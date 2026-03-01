@@ -125,6 +125,19 @@ const App = () => {
     setIsMenuOpen(false);
   };
 
+  // --- SANITIZER: Firestore rejects undefined values ---
+  const sanitizeForFirestore = (obj) => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (obj instanceof Date) return obj;
+    if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+    const clean = {};
+    for (const [key, value] of Object.entries(obj)) {
+      clean[key] = value === undefined ? null : sanitizeForFirestore(value);
+    }
+    return clean;
+  };
+
   // --- SAVE LOGIC ---
   const handleSaveQuote = async (finalAmount) => {
     if (!calcState.client || !calcState.project) return alert("Please enter Client and Project names.");
@@ -152,7 +165,7 @@ const App = () => {
     }
 
     try {
-      await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').add({
+      const quoteData = sanitizeForFirestore({
         client: calcState.client,
         project: calcState.project,
         calculatorState: calcState,
@@ -163,8 +176,12 @@ const App = () => {
         createdBy: user.email,
         updatedAt: new Date()
       });
+      await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').add(quoteData);
       alert("Quote Saved Successfully!");
-    } catch (e) { console.error(e); alert("Error saving quote."); }
+    } catch (e) {
+      console.error("Save quote error:", e);
+      alert("Error saving quote: " + (e.message || e.code || "Unknown error"));
+    }
   };
 
   const handleLoadQuote = (quote, isDuplicate) => {

@@ -3,15 +3,15 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 
-// Your config object (Preserved from your code)
+// Firebase config from environment variables
 const firebaseConfig = {
-    apiKey: "AIzaSyDS5RsnYL49tertpcIUXPa3dppw_soU1FQ",
-    authDomain: "led-react-6204e.firebaseapp.com",
-    projectId: "led-react-6204e",
-    storageBucket: "led-react-6204e.firebasestorage.app",
-    messagingSenderId: "500086523818",
-    appId: "1:500086523818:web:74b4a57f9c55730eee4dd3",
-    measurementId: "G-B0D52YG6QQ"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // 1. Initialize the MAIN App
