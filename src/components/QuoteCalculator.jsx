@@ -994,30 +994,35 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
 
                             {state.screens[state.activeScreenIndex] && (
                                 <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                                        <div>
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                                        <div className="whitespace-nowrap">
                                             <span className="text-slate-500 dark:text-slate-400 font-semibold">Dimensions:</span>
-                                            <span className="ml-2 font-bold text-slate-800 dark:text-white">
+                                            <span className="ml-1 font-bold text-slate-800 dark:text-white">
                                                 {state.screens[state.activeScreenIndex].targetWidth || 0} × {state.screens[state.activeScreenIndex].targetHeight || 0} {unit}
                                             </span>
                                         </div>
-                                        <div>
-                                            <span className="text-slate-500 dark:text-slate-400 font-semibold">Quantity:</span>
-                                            <span className="ml-2 font-bold text-teal-600 dark:text-teal-400">
-                                                {state.screens[state.activeScreenIndex].screenQty || 0} screens
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-500 dark:text-slate-400 font-semibold">Sizing:</span>
-                                            <span className="ml-2 font-bold text-slate-800 dark:text-white capitalize">
-                                                {state.screens[state.activeScreenIndex].sizingMode}
+                                        <div className="whitespace-nowrap">
+                                            <span className="text-slate-500 dark:text-slate-400 font-semibold">Qty:</span>
+                                            <span className="ml-1 font-bold text-teal-600 dark:text-teal-400">
+                                                {state.screens[state.activeScreenIndex].screenQty || 0}
                                             </span>
                                         </div>
                                         {calculation && (
-                                            <div>
+                                            <div className="whitespace-nowrap">
                                                 <span className="text-slate-500 dark:text-slate-400 font-semibold">Final Size:</span>
-                                                <span className="ml-2 font-bold text-slate-800 dark:text-white">
-                                                    {calculation.finalWidth} × {calculation.finalHeight} m
+                                                <span className="ml-1 font-bold text-slate-800 dark:text-white">
+                                                    {unit === 'ft' ? (parseFloat(calculation.finalWidth) * 3.28084).toFixed(2) : calculation.finalWidth} × {unit === 'ft' ? (parseFloat(calculation.finalHeight) * 3.28084).toFixed(2) : calculation.finalHeight} {unit}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {calculation && (
+                                            <div className="whitespace-nowrap">
+                                                <span className="text-slate-500 dark:text-slate-400 font-semibold">Area:</span>
+                                                <span className="ml-1 font-bold text-slate-800 dark:text-white">
+                                                    {unit === 'ft'
+                                                        ? `${calculation.matrix.sqft.perScreen.toFixed(1)} × ${state.screens[state.activeScreenIndex].screenQty || 0} = ${calculation.matrix.sqft.total.toFixed(1)} Sq.Ft`
+                                                        : `${(calculation.matrix.sqft.perScreen / 10.7639).toFixed(2)} × ${state.screens[state.activeScreenIndex].screenQty || 0} = ${(calculation.matrix.sqft.total / 10.7639).toFixed(2)} Sq.M`
+                                                    }
                                                 </span>
                                             </div>
                                         )}

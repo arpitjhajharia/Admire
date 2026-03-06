@@ -28,7 +28,7 @@ const App = () => {
 
   // --- CALCULATOR STATE (Full Original Object) ---
   const initialCalcState = {
-    client: '', project: '', unit: 'm',
+    client: '', project: '', unit: 'ft',
     screens: [
       {
         id: generateId(), screenQty: 0, targetWidth: 0, targetHeight: 0,
