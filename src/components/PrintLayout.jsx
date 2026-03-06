@@ -7,14 +7,15 @@ import { CONFIG } from '../lib/config';
 // 4. Print Layout - Dual Render (Visualizer Removed from Print)
 const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, date }) => {
     // 1. Data Preparation
-    const isMultiScreen = allScreensData && allScreensData.calculations && allScreensData.calculations.length > 1;
-    const configs = isMultiScreen ? allScreensData.calculations : (data ? [data] : []);
+    const hasAllScreensData = allScreensData && allScreensData.calculations && allScreensData.calculations.length > 0;
+    const isMultiScreen = hasAllScreensData && allScreensData.calculations.length > 1;
+    const configs = hasAllScreensData ? allScreensData.calculations : (data ? [data] : []);
 
     if (configs.length === 0) return null;
 
     // 2. Extract Shared Details
-    const clientName = (isMultiScreen ? allScreensData.clientName : data?.clientName) || '';
-    const projectName = (isMultiScreen ? allScreensData.projectName : data?.projectName) || '';
+    const clientName = (hasAllScreensData ? allScreensData.clientName : data?.clientName) || '';
+    const projectName = (hasAllScreensData ? allScreensData.projectName : data?.projectName) || '';
     const terms = configs[0].terms || {};
     const grandTotalProject = isMultiScreen ? allScreensData.totalProjectSell : data?.totalProjectSell;
 

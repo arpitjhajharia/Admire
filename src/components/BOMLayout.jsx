@@ -6,11 +6,12 @@ const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) 
     // 1. Data Validation
     if (!data && !allScreensData) return null;
 
-    const isMultiScreen = allScreensData && allScreensData.calculations && allScreensData.calculations.length > 1;
-    if (!isMultiScreen && !data) return null;
+    const hasAllScreensData = allScreensData && allScreensData.calculations && allScreensData.calculations.length > 0;
+    const isMultiScreen = hasAllScreensData && allScreensData.calculations.length > 1;
+    if (!hasAllScreensData && !data) return null;
 
-    const clientName = (isMultiScreen ? allScreensData.clientName : data?.clientName) || '';
-    const projectName = (isMultiScreen ? allScreensData.projectName : data?.projectName) || '';
+    const clientName = (hasAllScreensData ? allScreensData.clientName : data?.clientName) || '';
+    const projectName = (hasAllScreensData ? allScreensData.projectName : data?.projectName) || '';
 
     // 2. Helper to render a single screen's BOM table
     const renderScreenBOM = (calc, screenIndex, screenConfig) => {
@@ -320,19 +321,22 @@ const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) 
                                     {allScreensData.calculations.length} Configs • {allScreensData.totalScreenQty} Screens
                                 </p>
                             )}
-                            {!isMultiScreen && data.moduleType && (
-                                <p className="text-xs text-slate-500 mt-1 font-medium flex items-center gap-2">
-                                    <span className="inline-block bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold border border-slate-200">
-                                        P{data.moduleType.pitch} {data.moduleType.indoor ? 'Indoor' : 'Outdoor'}
-                                    </span>
-                                    <span>
-                                        {data.finalWidth}m x {data.finalHeight}m <span className="text-slate-400">/ {(Number(data.finalWidth) * 3.28084).toFixed(2)}ft x {(Number(data.finalHeight) * 3.28084).toFixed(2)}ft</span>
-                                    </span>
-                                    <span className="font-bold text-slate-700 border-l border-slate-300 pl-2 ml-1">
-                                        {data.screenQty} Screens
-                                    </span>
-                                </p>
-                            )}
+                            {!isMultiScreen && (() => {
+                                const singleCalc = hasAllScreensData ? allScreensData.calculations[0] : data;
+                                return singleCalc?.moduleType ? (
+                                    <p className="text-xs text-slate-500 mt-1 font-medium flex items-center gap-2">
+                                        <span className="inline-block bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold border border-slate-200">
+                                            P{singleCalc.moduleType.pitch} {singleCalc.moduleType.indoor ? 'Indoor' : 'Outdoor'}
+                                        </span>
+                                        <span>
+                                            {singleCalc.finalWidth}m x {singleCalc.finalHeight}m <span className="text-slate-400">/ {(Number(singleCalc.finalWidth) * 3.28084).toFixed(2)}ft x {(Number(singleCalc.finalHeight) * 3.28084).toFixed(2)}ft</span>
+                                        </span>
+                                        <span className="font-bold text-slate-700 border-l border-slate-300 pl-2 ml-1">
+                                            {singleCalc.screenQty} Screens
+                                        </span>
+                                    </p>
+                                ) : null;
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -342,11 +346,13 @@ const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) 
             </div>
 
             {/* Content Body */}
-            {isMultiScreen ? (
+            {hasAllScreensData ? (
                 <>
-                    <div className="mb-6">
-                        <h2 className="text-sm font-bold text-slate-700 uppercase mb-3 pb-2 border-b border-slate-300">Individual Screen Configurations</h2>
-                    </div>
+                    {isMultiScreen && (
+                        <div className="mb-6">
+                            <h2 className="text-sm font-bold text-slate-700 uppercase mb-3 pb-2 border-b border-slate-300">Individual Screen Configurations</h2>
+                        </div>
+                    )}
                     {allScreensData.calculations.map((calc, index) =>
                         renderScreenBOM(calc, index, allScreensData.screenConfigs ? allScreensData.screenConfigs[index] : {})
                     )}
