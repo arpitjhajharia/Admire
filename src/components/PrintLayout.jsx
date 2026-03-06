@@ -175,8 +175,10 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                         <th className="p-2 border border-slate-600 text-left w-12">#</th>
                                         <th className="p-2 border border-slate-600 text-left">Item Description</th>
                                         <th className="p-2 border border-slate-600 text-right w-28">Rate</th>
-                                        <th className="p-2 border border-slate-600 text-right w-32">Amount (1 Screen)</th>
-                                        <th className="p-2 border border-slate-600 text-right w-32">Amount ({screenQty} Screens)</th>
+                                        {screenQty > 1 && <th className="p-2 border border-slate-600 text-right w-32">Amount (1 Screen)</th>}
+                                        <th className="p-2 border border-slate-600 text-right w-32">
+                                            {screenQty > 1 ? `Amount (${screenQty} Screens)` : 'Amount'}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -184,7 +186,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                         <td className="p-2 border border-slate-300 text-center">—</td>
                                         <td className="p-2 border border-slate-300 font-bold">Total Sq.ft</td>
                                         <td className="p-2 border border-slate-300 text-right text-slate-400">—</td>
-                                        <td className="p-2 border border-slate-300 text-right">{areaSqft.toFixed(2)} Sq.ft</td>
+                                        {screenQty > 1 && <td className="p-2 border border-slate-300 text-right">{areaSqft.toFixed(2)} Sq.ft</td>}
                                         <td className="p-2 border border-slate-300 text-right font-bold">{(areaSqft * screenQty).toFixed(2)} Sq.ft</td>
                                     </tr>
                                     {commercialRows.map((row, i) => (
@@ -192,12 +194,13 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                             <td className="p-2 border border-slate-300 text-center">{i + 1}</td>
                                             <td className="p-2 border border-slate-300 font-bold">{row.name}</td>
                                             <td className="p-2 border border-slate-300 text-right text-slate-500">{row.rateLabel}</td>
-                                            <td className="p-2 border border-slate-300 text-right">{formatCurrency(row.rate, currency)}</td>
+                                            {screenQty > 1 && <td className="p-2 border border-slate-300 text-right">{formatCurrency(row.rate, currency)}</td>}
                                             <td className="p-2 border border-slate-300 text-right font-bold">{formatCurrency(row.rate * screenQty, currency)}</td>
                                         </tr>
                                     ))}
                                     <tr className="bg-slate-100">
-                                        <td colSpan="4" className="p-2 border border-slate-300 text-right font-bold uppercase">Subtotal (Excl. GST)</td>
+                                        <td colSpan={screenQty > 1 ? 3 : 3} className="p-2 border border-slate-300 text-right font-bold uppercase">Subtotal (Excl. GST)</td>
+                                        {screenQty > 1 && <td className="p-2 border border-slate-300 text-right font-bold text-sm">{formatCurrency(totalProjectSell / (screenQty || 1), currency)}</td>}
                                         <td className="p-2 border border-slate-300 text-right font-bold text-sm">{formatCurrency(totalProjectSell, currency)}</td>
                                     </tr>
                                 </tbody>
