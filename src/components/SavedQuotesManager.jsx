@@ -242,8 +242,8 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                 </div>
             </div>
 
-            {/* ── Quote Cards Grid ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* ── Mobile Layout (Card Grid) ── */}
+            <div className="grid grid-cols-1 gap-3 md:hidden">
                 {filteredQuotes.map(quote => {
                     const state = quote.calculatorState || {};
                     const isIndoor = state.selectedIndoor === 'true';
@@ -407,25 +407,199 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                         </div>
                     );
                 })}
+            </div>
 
-                {/* Empty State */}
-                {filteredQuotes.length === 0 && (
-                    <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
-                        <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center mb-4">
-                            <FileText className="w-7 h-7 text-slate-300 dark:text-slate-500" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-400 dark:text-slate-500 mb-1">
-                            {searchTerm ? 'No matching quotes' : 'No saved quotes yet'}
-                        </p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">
-                            {searchTerm
-                                ? `No quotes match "${searchTerm}". Try a different search term.`
-                                : 'Quotes you save from the calculator will appear here.'
+            {/* ── Desktop Layout (Data Table) ── */}
+            <div className="hidden md:block rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse">
+                        <thead>
+                            <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Project</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Client</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Pitch</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (ft)</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (m)</th>
+                                <th scope="col" className="px-3 py-1.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
+                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Estimate</th>}
+                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Saved</th>
+                                <th scope="col" className="px-3 py-1.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                            {filteredQuotes.map((quote, rowIdx) => {
+                                const state = quote.calculatorState || {};
+                                const isIndoor = state.selectedIndoor === 'true';
+                                const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
+                                const calcs = quote.allScreensData?.calculations;
+
+                                return (
+                                    <tr
+                                        key={quote.id}
+                                        className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60`}
+                                    >
+                                        {/* Project */}
+                                        <td className="px-3 py-1 max-w-[160px]">
+                                            <div className="text-[12px] font-semibold text-slate-800 dark:text-white truncate leading-tight" title={quote.project}>
+                                                {quote.project || 'Untitled'}
+                                            </div>
+                                        </td>
+
+                                        {/* Client */}
+                                        <td className="px-3 py-1 max-w-[140px]">
+                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight" title={quote.client}>
+                                                {quote.client || '—'}
+                                            </div>
+                                        </td>
+
+                                        {/* Type */}
+                                        <td className="px-3 py-1 whitespace-nowrap">
+                                            <span className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[9px] font-bold uppercase tracking-wide ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-900/20 dark:text-amber-400'}`}>
+                                                {isIndoor ? <Monitor size={8} /> : <Sun size={8} />}
+                                                {isIndoor ? 'In' : 'Out'}
+                                            </span>
+                                        </td>
+
+                                        {/* Pitch */}
+                                        <td className="px-3 py-1 whitespace-nowrap">
+                                            {pitch ? (
+                                                <span className="inline-flex items-center px-1 py-px rounded text-[9px] font-bold tracking-wide bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400">
+                                                    P{pitch}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[11px] text-slate-400 italic">—</span>
+                                            )}
+                                        </td>
+
+                                        {/* Size (ft) */}
+                                        <td className="px-3 py-1 align-top">
+                                            {calcs ? (
+                                                <div className="space-y-0.5">
+                                                    {calcs.map((calc, idx) => (
+                                                        <div key={idx} className="flex items-center gap-1 h-[18px]">
+                                                            {calcs.length > 1 && (
+                                                                <span className="flex-shrink-0 w-3.5 h-3.5 rounded-sm bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-500">{idx + 1}</span>
+                                                            )}
+                                                            <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
+                                                                {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-[11px] text-slate-400 italic">Single screen</span>
+                                            )}
+                                        </td>
+
+                                        {/* Size (m) */}
+                                        <td className="px-3 py-1 align-top">
+                                            {calcs ? (
+                                                <div className="space-y-0.5">
+                                                    {calcs.map((calc, idx) => (
+                                                        <div key={idx} className="flex items-center h-[18px]">
+                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                                                                {calc.finalWidth}×{calc.finalHeight}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-[11px] text-slate-400 italic">—</span>
+                                            )}
+                                        </td>
+
+                                        {/* Qty */}
+                                        <td className="px-3 py-1 align-top text-center border-r border-slate-100 dark:border-slate-800">
+                                            {calcs ? (
+                                                <div className="space-y-0.5 w-full">
+                                                    {calcs.map((calc, idx) => (
+                                                        <div key={idx} className="flex items-center justify-center h-[18px]">
+                                                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
+                                                                {calc.screenQty}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 tabular-nums italic">1</span>
+                                            )}
+                                        </td>
+
+                                        {/* Estimate */}
+                                        {!readOnly && (
+                                            <td className="px-3 py-1 whitespace-nowrap text-right">
+                                                <span className="text-[12px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
+                                                    {formatCurrency(quote.finalAmount, 'INR')}
+                                                </span>
+                                            </td>
+                                        )}
+
+                                        {/* Date */}
+                                        <td className="px-3 py-1 whitespace-nowrap">
+                                            <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
+                                                {formatDate(quote.updatedAt)}
+                                            </span>
+                                        </td>
+
+                                        {/* Actions */}
+                                        <td className="px-2 py-1 whitespace-nowrap">
+                                            <div className="flex items-center justify-end gap-0">
+                                                <button onClick={() => handleView(quote)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title={readOnly ? 'View BOM' : 'View'}>
+                                                    {readOnly ? <Box size={12} /> : <Eye size={12} />}
+                                                </button>
+                                                {!readOnly && (
+                                                    <>
+                                                        <button onClick={() => onLoadQuote(quote, false)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit"><Edit size={12} /></button>
+                                                        <button onClick={() => handleDownloadExcel(quote)} className="w-6 h-6 rounded flex items-center justify-center text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors" title="Download CSV"><Download size={12} /></button>
+                                                        <button onClick={() => onLoadQuote(quote, true)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Clone"><Copy size={12} /></button>
+                                                        <button onClick={() => handleDelete(quote.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete"><Trash2 size={12} /></button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Footer row count */}
+                {filteredQuotes.length > 0 && (
+                    <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
+                            {filteredQuotes.length === quotes.length
+                                ? `${quotes.length} ${quotes.length === 1 ? 'quote' : 'quotes'}`
+                                : `${filteredQuotes.length} of ${quotes.length} quotes`
                             }
-                        </p>
+                        </span>
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline underline-offset-2 transition-colors">
+                                Clear filter
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
+
+            {/* Empty State */}
+            {filteredQuotes.length === 0 && (
+                <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center mb-4">
+                        <FileText className="w-7 h-7 text-slate-300 dark:text-slate-500" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-400 dark:text-slate-500 mb-1">
+                        {searchTerm ? 'No matching quotes' : 'No saved quotes yet'}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">
+                        {searchTerm
+                            ? `No quotes match "${searchTerm}". Try a different search term.`
+                            : 'Quotes you save from the calculator will appear here.'
+                        }
+                    </p>
+                </div>
+            )}
         </div>
     );
 };
