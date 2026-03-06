@@ -248,6 +248,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                     const state = quote.calculatorState || {};
                     const isIndoor = state.selectedIndoor === 'true';
                     const screenCount = quote.allScreensData?.calculations?.length || 1;
+                    const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
 
                     return (
                         <div
@@ -264,16 +265,23 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                     >
                                         {quote.project || 'Untitled'}
                                     </h3>
-                                    <span className={`
-                                        flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-bold uppercase tracking-wider
-                                        ${isIndoor
-                                            ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
-                                            : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60'
-                                        }
-                                    `}>
-                                        {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
-                                        {isIndoor ? 'Indoor' : 'Outdoor'}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <span className={`
+                                            inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-bold uppercase tracking-wider
+                                            ${isIndoor
+                                                ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
+                                                : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60'
+                                            }
+                                        `}>
+                                            {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
+                                            {isIndoor ? 'Indoor' : 'Outdoor'}
+                                        </span>
+                                        {pitch && (
+                                            <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-bold tracking-wider bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400 dark:ring-violet-700/40">
+                                                P{pitch}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Client + Date on one line */}
@@ -297,9 +305,9 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                                         {idx + 1}
                                                     </span>
                                                     <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                                        {calc.finalWidth}×{calc.finalHeight}m
+                                                        {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}ft
                                                         <span className="text-slate-400 dark:text-slate-500 ml-1">
-                                                            / {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}ft
+                                                            / {calc.finalWidth}×{calc.finalHeight}m
                                                         </span>
                                                         <span className="text-slate-400 dark:text-slate-500"> ×{calc.screenQty}</span>
                                                     </span>
