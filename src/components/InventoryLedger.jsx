@@ -262,64 +262,102 @@ const InventoryLedger = ({ user, userRole, inventory = [], transactions = [], re
                     )}
                 </div>
 
-                {/* Desktop Table */}
-                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-700/80 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                            <tr>
-                                <th className="px-3 py-2.5 font-bold">Date</th>
-                                <th className="px-3 py-2.5 text-center font-bold">Type</th>
-                                <th className="px-3 py-2.5 font-bold">Component</th>
-                                <th className="px-3 py-2.5 font-bold">Specs</th>
-                                <th className="px-3 py-2.5 text-center font-bold">Qty</th>
-                                <th className="px-3 py-2.5 font-bold">Loc/Source</th>
-                                <th className="px-3 py-2.5 text-right font-bold">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 bg-white dark:bg-slate-800">
-                            {filteredTx.map(tx => {
-                                const item = inventory.find(i => i.id === tx.itemId) || {};
-                                return (
-                                    <tr key={tx.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors ${editingId === tx.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                                        <td className="px-3 py-2 whitespace-nowrap dark:text-slate-300 text-sm tabular-nums">{new Date(tx.date).toLocaleDateString()}</td>
-                                        <td className="px-3 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${tx.type === 'in' ? 'bg-green-50 text-green-600 ring-1 ring-green-200/60' : 'bg-red-50 text-red-600 ring-1 ring-red-200/60'}`}>
-                                                {tx.type.toUpperCase()}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-2 dark:text-white">
-                                            <div className="font-semibold text-sm">{item.brand} {item.model}</div>
-                                            {tx.batch && <span className="inline-block mt-0.5 bg-purple-50 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] px-1.5 py-px rounded-full font-bold ring-1 ring-purple-200/60">{tx.batch}</span>}
-                                        </td>
-                                        <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{item.type?.replace('_', ' ') || '-'}</td>
-                                        <td className={`px-3 py-2 text-center font-extrabold tabular-nums ${tx.type === 'in' ? 'text-green-600' : 'text-red-500'}`}>
-                                            {tx.type === 'in' ? '+' : '-'}{tx.qty}
-                                        </td>
-                                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{tx.remarks || '-'}</td>
-                                        <td className="px-3 py-2 text-right">
-                                            {!readOnly && (
-                                                <div className="flex justify-end gap-1">
-                                                    <button onClick={() => handleEdit(tx)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit">
-                                                        <Edit size={14} />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(tx.id)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete">
-                                                        <Trash2 size={14} />
-                                                    </button>
+                {/* Desktop Table (High Density) */}
+                <div className="hidden md:block rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse">
+                            <thead>
+                                <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
+                                    <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Date</th>
+                                    <th scope="col" className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
+                                    <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Component</th>
+                                    <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Specs</th>
+                                    <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
+                                    <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Loc/Source</th>
+                                    {!readOnly && <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                {filteredTx.map((tx, rowIdx) => {
+                                    const item = inventory.find(i => i.id === tx.itemId) || {};
+                                    return (
+                                        <tr key={tx.id} className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60 ${editingId === tx.id ? 'bg-amber-50/60 dark:bg-amber-900/20' : ''}`}>
+                                            {/* Date */}
+                                            <td className="px-3 py-1 whitespace-nowrap">
+                                                <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                                    {new Date(tx.date).toLocaleDateString()}
+                                                </span>
+                                            </td>
+
+                                            {/* Type */}
+                                            <td className="px-3 py-1 whitespace-nowrap text-center">
+                                                <span className={`inline-block px-1 py-px rounded text-[9px] font-bold uppercase tracking-widest ${tx.type === 'in' ? 'bg-green-50 text-green-600 ring-1 ring-green-200/60 dark:bg-green-900/30' : 'bg-red-50 text-red-600 ring-1 ring-red-200/60 dark:bg-red-900/30'}`}>
+                                                    {tx.type}
+                                                </span>
+                                            </td>
+
+                                            {/* Component */}
+                                            <td className="px-3 py-1 max-w-[200px]">
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <span className="text-[12px] font-semibold text-slate-800 dark:text-white truncate">
+                                                        {item.brand} {item.model}
+                                                    </span>
+                                                    {tx.batch && (
+                                                        <span className="flex-shrink-0 inline-block bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300 text-[9px] px-1.5 py-px rounded uppercase font-bold tracking-widest ring-1 ring-purple-200/60 border border-purple-100/50">
+                                                            {tx.batch}
+                                                        </span>
+                                                    )}
                                                 </div>
+                                            </td>
+
+                                            {/* Specs */}
+                                            <td className="px-3 py-1 max-w-[100px] whitespace-nowrap">
+                                                <span className="text-[11px] text-slate-500 dark:text-slate-400 capitalize truncate block">
+                                                    {item.type?.replace('_', ' ') || '-'}
+                                                </span>
+                                            </td>
+
+                                            {/* Qty */}
+                                            <td className="px-3 py-1 whitespace-nowrap text-right">
+                                                <span className={`text-[13px] font-extrabold tabular-nums tracking-tight ${tx.type === 'in' ? 'text-green-600 dark:text-green-500' : 'text-red-500 dark:text-red-400'}`}>
+                                                    {tx.type === 'in' ? '+' : '-'}{tx.qty}
+                                                </span>
+                                            </td>
+
+                                            {/* Loc/Source */}
+                                            <td className="px-3 py-1 max-w-[120px]">
+                                                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={tx.remarks}>
+                                                    {tx.remarks || '-'}
+                                                </div>
+                                            </td>
+
+                                            {/* Actions */}
+                                            {!readOnly && (
+                                                <td className="px-2 py-1 whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-0">
+                                                        <button onClick={() => handleEdit(tx)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
+                                                            <Edit size={12} />
+                                                        </button>
+                                                        <button onClick={() => handleDelete(tx.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                     {filteredTx.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-10 text-center bg-white dark:bg-slate-800">
                             <ClipboardList className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-                            <p className="text-sm text-slate-400">{searchTerm || filterType !== 'all' ? 'No matching transactions.' : 'No transactions recorded.'}</p>
+                            <p className="text-[12px] font-medium text-slate-400 uppercase tracking-widest">{searchTerm || filterType !== 'all' ? 'No matching transactions' : 'No transactions recorded'}</p>
                         </div>
                     )}
                 </div>
+
             </div>
         </div>
     );

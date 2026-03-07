@@ -489,71 +489,89 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
                 </div>
 
                 {/* Desktop Table View */}
-                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-700/80 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                            <tr>
-                                <th className="px-3 py-2.5 font-bold">Type</th>
-                                <th className="px-3 py-2.5 font-bold">Component</th>
-                                <th className="px-3 py-2.5 font-bold">Specs</th>
-                                <th className="px-3 py-2.5 text-center font-bold">Stock</th>
-                                {!readOnly && <th className="px-3 py-2.5 font-bold">Landed Cost</th>}
-                                {!readOnly && <th className="px-3 py-2.5 text-right font-bold">Stock Value (₹)</th>}
-                                <th className="px-3 py-2.5 text-right font-bold">Action</th>
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                    <table className="min-w-full border-collapse">
+                        <thead>
+                            <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Component</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Specs</th>
+                                <th scope="col" className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Stock</th>
+                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Landed Cost</th>}
+                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Stock Value (₹)</th>}
+                                <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 bg-white dark:bg-slate-800">
-                            {filteredItems.map(item => {
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                            {filteredItems.map((item, rowIdx) => {
                                 const stock = transactions.filter(t => t.itemId === item.id).reduce((acc, t) => acc + (t.type === 'in' ? Number(t.qty) : -Number(t.qty)), 0);
                                 const landedCost = (item.price || 0) + (item.carriage || 0);
                                 const isCore = ['module', 'cabinet', 'card', 'smps', 'processor'].includes(item.type);
 
                                 return (
-                                    <tr key={item.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors ${editingId === item.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                                        <td className="px-3 py-2 capitalize">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${isCore ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60' : 'bg-purple-50 text-purple-600 ring-1 ring-purple-200/60'}`}>
+                                    <tr key={item.id} className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60 ${editingId === item.id ? 'bg-amber-50/60 dark:bg-amber-900/20' : ''}`}>
+                                        <td className="px-3 py-1 whitespace-nowrap text-left">
+                                            <span className={`inline-block px-1 py-px rounded text-[8px] font-bold uppercase tracking-widest ${isCore ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60' : 'bg-purple-50 text-purple-600 ring-1 ring-purple-200/60'}`}>
                                                 {item.type.replace('_', ' ')}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-2 dark:text-slate-200">
-                                            <div className="font-semibold text-sm">{item.brand} {item.model}</div>
-                                            {item.vendor && <div className="text-[10px] text-teal-600 dark:text-teal-400 mt-0.5 font-medium">{item.vendor}</div>}
+                                        <td className="px-3 py-1 max-w-[200px]">
+                                            <div className="flex flex-col truncate">
+                                                <span className="text-[12px] font-semibold text-slate-800 dark:text-white truncate" title={`${item.brand} ${item.model}`}>
+                                                    {item.brand} {item.model}
+                                                </span>
+                                                {item.vendor && (
+                                                    <span className="text-[10px] text-teal-600 dark:text-teal-400/80 font-medium truncate" title={item.vendor}>
+                                                        {item.vendor}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">
-                                            {item.type === 'module' ? `P${item.pitch} ${item.width}x${item.height}` :
-                                                ['frc_cable', 'power_cable'].includes(item.type) ? `${item.ports} pins, ${item.length}mm` :
-                                                    ['screw', 'bolt'].includes(item.type) ? `${item.material} ${item.size} x ${item.length}mm` :
-                                                        item.width ? `${item.width}x${item.height || item.length}` : '-'}
+                                        <td className="px-3 py-1 max-w-[150px] whitespace-nowrap">
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block">
+                                                {item.type === 'module' ? `P${item.pitch} ${item.width}x${item.height}` :
+                                                    ['frc_cable', 'power_cable'].includes(item.type) ? `${item.ports} pins, ${item.length}mm` :
+                                                        ['screw', 'bolt'].includes(item.type) ? `${item.material} ${item.size} x ${item.length}mm` :
+                                                            item.width ? `${item.width}x${item.height || item.length}` : '-'}
+                                            </span>
                                         </td>
-                                        <td className={`px-3 py-2 font-bold text-center tabular-nums ${stock < 0 ? 'text-red-500' : stock === 0 ? 'text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                                            {stock}
+                                        <td className={`px-3 py-1 whitespace-nowrap text-center ${stock < 0 ? 'text-red-500' : stock === 0 ? 'text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                                            <span className="text-[13px] font-extrabold tabular-nums tracking-tight">
+                                                {stock}
+                                            </span>
                                         </td>
 
                                         {!readOnly && (
-                                            <td className="px-3 py-2 dark:text-slate-200">
-                                                <span className="font-semibold tabular-nums">{formatCurrency(landedCost, item.currency || 'INR', false, true)}</span>
+                                            <td className="px-3 py-1 whitespace-nowrap text-right">
+                                                <span className="text-[12px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
+                                                    {formatCurrency(landedCost, item.currency || 'INR', false, true)}
+                                                </span>
                                             </td>
                                         )}
                                         {!readOnly && (
-                                            <td className="px-3 py-2 font-bold text-right tabular-nums text-slate-700 dark:text-slate-300">
-                                                {formatCurrency(item.currency === 'USD' ? landedCost * stock * exchangeRate : landedCost * stock, 'INR', false, true)}
+                                            <td className="px-3 py-1 whitespace-nowrap text-right">
+                                                <span className="text-[13px] font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                                                    {formatCurrency(item.currency === 'USD' ? landedCost * stock * exchangeRate : landedCost * stock, 'INR', false, true)}
+                                                </span>
                                             </td>
                                         )}
 
-                                        <td className="px-3 py-2 flex gap-1 justify-end">
-                                            {item.type === 'module' && (
-                                                <button onClick={() => openBatchModal(item)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" title="Batches">
-                                                    <Layers size={14} />
-                                                </button>
-                                            )}
-                                            {!readOnly && <>
-                                                <button onClick={() => handleEdit(item)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit">
-                                                    <Edit size={14} />
-                                                </button>
-                                                <button onClick={() => handleDelete(item.id)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete">
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </>}
+                                        <td className="px-2 py-1 whitespace-nowrap">
+                                            <div className="flex items-center justify-end gap-0">
+                                                {item.type === 'module' && (
+                                                    <button onClick={() => openBatchModal(item)} className="w-6 h-6 rounded flex items-center justify-center text-purple-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors" title="Batches">
+                                                        <Layers size={12} />
+                                                    </button>
+                                                )}
+                                                {!readOnly && <>
+                                                    <button onClick={() => handleEdit(item)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
+                                                        <Edit size={12} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(item.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </>}
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -564,14 +582,10 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
 
                 {/* Empty state */}
                 {filteredItems.length === 0 && !loading && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center mb-3">
-                            <Package className="w-6 h-6 text-slate-300 dark:text-slate-500" />
-                        </div>
-                        <p className="text-sm font-semibold text-slate-400 dark:text-slate-500 mb-0.5">
-                            {searchTerm || filterType !== 'all' ? 'No matching components' : 'No components yet'}
-                        </p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                    <div className="flex flex-col items-center justify-center py-10 text-center bg-white dark:bg-slate-800 rounded-b-xl border-t border-slate-100 dark:border-slate-700">
+                        <Package className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
+                        <p className="text-[12px] font-medium text-slate-400 uppercase tracking-widest">{searchTerm || filterType !== 'all' ? 'No matching components' : 'No components yet'}</p>
+                        <p className="text-[10px] mt-1 text-slate-400">
                             {searchTerm || filterType !== 'all'
                                 ? 'Try adjusting your search or filter.'
                                 : 'Add your first component to get started.'

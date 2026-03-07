@@ -415,16 +415,16 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                     <table className="min-w-full border-collapse">
                         <thead>
                             <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Project</th>
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Client</th>
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Pitch</th>
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (ft)</th>
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (m)</th>
-                                <th scope="col" className="px-3 py-1.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
-                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Estimate</th>}
-                                <th scope="col" className="px-3 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Saved</th>
-                                <th scope="col" className="px-3 py-1.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Project</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Client</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Pitch</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (ft)</th>
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (m)</th>
+                                <th scope="col" className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
+                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Estimate</th>}
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Saved</th>
+                                <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -441,22 +441,22 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                     >
                                         {/* Project */}
                                         <td className="px-3 py-1 max-w-[160px]">
-                                            <div className="text-[12px] font-semibold text-slate-800 dark:text-white truncate leading-tight" title={quote.project}>
+                                            <div className="text-[13px] font-semibold text-slate-800 dark:text-white truncate leading-tight" title={quote.project}>
                                                 {quote.project || 'Untitled'}
                                             </div>
                                         </td>
 
                                         {/* Client */}
                                         <td className="px-3 py-1 max-w-[140px]">
-                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight" title={quote.client}>
+                                            <div className="text-[12px] text-slate-500 dark:text-slate-400 truncate leading-tight" title={quote.client}>
                                                 {quote.client || '—'}
                                             </div>
                                         </td>
 
                                         {/* Type */}
                                         <td className="px-3 py-1 whitespace-nowrap">
-                                            <span className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[9px] font-bold uppercase tracking-wide ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-900/20 dark:text-amber-400'}`}>
-                                                {isIndoor ? <Monitor size={8} /> : <Sun size={8} />}
+                                            <span className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[10px] font-bold uppercase tracking-wide ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-900/20 dark:text-amber-400'}`}>
+                                                {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
                                                 {isIndoor ? 'In' : 'Out'}
                                             </span>
                                         </td>
@@ -464,11 +464,11 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                         {/* Pitch */}
                                         <td className="px-3 py-1 whitespace-nowrap">
                                             {pitch ? (
-                                                <span className="inline-flex items-center px-1 py-px rounded text-[9px] font-bold tracking-wide bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400">
+                                                <span className="inline-flex items-center px-1 py-px rounded text-[10px] font-bold tracking-wide bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400">
                                                     P{pitch}
                                                 </span>
                                             ) : (
-                                                <span className="text-[11px] text-slate-400 italic">—</span>
+                                                <span className="text-[12px] text-slate-400 italic">—</span>
                                             )}
                                         </td>
 
@@ -477,18 +477,18 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                             {calcs ? (
                                                 <div className="space-y-0.5">
                                                     {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center gap-1 h-[18px]">
+                                                        <div key={idx} className="flex items-center gap-1 h-[20px]">
                                                             {calcs.length > 1 && (
-                                                                <span className="flex-shrink-0 w-3.5 h-3.5 rounded-sm bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-500">{idx + 1}</span>
+                                                                <span className="flex-shrink-0 w-3.5 h-3.5 rounded-sm bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500">{idx + 1}</span>
                                                             )}
-                                                            <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
+                                                            <span className="text-[12px] font-medium text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
                                                                 {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}
                                                             </span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <span className="text-[11px] text-slate-400 italic">Single screen</span>
+                                                <span className="text-[12px] text-slate-400 italic">Single screen</span>
                                             )}
                                         </td>
 
@@ -497,15 +497,15 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                             {calcs ? (
                                                 <div className="space-y-0.5">
                                                     {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center h-[18px]">
-                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                                                        <div key={idx} className="flex items-center h-[20px]">
+                                                            <span className="text-[12px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
                                                                 {calc.finalWidth}×{calc.finalHeight}
                                                             </span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <span className="text-[11px] text-slate-400 italic">—</span>
+                                                <span className="text-[12px] text-slate-400 italic">—</span>
                                             )}
                                         </td>
 
@@ -514,22 +514,22 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                             {calcs ? (
                                                 <div className="space-y-0.5 w-full">
                                                     {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center justify-center h-[18px]">
-                                                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
+                                                        <div key={idx} className="flex items-center justify-center h-[20px]">
+                                                            <span className="text-[12px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
                                                                 {calc.screenQty}
                                                             </span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 tabular-nums italic">1</span>
+                                                <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300 tabular-nums italic">1</span>
                                             )}
                                         </td>
 
                                         {/* Estimate */}
                                         {!readOnly && (
                                             <td className="px-3 py-1 whitespace-nowrap text-right">
-                                                <span className="text-[12px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
+                                                <span className="text-[13px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
                                                     {formatCurrency(quote.finalAmount, 'INR')}
                                                 </span>
                                             </td>
@@ -537,7 +537,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
 
                                         {/* Date */}
                                         <td className="px-3 py-1 whitespace-nowrap">
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
+                                            <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
                                                 {formatDate(quote.updatedAt)}
                                             </span>
                                         </td>
