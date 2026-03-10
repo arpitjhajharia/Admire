@@ -12,10 +12,13 @@ import QuoteCalculator from './components/QuoteCalculator';
 import UserManager from './components/UserManager';
 import BackupManager from './components/BackupManager';
 import Login from './components/Login';
+import Home from './components/Home';
+import TaskManager from './components/TaskManager';
 
 const App = () => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [activeModule, setActiveModule] = useState('home');
   const [view, setView] = useState('quote');
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -120,6 +123,7 @@ const App = () => {
   const handleLogout = () => {
     auth.signOut();
     setView('quote');
+    setActiveModule('home');
     setUser(null);
     setUserRole(null);
     setIsMenuOpen(false);
@@ -220,23 +224,35 @@ const App = () => {
       {/* HEADER */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50 shadow-sm">
         <div className="max-w-[1600px] mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveModule('home')}>
             <img src="/AdmireLED/logo.png" alt="Logo" className="h-10 w-auto" />
+            {activeModule === 'led' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-400">
+                LED Calc
+              </span>
+            )}
+            {activeModule === 'tasks' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-400">
+                Tasks
+              </span>
+            )}
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 p-1 rounded-lg">
-            {/* HIDE CALCULATOR FOR LABOUR */}
-            {!isLabour && (
-              <button onClick={() => setView('quote')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'quote' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Calculator</button>
-            )}
+          {activeModule === 'led' && (
+            <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 p-1 rounded-lg">
+              {/* HIDE CALCULATOR FOR LABOUR */}
+              {!isLabour && (
+                <button onClick={() => setView('quote')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'quote' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Calculator</button>
+              )}
 
-            <button onClick={() => setView('inventory')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'inventory' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Components</button>
-            <button onClick={() => setView('ledger')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'ledger' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Stock</button>
-            <button onClick={() => setView('saved')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'saved' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Quotes</button>
+              <button onClick={() => setView('inventory')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'inventory' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Components</button>
+              <button onClick={() => setView('ledger')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'ledger' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Stock</button>
+              <button onClick={() => setView('saved')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'saved' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Quotes</button>
 
-            {showUsersTab && <button onClick={() => setView('admin')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'admin' ? 'bg-white dark:bg-slate-600 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Admin</button>}
-          </nav>
+              {showUsersTab && <button onClick={() => setView('admin')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'admin' ? 'bg-white dark:bg-slate-600 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Admin</button>}
+            </nav>
+          )}
 
           {/* User Controls */}
           <div className="flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-slate-700">
@@ -277,26 +293,36 @@ const App = () => {
       {isMenuOpen && (
         <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-xl absolute w-full z-50 animate-in slide-in-from-top-2">
           <div className="flex flex-col p-2 space-y-1">
-            {/* HIDE CALCULATOR FOR LABOUR IN MOBILE MENU */}
-            {!isLabour && (
-              <button onClick={() => { setView('quote'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'quote' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                <Calculator size={18} /> Calculator
-              </button>
+            {activeModule === 'home' && (
+              <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">
+                Select a module from the home page.
+              </div>
             )}
-            <button onClick={() => { setView('inventory'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'inventory' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
-              <Box size={18} /> Components
-            </button>
-            <button onClick={() => { setView('ledger'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'ledger' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
-              <Archive size={18} /> Stock Ledger
-            </button>
-            <button onClick={() => { setView('saved'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'saved' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
-              <FileText size={18} /> Quotes
-            </button>
 
-            {showUsersTab && (
-              <button onClick={() => { setView('admin'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'admin' ? 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                <Shield size={18} /> Admin
-              </button>
+            {activeModule === 'led' && (
+              <>
+                {/* HIDE CALCULATOR FOR LABOUR IN MOBILE MENU */}
+                {!isLabour && (
+                  <button onClick={() => { setView('quote'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'quote' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    <Calculator size={18} /> Calculator
+                  </button>
+                )}
+                <button onClick={() => { setView('inventory'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'inventory' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <Box size={18} /> Components
+                </button>
+                <button onClick={() => { setView('ledger'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'ledger' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <Archive size={18} /> Stock Ledger
+                </button>
+                <button onClick={() => { setView('saved'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'saved' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <FileText size={18} /> Quotes
+                </button>
+
+                {showUsersTab && (
+                  <button onClick={() => { setView('admin'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'admin' ? 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    <Shield size={18} /> Admin
+                  </button>
+                )}
+              </>
             )}
 
             {/* Mobile Exchange Rate Input */}
@@ -322,58 +348,76 @@ const App = () => {
       )}
 
       <main className="max-w-[1600px] mx-auto p-4 md:p-6">
-        {view === 'inventory' && (
-          <InventoryManager
-            user={user}
-            userRole={userRole}
-            transactions={transactions}
-            readOnly={isInventoryReadOnly}
-            exchangeRate={exchangeRate}
+        {activeModule === 'home' && (
+          <Home
+            onSelectModule={(mod) => {
+              setActiveModule(mod);
+              if (mod === 'led') setView('quote');
+            }}
+            darkMode={darkMode}
           />
         )}
 
-        {view === 'ledger' && (
-          <InventoryLedger
-            user={user}
-            userRole={userRole}
-            inventory={inventory}
-            transactions={transactions}
-            readOnly={isLedgerReadOnly}
-          />
+        {activeModule === 'led' && (
+          <>
+            {view === 'inventory' && (
+              <InventoryManager
+                user={user}
+                userRole={userRole}
+                transactions={transactions}
+                readOnly={isInventoryReadOnly}
+                exchangeRate={exchangeRate}
+              />
+            )}
+
+            {view === 'ledger' && (
+              <InventoryLedger
+                user={user}
+                userRole={userRole}
+                inventory={inventory}
+                transactions={transactions}
+                readOnly={isLedgerReadOnly}
+              />
+            )}
+
+            {view === 'saved' && (
+              <SavedQuotesManager
+                user={user}
+                userRole={userRole}
+                inventory={inventory}
+                transactions={transactions}
+                exchangeRate={exchangeRate}
+                onLoadQuote={handleLoadQuote}
+                readOnly={isBOMReadOnly}
+              />
+            )}
+
+            {view === 'admin' && showUsersTab && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <UserManager user={user} />
+                <BackupManager />
+              </div>
+            )}
+
+            {view === 'quote' && (
+              <QuoteCalculator
+                user={user}
+                userRole={userRole}
+                inventory={inventory}
+                transactions={transactions}
+                state={calcState}
+                setState={setCalcState}
+                exchangeRate={exchangeRate}
+                setExchangeRate={setExchangeRate}
+                onSaveQuote={handleSaveQuote}
+                readOnly={isBOMReadOnly}
+              />
+            )}
+          </>
         )}
 
-        {view === 'saved' && (
-          <SavedQuotesManager
-            user={user}
-            userRole={userRole}
-            inventory={inventory}
-            transactions={transactions}
-            exchangeRate={exchangeRate}
-            onLoadQuote={handleLoadQuote}
-            readOnly={isBOMReadOnly}
-          />
-        )}
-
-        {view === 'admin' && showUsersTab && (
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <UserManager user={user} />
-            <BackupManager />
-          </div>
-        )}
-
-        {view === 'quote' && (
-          <QuoteCalculator
-            user={user}
-            userRole={userRole}
-            inventory={inventory}
-            transactions={transactions}
-            state={calcState}
-            setState={setCalcState}
-            exchangeRate={exchangeRate}
-            setExchangeRate={setExchangeRate}
-            onSaveQuote={handleSaveQuote}
-            readOnly={isBOMReadOnly}
-          />
+        {activeModule === 'tasks' && (
+          <TaskManager user={user} userRole={userRole} />
         )}
       </main>
     </div>
