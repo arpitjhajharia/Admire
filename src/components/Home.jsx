@@ -41,7 +41,7 @@ const Home = ({ onSelectModule, darkMode, showAdmin }) => {
             color: 'text-orange-500',
             bgColor: 'bg-orange-50 dark:bg-orange-900/20',
             borderColor: 'border-orange-200 dark:border-orange-800',
-            active: false
+            active: true
         }
     ];
 

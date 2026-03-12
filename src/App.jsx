@@ -16,6 +16,7 @@ import GlobalSettings from './components/GlobalSettings';
 import Login from './components/Login';
 import Home from './components/Home';
 import TaskManager from './components/TaskManager';
+import ReportingTracker from './components/ReportingTracker';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -250,6 +251,11 @@ const App = () => {
                 Tasks
               </span>
             )}
+            {activeModule === 'reports' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400">
+                Reports
+              </span>
+            )}
             {activeModule === 'admin' && (
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-400">
                 Admin
@@ -401,6 +407,10 @@ const App = () => {
 
         {activeModule === 'tasks' && (
           <TaskManager user={user} userRole={userRole} />
+        )}
+
+        {activeModule === 'reports' && (
+          <ReportingTracker user={user} userRole={userRole} />
         )}
 
         {activeModule === 'admin' && showUsersTab && (
