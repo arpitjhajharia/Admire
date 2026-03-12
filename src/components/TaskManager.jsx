@@ -209,7 +209,7 @@ const TaskManager = ({ user, userRole }) => {
     const SortableHeader = ({ label, columnKey, className = "" }) => (
         <th
             scope="col"
-            className={`px-1.5 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer hover:bg-slate-800/80 dark:hover:bg-slate-900/50 group transition-colors select-none ${className}`}
+            className={`px-1.5 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer hover:bg-slate-800/80 dark:hover:bg-slate-900/50 group transition-colors select-none ${className}`}
             onClick={() => handleSort(columnKey)}
         >
             <div className="flex items-center gap-1.5">
@@ -301,7 +301,7 @@ const TaskManager = ({ user, userRole }) => {
                     <select
                         value={project}
                         onChange={(e) => setProject(e.target.value)}
-                        className="w-full min-w-[50px] bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-[11px] uppercase focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
+                        className="w-full min-w-[50px] bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     >
                         <option value="">-</option>
                         {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
@@ -322,7 +322,7 @@ const TaskManager = ({ user, userRole }) => {
                                 el.style.height = el.scrollHeight + 'px';
                             }
                         }}
-                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1.5 py-1 text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white resize-none overflow-hidden"
+                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white resize-none overflow-hidden"
                         placeholder="Task name"
                         autoFocus
                     />
@@ -342,7 +342,7 @@ const TaskManager = ({ user, userRole }) => {
                                 el.style.height = el.scrollHeight + 'px';
                             }
                         }}
-                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white resize-none overflow-hidden"
+                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white resize-none overflow-hidden"
                         placeholder="Description"
                     />
                 </td>
@@ -350,7 +350,7 @@ const TaskManager = ({ user, userRole }) => {
                     <select
                         value={assignedTo}
                         onChange={(e) => setAssignedTo(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
+                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     >
                         <option value="">User</option>
                         {usersList.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
@@ -360,14 +360,14 @@ const TaskManager = ({ user, userRole }) => {
                     <select
                         value={priority}
                         onChange={(e) => setPriority(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
+                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     >
                         <option value="normal">Normal</option>
                         <option value="high">High</option>
                     </select>
                 </td>
                 <td className="px-1.5 py-1 text-left w-14 align-top break-words">
-                    <span className="text-[11px] text-slate-500/80 dark:text-slate-400/80 block break-words capitalize mt-[5px] cursor-not-allowed select-none" title={assignedBy}>
+                    <span className="text-xs text-slate-500/80 dark:text-slate-400/80 block break-words capitalize mt-[5px] cursor-not-allowed select-none" title={assignedBy}>
                         {assignedBy || '-'}
                     </span>
                 </td>
@@ -376,11 +376,11 @@ const TaskManager = ({ user, userRole }) => {
                         type="date"
                         value={dueDate}
                         onChange={(e) => setDueDate(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 text-center py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
+                        className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 text-center py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     />
                 </td>
                 <td className="px-1.5 py-1 whitespace-nowrap text-left w-14 align-top">
-                    <span className="text-[11px] text-slate-500/80 dark:text-slate-400/80 block tabular-nums mt-[5px] cursor-not-allowed select-none">
+                    <span className="text-xs text-slate-500/80 dark:text-slate-400/80 block tabular-nums mt-[5px] cursor-not-allowed select-none">
                         {formatDate(assignedOn)}
                     </span>
                 </td>
@@ -447,21 +447,21 @@ const TaskManager = ({ user, userRole }) => {
                             {task.project}
                         </span>
                     ) : (
-                        <span className="text-[11px] text-slate-400 block">-</span>
+                        <span className="text-xs text-slate-400 block">-</span>
                     )}
                 </td>
                 <td className="px-1.5 py-1 w-1/3 min-w-[120px] align-top">
-                    <span className={`text-[11px] font-semibold break-words block ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`} title={task.title}>
+                    <span className={`text-xs font-semibold break-words block ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`} title={task.title}>
                         {task.title}
                     </span>
                 </td>
                 <td className="px-1.5 py-1 w-2/3 min-w-[180px] hidden xl:table-cell align-top">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 break-words block whitespace-pre-wrap" title={task.description}>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 break-words block whitespace-pre-wrap" title={task.description}>
                         {task.description || '-'}
                     </span>
                 </td>
                 <td className="px-1.5 py-1 text-left w-20 align-top break-words">
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 block capitalize" title={task.assignedTo}>
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 block capitalize" title={task.assignedTo}>
                         {task.assignedTo || 'Unassigned'}
                     </span>
                 </td>
@@ -473,17 +473,17 @@ const TaskManager = ({ user, userRole }) => {
                     )}
                 </td>
                 <td className="px-1.5 py-1 text-left w-14 align-top break-words">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block break-words capitalize" title={task.assignedBy}>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block break-words capitalize" title={task.assignedBy}>
                         {task.assignedBy || '-'}
                     </span>
                 </td>
                 <td className="px-1.5 py-1 whitespace-nowrap text-left w-14 align-top">
-                    <span className={`text-[11px] block tabular-nums ${dueDateClass}`}>
+                    <span className={`text-xs block tabular-nums ${dueDateClass}`}>
                         {formatDate(task.dueDate)}
                     </span>
                 </td>
                 <td className="px-1.5 py-1 whitespace-nowrap text-left w-14 align-top">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block tabular-nums">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block tabular-nums">
                         {formatDate(task.assignedOn)}
                     </span>
                 </td>
@@ -535,7 +535,7 @@ const TaskManager = ({ user, userRole }) => {
                 <table className="min-w-full border-collapse">
                     <thead>
                         <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
-                            <th scope="col" className="px-1.5 py-1.5 w-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">State</th>
+                            <th scope="col" className="px-1.5 py-1.5 w-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">State</th>
                             <SortableHeader label="Project" columnKey="project" className="w-16" />
                             <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
@@ -544,7 +544,7 @@ const TaskManager = ({ user, userRole }) => {
                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
                             <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
-                            <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+                            <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -558,7 +558,7 @@ const TaskManager = ({ user, userRole }) => {
                                 onClick={() => toggleGroup('myTasks')}
                             >
                                 <td colSpan="10" className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-700/50">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-[0.1em] select-none">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-[0.1em] select-none">
                                         {expandedGroups.myTasks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                         Assigned to Me ({myTasks.length})
                                     </div>
@@ -574,7 +574,7 @@ const TaskManager = ({ user, userRole }) => {
                                 onClick={() => toggleGroup('otherTasks')}
                             >
                                 <td colSpan="10" className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-700/50">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.1em] select-none">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.1em] select-none">
                                         {expandedGroups.otherTasks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                         {myTasks.length > 0 ? "Other Tasks" : "All Tasks"} ({otherTasks.length})
                                     </div>
@@ -590,7 +590,7 @@ const TaskManager = ({ user, userRole }) => {
                                 onClick={() => toggleGroup('completedTasks')}
                             >
                                 <td colSpan="10" className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-700/50">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em] select-none">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em] select-none">
                                         {expandedGroups.completedTasks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                         Completed Tasks ({completedTasks.length})
                                     </div>

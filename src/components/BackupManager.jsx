@@ -157,9 +157,10 @@ const BackupManager = () => {
 
     // Status Logic
     const isFresh = lastBackupTime && (new Date() - lastBackupTime) < (24 * 60 * 60 * 1000); // 24 hours
+    const daysSinceLastBackup = lastBackupTime ? Math.floor((new Date() - lastBackupTime) / (24 * 60 * 60 * 1000)) : null;
 
     return (
-        <div className="p-3 md:p-4">
+        <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
             {/* ── Header ── */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
                 <div className="flex items-center gap-2">
@@ -168,74 +169,72 @@ const BackupManager = () => {
                     </div>
                     <div>
                         <h2 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-white leading-none">
-                            Disaster Recovery
+                            Backups
                         </h2>
-                        <p className="text-[11px] font-medium text-slate-400 mt-0.5 tracking-wide uppercase">
-                            {backups.length} {backups.length === 1 ? 'snapshot' : 'snapshots'} stored
-                        </p>
                     </div>
                 </div>
             </div>
 
             {/* ── Smart Status Card ── */}
-            <div className={`p-3 rounded-xl mb-4 border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isFresh ? 'bg-green-50/80 border-green-200/80 dark:bg-green-900/20 dark:border-green-800' : 'bg-amber-50/80 border-amber-200/80 dark:bg-amber-900/20 dark:border-amber-800'}`}>
+            <div className={`p-3 rounded-xl border flex flex-col gap-3 ${isFresh ? 'bg-green-50/80 border-green-200/80 dark:bg-green-900/20 dark:border-green-800' : 'bg-amber-50/80 border-amber-200/80 dark:bg-amber-900/20 dark:border-amber-800'}`}>
                 <div>
                     <h3 className={`text-sm font-bold flex items-center gap-1.5 ${isFresh ? 'text-green-700 dark:text-green-300' : 'text-amber-700 dark:text-amber-300'}`}>
                         {isFresh ? <Check size={14} /> : <AlertTriangle size={14} />}
-                        {isFresh ? "System is Backed Up" : "Daily Backup Pending"}
+                        {daysSinceLastBackup === 0 ? "Backed up today" : daysSinceLastBackup === null ? "No backups yet" : `${daysSinceLastBackup} days since last backup`}
                     </h3>
-                    <p className={`text-[11px] mt-0.5 ${isFresh ? 'text-green-600/70 dark:text-green-400/70' : 'text-amber-600/70 dark:text-amber-400/70'}`}>
-                        {lastBackupTime
-                            ? `Last manual snapshot: ${lastBackupTime.toLocaleString()}`
-                            : "No manual backups found."}
-                    </p>
                 </div>
                 <button
                     onClick={createSnapshot}
                     disabled={loading}
-                    className={`flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm ${isFresh ? 'bg-white dark:bg-slate-800 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/30' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+                    className={`w-full flex justify-center items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm ${isFresh ? 'bg-white dark:bg-slate-800 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/30' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
                 >
                     {loading ? <Loader className="animate-spin" size={15} /> : <Save size={15} />}
                     {isFresh ? "New Snapshot" : "Backup Now"}
                 </button>
             </div>
 
-            {/* ── Snapshot History ── */}
-            <div className="space-y-2">
-                {backups.map(b => (
-                    <div key={b.id} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${b.isSafetySnapshot ? 'bg-indigo-50/60 border-indigo-200/80 dark:bg-indigo-900/15 dark:border-indigo-800' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'} hover:shadow-sm`}>
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                                {b.isSafetySnapshot && (
-                                    <span className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-1.5 py-px rounded-full ring-1 ring-indigo-200/60 flex items-center gap-1">
-                                        <ShieldCheck size={10} /> Safety
+            {/* ── Snapshot History Accordion ── */}
+            <details className="group border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 shadow-sm mt-3 overflow-hidden">
+                <summary className="p-3 text-sm font-bold text-slate-800 dark:text-white cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between list-none">
+                    <span>Version History ({backups.length})</span>
+                    <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="p-3 pt-0 space-y-2 max-h-[300px] overflow-y-auto">
+                    {backups.map(b => (
+                        <div key={b.id} className={`flex flex-col gap-2 p-2.5 rounded-lg border transition-colors ${b.isSafetySnapshot ? 'bg-indigo-50/60 border-indigo-200/80 dark:bg-indigo-900/15 dark:border-indigo-800' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'} hover:shadow-sm`}>
+                            <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {b.isSafetySnapshot && (
+                                        <span className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-1 py-px rounded-full ring-1 ring-indigo-200/60 flex items-center gap-1">
+                                            <ShieldCheck size={10} /> Safety
+                                        </span>
+                                    )}
+                                    <span className="text-xs font-bold text-slate-700 dark:text-white tabular-nums">
+                                        {new Date(b.timestamp).toLocaleString()}
                                     </span>
-                                )}
-                                <span className="text-sm font-bold text-slate-700 dark:text-white tabular-nums">
-                                    {new Date(b.timestamp).toLocaleString()}
-                                </span>
+                                </div>
+                                <button
+                                    onClick={() => restoreSnapshot(b)}
+                                    className="flex-shrink-0 text-blue-500 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1"
+                                >
+                                    <RotateCcw size={10} /> Restore
+                                </button>
                             </div>
-                            <div className="text-[10px] text-slate-400 mt-1 flex gap-1.5 flex-wrap">
-                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1.5 py-px rounded-full ring-1 ring-slate-200/60 dark:ring-slate-600">📦 {b.stats.inventory}</span>
-                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1.5 py-px rounded-full ring-1 ring-slate-200/60 dark:ring-slate-600">📄 {b.stats.quotes}</span>
-                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1.5 py-px rounded-full ring-1 ring-slate-200/60 dark:ring-slate-600">📝 {b.stats.transactions}</span>
+                            <div className="text-[10px] text-slate-400 flex gap-1 flex-wrap">
+                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1 py-px text-[10px] rounded-sm ring-1 ring-slate-200/60 dark:ring-slate-600">📦 {b.stats.inventory}</span>
+                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1 py-px text-[10px] rounded-sm ring-1 ring-slate-200/60 dark:ring-slate-600">📄 {b.stats.quotes}</span>
+                                <span className="bg-slate-50 dark:bg-slate-700/50 px-1 py-px text-[10px] rounded-sm ring-1 ring-slate-200/60 dark:ring-slate-600">📝 {b.stats.transactions}</span>
                             </div>
                         </div>
-                        <button
-                            onClick={() => restoreSnapshot(b)}
-                            className="flex-shrink-0 quote-action-btn text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
-                        >
-                            <RotateCcw size={12} /> Restore
-                        </button>
-                    </div>
-                ))}
-                {backups.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <Database className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-                        <p className="text-sm text-slate-400">No backups found.</p>
-                    </div>
-                )}
-            </div>
+                    ))}
+                    {backups.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                            <Database className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-2" />
+                            <p className="text-xs text-slate-400">No backups found.</p>
+                        </div>
+                    )}
+                </div>
+            </details>
         </div>
     );
 };

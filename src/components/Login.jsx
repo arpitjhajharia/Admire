@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth } from '../lib/firebase';
+import { auth, db, appId } from '../lib/firebase';
 import { Lock, User } from 'lucide-react';
 
 const Login = () => {
@@ -11,7 +11,20 @@ const Login = () => {
         setError('');
         try {
             // Internally convert username to email for Firebase
-            const email = `${formData.username.trim().toLowerCase()}@admire.internal`;
+            let email = `${formData.username.trim().toLowerCase()}@admire.internal`;
+
+            // Try to lookup the actual email from Firestore in case it has a unique suffix
+            try {
+                const snapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles')
+                    .where('username', '==', formData.username.trim())
+                    .get();
+                if (!snapshot.empty && snapshot.docs[0].data().email) {
+                    email = snapshot.docs[0].data().email;
+                }
+            } catch (lookupErr) {
+                console.warn("Could not lookup user email, falling back to default:", lookupErr);
+            }
+
             await auth.signInWithEmailAndPassword(email, formData.password);
         } catch (err) {
             console.error(err);

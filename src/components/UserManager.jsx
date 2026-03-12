@@ -13,6 +13,8 @@ const UserManager = ({ user }) => {
     // Edit User State
     const [editingId, setEditingId] = useState(null);
     const [editRole, setEditRole] = useState('');
+    const [editUsername, setEditUsername] = useState('');
+    const [editPassword, setEditPassword] = useState('');
 
     // Load Users
     useEffect(() => {
@@ -33,15 +35,29 @@ const UserManager = ({ user }) => {
 
         setLoading(true);
         try {
-            const email = `${newUser.username.trim().toLowerCase()}@admire.internal`;
+            let email = `${newUser.username.trim().toLowerCase()}@admire.internal`;
+            let userCredential;
+            let uid;
 
             // 1. Create in Firebase Auth (Using secondary app to keep admin logged in)
-            const userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(email, newUser.password);
-            const uid = userCredential.user.uid;
+            try {
+                userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(email, newUser.password);
+                uid = userCredential.user.uid;
+            } catch (authError) {
+                if (authError.code === 'auth/email-already-in-use') {
+                    // Bypass email already in use for previously deleted users
+                    email = `${newUser.username.trim().toLowerCase()}_${Date.now()}@admire.internal`;
+                    userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(email, newUser.password);
+                    uid = userCredential.user.uid;
+                } else {
+                    throw authError; // Rethrow if it's a different error
+                }
+            }
 
-            // 2. Save Role & Username to Firestore
+            // 2. Save Role & Username (and updated email) to Firestore
             await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(uid).set({
                 username: newUser.username.trim(),
+                email: email, // Store the actual authentication email
                 role: newUser.role,
                 createdAt: new Date().toISOString()
             });
@@ -70,14 +86,37 @@ const UserManager = ({ user }) => {
 
     const startEditing = (user) => {
         setEditingId(user.id);
-        setEditRole(user.role);
+        setEditRole(user.role || 'labour');
+        setEditUsername(user.username || '');
+        setEditPassword('');
     };
 
-    const saveEdit = async (userId) => {
+    const saveEdit = async (userObj) => {
+        if (!editUsername.trim()) return alert("Username cannot be empty");
+        if (editPassword && editPassword.length < 6) return alert("Password must be at least 6 characters");
+
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userId).update({
-                role: editRole
-            });
+            if (editPassword) {
+                // Changing password requires recreating the Auth user.
+                let newEmail = `${editUsername.trim().toLowerCase()}_${Date.now()}@admire.internal`;
+                const userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(newEmail, editPassword);
+                const newUid = userCredential.user.uid;
+
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(newUid).set({
+                    username: editUsername.trim(),
+                    email: newEmail,
+                    role: editRole,
+                    createdAt: userObj.createdAt || new Date().toISOString()
+                });
+
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userObj.id).delete();
+            } else {
+                // Just update username and role without touching Firebase Auth
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userObj.id).update({
+                    username: editUsername.trim(),
+                    role: editRole
+                });
+            }
             setEditingId(null);
         } catch (error) {
             console.error(error);
@@ -88,38 +127,25 @@ const UserManager = ({ user }) => {
     // Shared input class
     const inputCls = "px-2.5 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-slate-500 transition-shadow";
 
-    const getRoleBadge = (role) => {
-        const styles = {
-            'super_admin': 'bg-purple-50 text-purple-600 ring-1 ring-purple-200/60',
-            'manager': 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60',
-            'supervisor': 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60',
-            'labour': 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60 dark:bg-slate-700 dark:text-slate-400 dark:ring-slate-600'
-        };
-        return styles[role] || styles['labour'];
-    };
-
     return (
-        <div className="p-3 md:p-4">
+        <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
             {/* ── Header ── */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-800 to-slate-600 flex items-center justify-center shadow-sm">
-                        <Shield className="w-4 h-4 text-white" />
+                        <Users className="w-4 h-4 text-white" />
                     </div>
                     <div>
                         <h2 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-white leading-none">
-                            User Management
+                            Users
                         </h2>
-                        <p className="text-[11px] font-medium text-slate-400 mt-0.5 tracking-wide uppercase">
-                            {users.length} {users.length === 1 ? 'user' : 'users'}
-                        </p>
                     </div>
                 </div>
 
                 {!showForm && (
                     <button
                         onClick={() => setShowForm(true)}
-                        className="flex-shrink-0 bg-slate-800 dark:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-slate-900 dark:hover:bg-slate-500 transition-colors shadow-sm"
+                        className="flex-shrink-0 bg-slate-800 dark:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-slate-900 dark:hover:bg-slate-500 transition-colors shadow-sm"
                     >
                         <UserPlus size={15} /> Add User
                     </button>
@@ -171,21 +197,41 @@ const UserManager = ({ user }) => {
 
             {/* ── User List Table ── */}
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-700/80 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-700/80 text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         <tr>
-                            <th className="px-3 py-2.5 font-bold">Username</th>
-                            <th className="px-3 py-2.5 font-bold">Role</th>
-                            <th className="px-3 py-2.5 text-right font-bold">Action</th>
+                            <th className="px-1.5 py-1.5 font-bold">Username</th>
+                            <th className="px-1.5 py-1.5 font-bold">Role</th>
+                            <th className="px-1.5 py-1.5 text-right font-bold">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 bg-white dark:bg-slate-800">
                         {users.map(u => (
                             <tr key={u.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors ${editingId === u.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                                <td className="px-3 py-2 font-semibold text-slate-800 dark:text-white">
-                                    {u.username || <span className="text-slate-400 italic font-normal text-xs" title={u.id}>Unknown (ID: {u.id.substr(0, 8)}…)</span>}
+                                <td className="px-1.5 py-1 font-semibold text-slate-800 dark:text-white relative">
+                                    {editingId === u.id ? (
+                                        <div className="flex flex-col gap-1">
+                                            <input
+                                                type="text"
+                                                value={editUsername}
+                                                onChange={e => setEditUsername(e.target.value)}
+                                                className={inputCls + " py-1 text-xs min-w-[120px]"}
+                                                placeholder="Username"
+                                                autoFocus
+                                            />
+                                            <input
+                                                type="password"
+                                                value={editPassword}
+                                                onChange={e => setEditPassword(e.target.value)}
+                                                className={inputCls + " py-1 text-xs min-w-[120px]"}
+                                                placeholder="New Password (optional)"
+                                            />
+                                        </div>
+                                    ) : (
+                                        u.username || <span className="text-slate-400 italic font-normal text-xs" title={u.id}>Unknown (ID: {u.id.substr(0, 8)}…)</span>
+                                    )}
                                 </td>
-                                <td className="px-3 py-2">
+                                <td className="px-1.5 py-1">
                                     {editingId === u.id ? (
                                         <select
                                             value={editRole}
@@ -198,16 +244,20 @@ const UserManager = ({ user }) => {
                                             <option value="super_admin">Super Admin</option>
                                         </select>
                                     ) : (
-                                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleBadge(u.role)}`}>
+                                        <span className={`text-xs capitalize font-medium ${u.role === 'super_admin' ? 'text-purple-600 dark:text-purple-400' :
+                                            u.role === 'manager' ? 'text-blue-600 dark:text-blue-400' :
+                                                u.role === 'supervisor' ? 'text-amber-600 dark:text-amber-400' :
+                                                    'text-slate-500 dark:text-slate-400'
+                                            }`}>
                                             {u.role.replace('_', ' ')}
                                         </span>
                                     )}
                                 </td>
-                                <td className="px-3 py-2 text-right">
-                                    <div className="flex justify-end gap-1">
+                                <td className="px-1.5 py-1 text-right align-top">
+                                    <div className="flex justify-end gap-1 mt-1">
                                         {editingId === u.id ? (
                                             <>
-                                                <button onClick={() => saveEdit(u.id)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20" title="Save">
+                                                <button onClick={() => saveEdit(u)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20" title="Save">
                                                     <Check size={14} />
                                                 </button>
                                                 <button onClick={() => setEditingId(null)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" title="Cancel">
@@ -216,7 +266,7 @@ const UserManager = ({ user }) => {
                                             </>
                                         ) : (
                                             <>
-                                                <button onClick={() => startEditing(u)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit Role">
+                                                <button onClick={() => startEditing(u)} className="quote-action-btn w-7 h-7 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit">
                                                     <Edit2 size={14} />
                                                 </button>
                                                 <button
@@ -234,7 +284,7 @@ const UserManager = ({ user }) => {
                         ))}
                         {users.length === 0 && (
                             <tr>
-                                <td colSpan="3" className="px-3 py-8 text-center">
+                                <td colSpan="3" className="px-1.5 py-5 text-center">
                                     <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                                     <p className="text-sm text-slate-400">No users found.</p>
                                 </td>
@@ -242,10 +292,6 @@ const UserManager = ({ user }) => {
                         )}
                     </tbody>
                 </table>
-            </div>
-
-            <div className="mt-2 px-3 py-2 text-[11px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700/50 text-center">
-                To change a password or username, please delete the user and create them again.
             </div>
         </div>
     );

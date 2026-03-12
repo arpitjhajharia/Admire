@@ -404,11 +404,17 @@ const App = () => {
         )}
 
         {activeModule === 'admin' && showUsersTab && (
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <GlobalSettings />
-            <UserManager user={user} />
-            <ProjectManager user={user} />
-            <BackupManager />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 animate-in fade-in duration-300">
+            <div className="flex flex-col gap-4">
+              <GlobalSettings />
+              <BackupManager />
+            </div>
+            <div className="flex flex-col gap-4">
+              <ProjectManager user={user} />
+            </div>
+            <div className="flex flex-col gap-4">
+              <UserManager user={user} />
+            </div>
           </div>
         )}
       </main>
