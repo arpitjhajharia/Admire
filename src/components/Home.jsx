@@ -31,7 +31,7 @@ const Home = ({ onSelectModule, darkMode, showAdmin }) => {
             color: 'text-purple-500',
             bgColor: 'bg-purple-50 dark:bg-purple-900/20',
             borderColor: 'border-purple-200 dark:border-purple-800',
-            active: false
+            active: true
         },
         {
             id: 'reports',

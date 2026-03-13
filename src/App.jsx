@@ -17,6 +17,7 @@ import Login from './components/Login';
 import Home from './components/Home';
 import TaskManager from './components/TaskManager';
 import ReportingTracker from './components/ReportingTracker';
+import CRMManager from './components/CRMManager';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -256,8 +257,13 @@ const App = () => {
                 BOQ
               </span>
             )}
-            {activeModule === 'admin' && (
+            {activeModule === 'crm' && (
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-400">
+                CRM
+              </span>
+            )}
+            {activeModule === 'admin' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-400">
                 Admin
               </span>
             )}
@@ -411,6 +417,10 @@ const App = () => {
 
         {activeModule === 'reports' && (
           <ReportingTracker user={user} userRole={userRole} />
+        )}
+
+        {activeModule === 'crm' && (
+          <CRMManager user={user} userRole={userRole} />
         )}
 
         {activeModule === 'admin' && showUsersTab && (
