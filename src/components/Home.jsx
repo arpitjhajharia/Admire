@@ -35,8 +35,8 @@ const Home = ({ onSelectModule, darkMode, showAdmin }) => {
         },
         {
             id: 'reports',
-            name: 'Reporting Manager',
-            description: 'Advanced analytics and reporting',
+            name: 'BOQ Tracker',
+            description: 'Manage and track BOQ items and progress',
             icon: BarChart,
             color: 'text-orange-500',
             bgColor: 'bg-orange-50 dark:bg-orange-900/20',

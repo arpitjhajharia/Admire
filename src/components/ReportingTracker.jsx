@@ -109,7 +109,7 @@ const Loading = () => (
         <div className="animate-spin mr-3">
             <Package size={24} />
         </div>
-        Loading Admire Sign Tracker...
+        Loading Admire BOQ Tracker...
     </div>
 );
 
@@ -270,10 +270,10 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
     );
 };
 
-const ProjectSettingsModal = ({ project, onClose }) => {
-    const [name, setName] = useState(project.name);
-    const [factoryStages, setFactoryStages] = useState(project.factoryStages || []);
-    const [siteStages, setSiteStages] = useState(project.siteStages || []);
+const BOQSettingsModal = ({ boq, onClose }) => {
+    const [name, setName] = useState(boq.name);
+    const [factoryStages, setFactoryStages] = useState(boq.factoryStages || []);
+    const [siteStages, setSiteStages] = useState(boq.siteStages || []);
     const [newFactoryStage, setNewFactoryStage] = useState('');
     const [newSiteStage, setNewSiteStage] = useState('');
     const [saving, setSaving] = useState(false);
@@ -301,7 +301,7 @@ const ProjectSettingsModal = ({ project, onClose }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id), {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), {
                 name,
                 factoryStages,
                 siteStages
@@ -314,12 +314,12 @@ const ProjectSettingsModal = ({ project, onClose }) => {
         setSaving(false);
     };
 
-    const handleDeleteProject = async () => {
-        if (!window.confirm(`CRITICAL WARNING: This will delete project "${project.name}" and ALL ${project.stats?.total || 0} signs inside it. This cannot be undone. Are you sure?`)) return;
+    const handleDeleteBOQ = async () => {
+        if (!window.confirm(`CRITICAL WARNING: This will delete BOQ "${boq.name}" and ALL ${boq.stats?.total || 0} signs inside it. This cannot be undone. Are you sure?`)) return;
 
         setSaving(true);
         try {
-            const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs');
+            const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs');
             const snapshot = await getDocs(signsRef);
             const batch = writeBatch(db);
 
@@ -328,7 +328,7 @@ const ProjectSettingsModal = ({ project, onClose }) => {
             });
             await batch.commit();
 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id));
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id));
 
             window.location.reload();
         } catch (e) {
@@ -342,13 +342,13 @@ const ProjectSettingsModal = ({ project, onClose }) => {
         <div className="fixed inset-0 bg-white z-[80] overflow-y-auto">
             <div className="max-w-2xl mx-auto p-6">
                 <div className="flex justify-between items-center mb-8 border-b pb-4">
-                    <h2 className="text-2xl font-bold flex items-center gap-2"><Settings className="text-slate-400" /> Project Settings</h2>
+                    <h2 className="text-2xl font-bold flex items-center gap-2"><Settings className="text-slate-400" /> BOQ Settings</h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
                 </div>
 
                 <div className="space-y-8">
                     <section>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Project Name</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">BOQ Name</label>
                         <input
                             className="w-full border p-2 rounded-lg text-lg"
                             value={name}
@@ -408,15 +408,15 @@ const ProjectSettingsModal = ({ project, onClose }) => {
                         <h3 className="text-red-600 font-bold mb-2 flex items-center gap-2"><AlertTriangle size={20} /> Danger Zone</h3>
                         <div className="bg-red-50 border border-red-100 rounded-lg p-4 flex justify-between items-center">
                             <div className="text-sm text-red-800">
-                                <p className="font-bold">Delete this project</p>
+                                <p className="font-bold">Delete this BOQ</p>
                                 <p>Once deleted, it will be gone forever. Please be certain.</p>
                             </div>
                             <button
-                                onClick={handleDeleteProject}
+                                onClick={handleDeleteBOQ}
                                 disabled={saving}
                                 className="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700 disabled:opacity-50"
                             >
-                                Delete Project
+                                Delete BOQ
                             </button>
                         </div>
                     </section>
@@ -440,35 +440,43 @@ const ProjectSettingsModal = ({ project, onClose }) => {
 
 // --- Login Component Removed since App handles Authentication ---
 
-const Dashboard = ({ user, onViewProject, onManageUsers, onLogout }) => {
-    const [projects, setProjects] = useState([]);
+const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
+    const [boqs, setBOQs] = useState([]);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [newProjectName, setNewProjectName] = useState('');
+    const [editBOQ, setEditBOQ] = useState(null); // {id, name}
+    const [deleteBOQ, setDeleteBOQ] = useState(null); // {id, name}
+    const [newBOQName, setNewBOQName] = useState('');
 
     useEffect(() => {
-        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'projects'));
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'boqs'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const projs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setProjects(projs);
-        }, (err) => console.error("Error fetching projects", err));
+            const boqList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setBOQs(boqList);
+        }, (err) => console.error("Error fetching boqs", err));
         return () => unsubscribe();
     }, []);
 
-    const handleCreateProject = async () => {
-        if (!newProjectName.trim()) return;
+    const handleUpdateBOQName = async () => {
+        if (!editBOQ || !editBOQ.name.trim()) return;
         try {
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'projects'), {
-                name: newProjectName,
-                createdAt: serverTimestamp(),
-                createdBy: user.username,
-                factoryStages: [], // Init empty stages
-                siteStages: [], // Init empty stages
-                stats: { total: 0, pending: 0, manufactured: 0, installed: 0, handedover: 0 }
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', editBOQ.id), {
+                name: editBOQ.name
             });
-            setShowAddModal(false);
-            setNewProjectName('');
+            setEditBOQ(null);
         } catch (e) {
-            console.error("Error creating project", e);
+            console.error("Error updating BOQ name", e);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteBOQ) return;
+        try {
+            // This only deletes the BOQ doc, not the sub-collections. 
+            // In a real app, you'd want a recursive delete or a cloud function.
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', deleteBOQ.id));
+            setDeleteBOQ(null);
+        } catch (e) {
+            console.error("Error deleting BOQ", e);
         }
     };
 
@@ -506,74 +514,161 @@ const Dashboard = ({ user, onViewProject, onManageUsers, onLogout }) => {
 
             <main className="max-w-7xl mx-auto p-6">
                 <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-2xl font-bold text-slate-800">Projects Dashboard</h2>
+                    <h2 className="text-2xl font-bold text-slate-800">BOQ Dashboard</h2>
                     {user.role === ROLES.ADMIN && (
                         <button
                             onClick={() => setShowAddModal(true)}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition"
                         >
-                            <Plus size={18} /> New Project
+                            <Plus size={18} /> New BOQ
                         </button>
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {projects.map(project => (
-                        <div
-                            key={project.id}
-                            onClick={() => onViewProject(project)}
-                            className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition cursor-pointer border border-slate-100 group"
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <h3 className="text-lg font-bold text-slate-800 group-hover:text-indigo-600 transition">{project.name}</h3>
-                                <span className="text-slate-400"><FileText size={18} /></span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div className="bg-slate-50 p-3 rounded-lg">
-                                    <span className="block text-slate-500 text-xs uppercase tracking-wider">Total</span>
-                                    <span className="text-xl font-bold text-slate-700">{project.stats?.total || 0}</span>
-                                </div>
-                                <div className="bg-orange-50 p-3 rounded-lg">
-                                    <span className="block text-orange-600 text-xs uppercase tracking-wider">Pending</span>
-                                    <span className="text-xl font-bold text-orange-700">{project.stats?.pending || 0}</span>
-                                </div>
-                                <div className="bg-blue-50 p-3 rounded-lg">
-                                    <span className="block text-blue-600 text-xs uppercase tracking-wider">Produced</span>
-                                    <span className="text-xl font-bold text-blue-700">{project.stats?.manufactured || 0}</span>
-                                </div>
-                                <div className="bg-green-50 p-3 rounded-lg">
-                                    <span className="block text-green-600 text-xs uppercase tracking-wider">Installed</span>
-                                    <span className="text-xl font-bold text-green-700">{project.stats?.installed || 0}</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {projects.length === 0 && (
-                        <div className="col-span-full py-20 text-center text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">
-                            <Package size={48} className="mx-auto mb-4 opacity-50" />
-                            <p>No projects found. Create one to get started.</p>
-                        </div>
-                    )}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                            <tr>
+                                <th className="px-6 py-3 w-1/3">BOQ Name</th>
+                                <th className="px-4 py-3 text-center w-24">Total</th>
+                                <th className="px-4 py-3 text-center w-24">Pending</th>
+                                <th className="px-4 py-3 text-center w-24 text-blue-600">Produced</th>
+                                <th className="px-4 py-3 text-center w-24 text-green-600">Installed</th>
+                                <th className="px-6 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {boqs.map(boq => (
+                                <tr
+                                    key={boq.id}
+                                    className="hover:bg-slate-50 transition cursor-pointer group"
+                                    onClick={() => onViewBOQ(boq)}
+                                >
+                                    <td className="px-6 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-indigo-50 p-2 rounded text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition">
+                                                <FileText size={16} />
+                                            </div>
+                                            <span className="font-bold text-slate-800 text-sm">{boq.name}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center font-bold text-slate-600 text-sm">{boq.stats?.total || 0}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-orange-600 text-sm">{boq.stats?.pending || 0}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-blue-600 text-sm">{boq.stats?.manufactured || 0}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-green-600 text-sm">{boq.stats?.installed || 0}</td>
+                                    <td className="px-6 py-3 text-right">
+                                        <div className="flex justify-end items-center gap-2">
+                                            {user.role === ROLES.ADMIN && (
+                                                <>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setEditBOQ({ id: boq.id, name: boq.name }); }}
+                                                        className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition"
+                                                        title="Rename BOQ"
+                                                    >
+                                                        <Edit size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setDeleteBOQ({ id: boq.id, name: boq.name }); }}
+                                                        className="p-1.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600 transition"
+                                                        title="Delete BOQ"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button className="text-indigo-600 font-bold text-xs hover:underline ml-2">View Details →</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {boqs.length === 0 && (
+                                <tr>
+                                    <td colSpan="6" className="py-20 text-center text-slate-400">
+                                        <Package size={48} className="mx-auto mb-4 opacity-50" />
+                                        <p>No BOQs found. Create one to get started.</p>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </main>
 
             {showAddModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4">Add New Project</h3>
+                        <h3 className="text-lg font-bold mb-4">Add New BOQ</h3>
                         <input
                             autoFocus
                             type="text"
                             className="w-full border p-2 rounded mb-4"
-                            placeholder="Project Name"
-                            value={newProjectName}
-                            onChange={e => setNewProjectName(e.target.value)}
+                            placeholder="BOQ Name"
+                            value={newBOQName}
+                            onChange={e => setNewBOQName(e.target.value)}
                         />
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
-                            <button onClick={handleCreateProject} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Create</button>
+                            <button
+                                onClick={async () => {
+                                    if (!newBOQName.trim()) return;
+                                    try {
+                                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'boqs'), {
+                                            name: newBOQName,
+                                            createdAt: serverTimestamp(),
+                                            createdBy: user.username,
+                                            factoryStages: [],
+                                            siteStages: [],
+                                            stats: { total: 0, pending: 0, manufactured: 0, installed: 0, handedover: 0 }
+                                        });
+                                        setShowAddModal(false);
+                                        setNewBOQName('');
+                                    } catch (e) { console.error(e); }
+                                }}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            >
+                                Create
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Name Modal */}
+            {editBOQ && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <h3 className="text-lg font-bold mb-4">Rename BOQ</h3>
+                        <input
+                            autoFocus
+                            type="text"
+                            className="w-full border-2 border-indigo-100 focus:border-indigo-500 outline-none p-3 rounded-lg mb-6 transition-all"
+                            value={editBOQ.name}
+                            onChange={e => setEditBOQ({ ...editBOQ, name: e.target.value })}
+                            onKeyDown={e => e.key === 'Enter' && handleUpdateBOQName()}
+                        />
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setEditBOQ(null)} className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-50 rounded-lg">Cancel</button>
+                            <button onClick={handleUpdateBOQName} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm transition">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteBOQ && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <div className="flex items-center gap-3 text-red-600 mb-4">
+                            <AlertTriangle size={24} />
+                            <h3 className="text-lg font-bold">Delete BOQ?</h3>
+                        </div>
+                        <p className="text-slate-600 mb-6">
+                            Are you sure you want to delete <span className="font-bold text-slate-800">"{deleteBOQ.name}"</span>?
+                            This action cannot be undone and will remove all associated sign records.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setDeleteBOQ(null)} className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-50 rounded-lg">No, Keep it</button>
+                            <button onClick={handleConfirmDelete} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-sm transition">Yes, Delete BOQ</button>
                         </div>
                     </div>
                 </div>
@@ -637,8 +732,8 @@ const EditSignModal = ({ sign, columns, onClose, onUpdate }) => {
     );
 };
 
-// ... ProjectManager (Same as before) ...
-const ProjectManager = ({ project, user, onBack }) => {
+// ... BOQManager (Same as before) ...
+const BOQManager = ({ boq, user, onBack }) => {
     const [signs, setSigns] = useState([]);
     const [viewMode, setViewMode] = useState('table');
     const [importConfig, setImportConfig] = useState(null);
@@ -663,8 +758,8 @@ const ProjectManager = ({ project, user, onBack }) => {
     const [lastSiteStage, setLastSiteStage] = useState('');
 
     useEffect(() => {
-        if (!project) return;
-        const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs');
+        if (!boq) return;
+        const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs');
         const unsubscribe = onSnapshot(signsRef, (snapshot) => {
             const loadedSigns = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
             setSigns(loadedSigns);
@@ -679,22 +774,22 @@ const ProjectManager = ({ project, user, onBack }) => {
                     return acc;
                 }, { total: 0, pending: 0, manufactured: 0, installed: 0, handedover: 0 });
 
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id), { stats });
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), { stats });
             }
         });
         return () => unsubscribe();
-    }, [project.id]);
+    }, [boq.id]);
 
     useEffect(() => {
-        if (project.columns) {
-            setColumns(project.columns);
+        if (boq.columns) {
+            setColumns(boq.columns);
             // Initialize visible columns to all currently visible columns from config
             if (visibleColumnKeys.size === 0) {
-                const initialKeys = new Set(project.columns.filter(c => c.visible).map(c => c.key));
+                const initialKeys = new Set(boq.columns.filter(c => c.visible).map(c => c.key));
                 setVisibleColumnKeys(initialKeys);
             }
         }
-    }, [project]);
+    }, [boq]);
 
     const toggleColumnVisibility = (key) => {
         const newSet = new Set(visibleColumnKeys);
@@ -1058,7 +1153,7 @@ const ProjectManager = ({ project, user, onBack }) => {
             label: h
         }));
 
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id), {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), {
             columns: newColumns
         });
         setColumns(newColumns);
@@ -1097,7 +1192,7 @@ const ProjectManager = ({ project, user, onBack }) => {
                 siteImages: []
             };
 
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', signId), signData);
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId), signData);
         }
 
         setImportConfig(null);
@@ -1107,7 +1202,7 @@ const ProjectManager = ({ project, user, onBack }) => {
         const ids = Array.from(signIds);
         for (const id of ids) {
             try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', id), {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), {
                     status: newStatus,
                     history: serverTimestamp()
                 });
@@ -1123,7 +1218,7 @@ const ProjectManager = ({ project, user, onBack }) => {
         const ids = Array.from(signIds);
         for (const id of ids) {
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id));
             } catch (e) {
                 console.error(e);
                 alert("Error deleting sign: " + id);
@@ -1134,7 +1229,7 @@ const ProjectManager = ({ project, user, onBack }) => {
 
     const handleUpdateSign = async (signId, updatedData) => {
         try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', signId), updatedData);
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId), updatedData);
         } catch (e) {
             console.error("Update failed", e);
             alert("Failed to update sign.");
@@ -1145,7 +1240,7 @@ const ProjectManager = ({ project, user, onBack }) => {
         if (!window.confirm("Are you sure you want to delete this image?")) return;
 
         try {
-            const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', signId);
+            const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
             const signDoc = await getDoc(signRef);
 
             if (signDoc.exists()) {
@@ -1163,7 +1258,7 @@ const ProjectManager = ({ project, user, onBack }) => {
     };
 
     const handleUploadRequest = (sign, isFactory) => {
-        const stages = isFactory ? project.factoryStages : project.siteStages;
+        const stages = isFactory ? boq.factoryStages : boq.siteStages;
         if (stages && stages.length > 0) {
             setUploadModal({ isOpen: true, sign, isFactory });
         } else {
@@ -1197,7 +1292,7 @@ const ProjectManager = ({ project, user, onBack }) => {
             timestamp: new Date().toISOString()
         };
 
-        const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', sign._id);
+        const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id);
         const field = isFactory ? 'factoryImages' : 'siteImages';
         const currentImages = sign[field] || [];
 
@@ -1258,7 +1353,7 @@ const ProjectManager = ({ project, user, onBack }) => {
     if (viewMode === 'print') {
         return (
             <PrintView
-                project={project}
+                boq={boq}
                 signs={filteredSigns}
                 columns={activeColumns}
                 onClose={() => setViewMode('table')}
@@ -1291,8 +1386,8 @@ const ProjectManager = ({ project, user, onBack }) => {
             )}
 
             {showSettings && (
-                <ProjectSettingsModal
-                    project={project}
+                <BOQSettingsModal
+                    boq={boq}
                     onClose={() => setShowSettings(false)}
                 />
             )}
@@ -1302,7 +1397,7 @@ const ProjectManager = ({ project, user, onBack }) => {
                 onClose={() => setUploadModal({ ...uploadModal, isOpen: false })}
                 onUpload={handleImageUpload}
                 type={uploadModal.isFactory ? "Factory" : "Site"}
-                stages={uploadModal.isFactory ? project.factoryStages : project.siteStages}
+                stages={uploadModal.isFactory ? boq.factoryStages : boq.siteStages}
                 defaultStage={uploadModal.isFactory ? lastFactoryStage : lastSiteStage}
             />
 
@@ -1313,7 +1408,7 @@ const ProjectManager = ({ project, user, onBack }) => {
                         <ChevronUp className="rotate-[-90deg]" />
                     </button>
                     <div>
-                        <h2 className="text-xl font-bold text-slate-800">{project.name}</h2>
+                        <h2 className="text-xl font-bold text-slate-800">{boq.name}</h2>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                             <span>{signs.length} items</span>
                             <span>•</span>
@@ -1353,7 +1448,7 @@ const ProjectManager = ({ project, user, onBack }) => {
                         <button
                             onClick={() => setShowSettings(true)}
                             className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-                            title="Project Settings"
+                            title="BOQ Settings"
                         >
                             <Settings size={18} />
                         </button>
@@ -1482,7 +1577,7 @@ const ProjectManager = ({ project, user, onBack }) => {
                                 onDelete={async () => {
                                     if (window.confirm('Delete sign?')) {
                                         try {
-                                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', project.id, 'signs', sign._id));
+                                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id));
                                         } catch (err) {
                                             console.error(err);
                                             alert("Delete failed: " + err.message);
@@ -1737,7 +1832,7 @@ const ImportMapper = ({ config, onClose, onConfirm }) => {
     );
 };
 
-const PrintView = ({ project, signs, columns, onClose }) => {
+const PrintView = ({ boq, signs, columns, onClose }) => {
     const [showColMenu, setShowColMenu] = useState(false);
     const [selectedColIds, setSelectedColIds] = useState(new Set(['art', 'fact_all', 'site_all']));
 
@@ -1748,8 +1843,8 @@ const PrintView = ({ project, signs, columns, onClose }) => {
             { id: 'fact_all', label: 'Factory (All)', type: 'factory', mode: 'all', color: 'text-orange-600' }
         ];
 
-        if (project.factoryStages && project.factoryStages.length > 0) {
-            project.factoryStages.forEach(s => {
+        if (boq.factoryStages && boq.factoryStages.length > 0) {
+            boq.factoryStages.forEach(s => {
                 opts.push({ id: `fact_${s}`, label: `Factory - ${s}`, type: 'factory', mode: 'stage', stage: s, color: 'text-orange-500' });
             });
         } else {
@@ -1759,8 +1854,8 @@ const PrintView = ({ project, signs, columns, onClose }) => {
 
         opts.push({ id: 'site_all', label: 'Site (All)', type: 'site', mode: 'all', color: 'text-green-600' });
 
-        if (project.siteStages && project.siteStages.length > 0) {
-            project.siteStages.forEach(s => {
+        if (boq.siteStages && boq.siteStages.length > 0) {
+            boq.siteStages.forEach(s => {
                 opts.push({ id: `site_${s}`, label: `Site - ${s}`, type: 'site', mode: 'stage', stage: s, color: 'text-green-500' });
             });
         } else {
@@ -1768,7 +1863,7 @@ const PrintView = ({ project, signs, columns, onClose }) => {
         }
 
         return opts;
-    }, [project]);
+    }, [boq]);
 
     const toggleCol = (id) => {
         const next = new Set(selectedColIds);
@@ -1829,16 +1924,16 @@ const PrintView = ({ project, signs, columns, onClose }) => {
 
             <div className="mt-12 print:mt-0 print:w-full">
                 <div className="mb-4 border-b pb-2 flex justify-between items-end">
-                    <h1 className="text-xl font-bold uppercase">{project.name}</h1>
+                    <h1 className="text-xl font-bold uppercase">{boq.name}</h1>
                     <p className="text-xs text-slate-500">Generated {new Date().toLocaleDateString()}</p>
                 </div>
 
                 <table className="w-full text-xs border-collapse border border-slate-300">
                     <thead>
                         <tr className="bg-slate-100 print:bg-slate-200">
-                            <th className="border border-slate-300 p-2 text-left w-64">Sign Details</th>
+                            <th className="border border-slate-300 p-1.5 text-left w-52">Sign Details</th>
                             {activeReportCols.map(col => (
-                                <th key={col.id} className={`border border-slate-300 p-2 w-48 text-left uppercase ${col.color}`}>
+                                <th key={col.id} className={`border border-slate-300 p-1.5 w-40 text-left uppercase ${col.color}`}>
                                     {col.label}
                                 </th>
                             ))}
@@ -1848,15 +1943,15 @@ const PrintView = ({ project, signs, columns, onClose }) => {
                         {signs.map(sign => {
                             return (
                                 <tr key={sign._id} className="break-inside-avoid">
-                                    <td className="border border-slate-300 p-3 align-top">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="font-bold text-lg">{sign[idCol?.key] || sign._id}</span>
-                                            <span className="text-xs uppercase font-bold text-slate-400 bg-slate-100 px-1 rounded">{sign.status.split(' ')[0]}</span>
+                                    <td className="border border-slate-300 p-1 align-top">
+                                        <div className="flex justify-between items-start">
+                                            <span className="font-bold text-sm leading-none">{sign[idCol?.key] || sign._id}</span>
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-50 px-1 rounded border leading-none">{sign.status.split(' ')[0]}</span>
                                         </div>
-                                        <div className="space-y-1">
+                                        <div className="mt-0.5 leading-[1.1]">
                                             {textCols.map(c => (
-                                                <div key={c.key} className="grid grid-cols-[80px_1fr] gap-1">
-                                                    <span className="text-slate-500 font-medium truncate">{c.label}</span>
+                                                <div key={c.key} className="grid grid-cols-[60px_1fr] gap-x-1 text-xs">
+                                                    <span className="text-slate-500 font-medium truncate">{c.label}:</span>
                                                     <span className="font-semibold">{sign[c.key]}</span>
                                                 </div>
                                             ))}
@@ -1868,10 +1963,10 @@ const PrintView = ({ project, signs, columns, onClose }) => {
                                         const bgClass = col.type === 'artwork' ? 'bg-slate-50/30' : (col.type === 'factory' ? 'bg-orange-50/10' : 'bg-green-50/10');
 
                                         return (
-                                            <td key={col.id} className={`border border-slate-300 p-2 align-top ${bgClass}`}>
-                                                <div className="flex flex-wrap gap-2">
+                                            <td key={col.id} className={`border border-slate-300 p-1 align-top ${bgClass}`}>
+                                                <div className="flex flex-wrap gap-1">
                                                     {images.map((img, i) => (
-                                                        <img key={i} src={img.url} className="h-24 w-auto object-contain border bg-white shadow-sm" alt="" />
+                                                        <img key={i} src={img.url} className="h-16 w-auto object-contain border bg-white shadow-sm" alt="" />
                                                     ))}
                                                 </div>
                                             </td>
@@ -1971,7 +2066,7 @@ const UserManagement = ({ onClose }) => {
 
 const ReportingTracker = ({ user: globalUser, userRole }) => {
     const loading = false;
-    const [activeProject, setActiveProject] = useState(null);
+    const [activeBOQ, setActiveBOQ] = useState(null);
     const [showUserMan, setShowUserMan] = useState(false);
 
     // Map global user to tracker role
@@ -1991,12 +2086,12 @@ const ReportingTracker = ({ user: globalUser, userRole }) => {
 
     if (showUserMan) return <UserManagement onClose={() => setShowUserMan(false)} />;
 
-    if (activeProject) {
+    if (activeBOQ) {
         return (
-            <ProjectManager
-                project={activeProject}
+            <BOQManager
+                boq={activeBOQ}
                 user={user}
-                onBack={() => setActiveProject(null)}
+                onBack={() => setActiveBOQ(null)}
             />
         );
     }
@@ -2004,7 +2099,7 @@ const ReportingTracker = ({ user: globalUser, userRole }) => {
     return (
         <Dashboard
             user={user}
-            onViewProject={setActiveProject}
+            onViewBOQ={setActiveBOQ}
             onManageUsers={() => setShowUserMan(true)}
             onLogout={() => { }} // Controlled by main app
         />

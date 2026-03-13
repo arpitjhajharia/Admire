@@ -253,7 +253,7 @@ const App = () => {
             )}
             {activeModule === 'reports' && (
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400">
-                Reports
+                BOQ
               </span>
             )}
             {activeModule === 'admin' && (
