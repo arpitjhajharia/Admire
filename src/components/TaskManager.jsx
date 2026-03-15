@@ -130,8 +130,6 @@ const TaskManager = ({ user, userRole }) => {
     const handleSaveTask = async () => {
         if (!title || !title.trim()) return;
 
-        // Firebase crashes if any field is explicitly undefined.
-        // We ensure fallback to empty string or valid value.
         const taskData = {
             title: title.trim(),
             project: project ? project.trim() : '',
@@ -186,11 +184,6 @@ const TaskManager = ({ user, userRole }) => {
         e.stopPropagation();
         const newStatus = task.status === 'completed' ? 'open' : 'completed';
         updateTaskStatus(task.id, newStatus);
-    };
-
-    const priorityColors = {
-        normal: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
-        high: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
     };
 
     const handleSort = (key) => {
@@ -274,7 +267,6 @@ const TaskManager = ({ user, userRole }) => {
 
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
-        // Assume dateStr format is usually YYYY-MM-DD from input type="date"
         const [year, month, day] = dateStr.split('-');
         if (!year || !month || !day) return dateStr;
         const dateObj = new Date(year, parseInt(month) - 1, day);
@@ -284,6 +276,17 @@ const TaskManager = ({ user, userRole }) => {
         return `${d}-${m}`;
     };
 
+    const getDueDateClass = (task) => {
+        const isDone = task.status === 'completed' || task.status === 'done';
+        if (!task.dueDate) return 'text-slate-400 italic';
+        if (isDone) return 'text-slate-700 dark:text-slate-300 font-medium';
+        const todayStr = getTodayStr();
+        if (task.dueDate < todayStr) return 'text-red-600 dark:text-red-400 font-bold';
+        if (task.dueDate === todayStr) return 'text-amber-600 dark:text-amber-500 font-bold';
+        return 'text-slate-700 dark:text-slate-300 font-medium';
+    };
+
+    // ── DESKTOP: inline editable row ──────────────────────────────────────────
     const renderEditableRow = (keyPrefix = 'new') => {
         return (
             <tr key={`editable-${keyPrefix}`} className="bg-teal-50/50 dark:bg-teal-900/20 border-y-2 border-teal-500/30">
@@ -405,23 +408,13 @@ const TaskManager = ({ user, userRole }) => {
         );
     };
 
+    // ── DESKTOP: read-only table row ──────────────────────────────────────────
     const renderTableRow = (task, rowIdx) => {
         if (editingTask?.id === task.id) {
             return renderEditableRow(task.id);
         }
         const isDone = task.status === 'completed' || task.status === 'done';
-
-        let dueDateClass = 'text-slate-700 dark:text-slate-300 font-medium';
-        if (!task.dueDate) {
-            dueDateClass = 'text-slate-400 italic';
-        } else if (!isDone) {
-            const todayStr = getTodayStr();
-            if (task.dueDate < todayStr) {
-                dueDateClass = 'text-red-600 dark:text-red-400 font-bold';
-            } else if (task.dueDate === todayStr) {
-                dueDateClass = 'text-amber-600 dark:text-amber-500 font-bold';
-            }
-        }
+        const dueDateClass = getDueDateClass(task);
 
         return (
             <tr
@@ -501,37 +494,282 @@ const TaskManager = ({ user, userRole }) => {
         );
     };
 
+    // ── MOBILE: task edit modal ───────────────────────────────────────────────
+    const renderMobileEditModal = () => {
+        if (!editingTask) return null;
+        return (
+            <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
+                {/* Modal header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                        {editingTask.id === 'new' ? 'New Task' : 'Edit Task'}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSaveTask}
+                            disabled={!title.trim()}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg disabled:opacity-40 transition-colors"
+                        >
+                            <Save size={12} /> Save
+                        </button>
+                        <button
+                            onClick={cancelEdit}
+                            className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Scrollable form */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Task title */}
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Task Name *</label>
+                        <textarea
+                            value={title}
+                            rows={2}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white resize-none"
+                            placeholder="Task name"
+                            autoFocus
+                        />
+                    </div>
+
+                    {/* Project + Priority row */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Project</label>
+                            <select
+                                value={project}
+                                onChange={(e) => setProject(e.target.value)}
+                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+                            >
+                                <option value="">None</option>
+                                {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                            <select
+                                value={priority}
+                                onChange={(e) => setPriority(e.target.value)}
+                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+                            >
+                                <option value="normal">Normal</option>
+                                <option value="high">⚑ High</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Assigned To */}
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Assigned To</label>
+                        <select
+                            value={assignedTo}
+                            onChange={(e) => setAssignedTo(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+                        >
+                            <option value="">Unassigned</option>
+                            {usersList.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Due date + Status row */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                            <input
+                                type="date"
+                                value={dueDate}
+                                onChange={(e) => setDueDate(e.target.value)}
+                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+                            />
+                        </div>
+                        {editingTask.id !== 'new' && (
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                                <select
+                                    value={status}
+                                    onChange={(e) => setStatus(e.target.value)}
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+                                >
+                                    <option value="open">Open</option>
+                                    <option value="completed">Completed</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Description</label>
+                        <textarea
+                            value={description}
+                            rows={3}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white resize-none"
+                            placeholder="Optional description"
+                        />
+                    </div>
+
+                    {/* Delete button (edit only) */}
+                    {editingTask.id !== 'new' && (
+                        <button
+                            onClick={() => { handleDeleteTask(editingTask.id); cancelEdit(); }}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-red-600 border border-red-200 rounded-lg text-sm font-semibold hover:bg-red-50 transition-colors"
+                        >
+                            <Trash2 size={14} /> Delete Task
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // ── MOBILE: task card ─────────────────────────────────────────────────────
+    const renderMobileCard = (task, rowIdx) => {
+        const isDone = task.status === 'completed' || task.status === 'done';
+        const dueDateClass = getDueDateClass(task);
+        const todayStr = getTodayStr();
+        const isOverdue = !isDone && task.dueDate && task.dueDate < todayStr;
+        const isDueToday = !isDone && task.dueDate && task.dueDate === todayStr;
+
+        return (
+            <div
+                key={task.id}
+                className={`flex items-start gap-2.5 px-3 py-2.5 cursor-pointer transition-colors ${
+                    rowIdx % 2 === 0
+                        ? 'bg-white dark:bg-slate-800'
+                        : 'bg-slate-50/70 dark:bg-slate-800/50'
+                } ${isDone ? 'opacity-60' : ''} active:bg-blue-50/60 dark:active:bg-slate-700`}
+                onClick={() => startEdit(task)}
+            >
+                {/* Checkbox */}
+                <button
+                    onClick={(e) => toggleTaskStatus(task, e)}
+                    className="flex-shrink-0 mt-0.5 text-slate-400 hover:text-teal-500 transition-colors"
+                >
+                    {isDone
+                        ? <CheckCircle2 size={16} className="text-teal-500" />
+                        : <Circle size={16} />
+                    }
+                </button>
+
+                {/* Main content */}
+                <div className="flex-1 min-w-0">
+                    {/* Row 1: title + priority badge */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className={`text-xs font-semibold leading-snug flex-1 ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>
+                            {task.title}
+                        </span>
+                        {task.priority === 'high' && (
+                            <span className="flex-shrink-0 px-1 py-px rounded text-[8px] font-bold uppercase tracking-wide bg-red-50 text-red-600 ring-1 ring-red-200/60 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-700/50 mt-0.5">
+                                High
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Row 2: project + assigned-to + due date */}
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                        {task.project && (
+                            <span className="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wide bg-purple-50 text-purple-600 ring-1 ring-purple-200/60 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-700/50">
+                                {task.project}
+                            </span>
+                        )}
+                        {task.assignedTo && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">
+                                → {task.assignedTo}
+                            </span>
+                        )}
+                        {task.dueDate && (
+                            <span className={`text-[10px] tabular-nums ${isOverdue ? 'text-red-500 font-bold' : isDueToday ? 'text-amber-500 font-bold' : 'text-slate-400'}`}>
+                                {isOverdue ? '⚠ ' : isDueToday ? '● ' : ''}Due {formatDate(task.dueDate)}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // ── MOBILE: group header ──────────────────────────────────────────────────
+    const renderMobileGroupHeader = (label, count, groupKey, colorClass = 'text-slate-500') => (
+        <div
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-900/60 border-y border-slate-200 dark:border-slate-700/50 cursor-pointer select-none"
+            onClick={() => toggleGroup(groupKey)}
+        >
+            {expandedGroups[groupKey] ? <ChevronUp size={13} className={colorClass} /> : <ChevronDown size={13} className={colorClass} />}
+            <span className={`text-[10px] font-bold uppercase tracking-[0.1em] ${colorClass}`}>
+                {label} ({count})
+            </span>
+        </div>
+    );
+
     return (
         <div className="animate-in fade-in duration-300 pb-10">
-            <div className="flex items-center justify-between mb-6">
+            {/* ── Header ── */}
+            <div className="flex items-start justify-between mb-4 sm:mb-6">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Task List</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Manage your project tasks and workflow</p>
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">Task List</h2>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Manage your project tasks and workflow</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                     <button
                         onClick={() => setHideCompleted(!hideCompleted)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm border ${hideCompleted
+                        className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors shadow-sm border ${hideCompleted
                             ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'
                             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700'
                             }`}
                         title={hideCompleted ? "Click to show completed tasks" : "Click to hide completed tasks"}
                     >
-                        <Filter size={15} />
-                        {hideCompleted ? 'Show All' : 'Hide Completed'}
+                        <Filter size={13} />
+                        <span className="hidden sm:inline">{hideCompleted ? 'Show All' : 'Hide Completed'}</span>
+                        <span className="sm:hidden">{hideCompleted ? 'All' : 'Hide ✓'}</span>
                     </button>
                     <button
                         onClick={() => startEdit()}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition-colors shadow-sm"
+                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs sm:text-sm font-bold transition-colors shadow-sm"
                     >
-                        <Plus size={15} />
-                        New Task
+                        <Plus size={13} />
+                        <span className="hidden sm:inline">New Task</span>
+                        <span className="sm:hidden">New</span>
                     </button>
                 </div>
             </div>
 
-            {/* Table View */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04)] bg-white dark:bg-slate-800">
+            {/* ── MOBILE CARD VIEW (< md) ── */}
+            <div className="md:hidden rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-sm overflow-hidden bg-white dark:bg-slate-800">
+                {/* Mobile edit modal */}
+                {editingTask && renderMobileEditModal()}
+
+                {/* My Tasks */}
+                {myTasks.length > 0 && renderMobileGroupHeader('Assigned to Me', myTasks.length, 'myTasks', 'text-teal-600 dark:text-teal-400')}
+                {expandedGroups.myTasks && myTasks.map((task, idx) => renderMobileCard(task, idx))}
+
+                {/* Other Tasks */}
+                {otherTasks.length > 0 && renderMobileGroupHeader(
+                    myTasks.length > 0 ? 'Other Tasks' : 'All Tasks',
+                    otherTasks.length,
+                    'otherTasks',
+                    'text-slate-500 dark:text-slate-400'
+                )}
+                {expandedGroups.otherTasks && otherTasks.map((task, idx) => renderMobileCard(task, idx))}
+
+                {/* Completed Tasks */}
+                {completedTasks.length > 0 && renderMobileGroupHeader('Completed', completedTasks.length, 'completedTasks', 'text-slate-400 dark:text-slate-500')}
+                {expandedGroups.completedTasks && completedTasks.map((task, idx) => renderMobileCard(task, idx))}
+
+                {/* Empty state */}
+                {tasks.length === 0 && (
+                    <div className="p-10 text-center text-slate-400 dark:text-slate-500 text-sm">
+                        No tasks yet. Tap <span className="font-semibold text-teal-600">New</span> to create one.
+                    </div>
+                )}
+            </div>
+
+            {/* ── DESKTOP TABLE VIEW (≥ md) ── */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04)] bg-white dark:bg-slate-800">
                 <table className="min-w-full border-collapse">
                     <thead>
                         <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">

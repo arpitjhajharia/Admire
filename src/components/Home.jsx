@@ -59,45 +59,51 @@ const Home = ({ onSelectModule, darkMode, showAdmin }) => {
     }
 
     return (
-        <div className="max-w-6xl mx-auto p-6 animate-in fade-in duration-500">
-            <div className="mb-8 text-center md:text-left">
-                <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">Welcome to Admire's Dashboard</h1>
-                <p className="text-slate-500 dark:text-slate-400 max-w-2xl">
-                    Select a module to continue. More features and modules will be available soon.
+        <div className="max-w-6xl mx-auto px-4 py-4 sm:p-6 animate-in fade-in duration-500">
+            {/* Header — compact on mobile */}
+            <div className="mb-4 sm:mb-8 text-center md:text-left">
+                <h1 className="text-xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-1 sm:mb-2">
+                    Welcome to Admire's Dashboard
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
+                    Select a module to continue.
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* 2-col on mobile, 2-col on md, 4-col on lg */}
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {modules.map((mod) => (
                     <button
                         key={mod.id}
                         onClick={() => mod.active ? onSelectModule(mod.id) : null}
-                        className={`flex flex-col items-start p-6 rounded-2xl border transition-all duration-300 ${mod.active
+                        className={`flex flex-col items-start p-3 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 text-left ${mod.active
                             ? `hover:-translate-y-1 hover:shadow-xl cursor-pointer ${mod.borderColor} bg-white dark:bg-slate-800`
                             : 'opacity-60 cursor-not-allowed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'
                             }`}
                     >
-                        <div className={`p-4 rounded-xl mb-4 ${mod.bgColor} ${mod.color}`}>
-                            <mod.icon size={32} />
+                        {/* Icon — smaller on mobile */}
+                        <div className={`p-2 sm:p-4 rounded-lg sm:rounded-xl mb-2 sm:mb-4 ${mod.bgColor} ${mod.color}`}>
+                            <mod.icon size={20} className="sm:hidden" />
+                            <mod.icon size={32} className="hidden sm:block" />
                         </div>
 
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">
+                        <h3 className="text-sm sm:text-lg font-bold text-slate-800 dark:text-slate-100 mb-0.5 sm:mb-2 leading-tight">
                             {mod.name}
                         </h3>
 
-                        <p className="text-sm text-slate-500 dark:text-slate-400 text-left mb-4">
+                        <p className="text-[10px] sm:text-sm text-slate-500 dark:text-slate-400 mb-2 sm:mb-4 leading-snug line-clamp-2">
                             {mod.description}
                         </p>
 
                         {!mod.active && (
-                            <span className="mt-auto inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                            <span className="mt-auto inline-flex items-center px-2 py-0.5 rounded-full text-[9px] sm:text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
                                 Coming Soon
                             </span>
                         )}
 
                         {mod.active && (
-                            <span className="mt-auto inline-flex items-center text-sm font-medium text-teal-600 dark:text-teal-400 hover:underline">
-                                Open Module →
+                            <span className="mt-auto inline-flex items-center text-[10px] sm:text-sm font-semibold text-teal-600 dark:text-teal-400">
+                                Open →
                             </span>
                         )}
                     </button>

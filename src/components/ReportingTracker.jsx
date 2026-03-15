@@ -31,7 +31,8 @@ import {
     Eye,
     EyeOff,
     List,
-    CheckSquare
+    CheckSquare,
+    ArrowUpDown
 } from 'lucide-react';
 
 const ROLES = {
@@ -491,41 +492,113 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
 
     return (
         <div className="min-h-screen bg-slate-50">
-            <nav className="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-                <div className="flex items-center gap-3">
-                    <div className="bg-indigo-600 p-2 rounded-lg text-white"><Package size={20} /></div>
-                    <h1 className="text-xl font-bold text-slate-800">Admire Sign</h1>
+            {/* ── Nav bar — compact on mobile ── */}
+            <nav className="bg-white shadow-sm border-b px-3 sm:px-6 py-2.5 sm:py-4 flex justify-between items-center sticky top-0 z-10">
+                <div className="flex items-center gap-2.5">
+                    <div className="bg-indigo-600 p-1.5 sm:p-2 rounded-lg text-white">
+                        <Package size={18} />
+                    </div>
+                    <div>
+                        <h1 className="text-base sm:text-xl font-bold text-slate-800 leading-tight">Admire Sign</h1>
+                        <span className="text-[10px] text-slate-400 sm:hidden capitalize">{user.username} · {user.role}</span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1 sm:gap-4">
                     <div className="hidden md:flex flex-col items-end">
                         <span className="text-sm font-semibold text-slate-700">{user.username}</span>
                         {getRoleBadge(user.role)}
                     </div>
                     {user.role === ROLES.ADMIN && (
-                        <button onClick={onManageUsers} className="p-2 hover:bg-slate-100 rounded-full text-slate-600" title="Manage Users">
-                            <Users size={20} />
+                        <button onClick={onManageUsers} className="p-2 hover:bg-slate-100 active:bg-slate-200 rounded-full text-slate-500" title="Manage Users">
+                            <Users size={18} />
                         </button>
                     )}
-                    <button onClick={onLogout} className="p-2 hover:bg-red-50 text-red-600 rounded-full" title="Logout">
-                        <LogOut size={20} />
+                    <button onClick={onLogout} className="p-2 hover:bg-red-50 active:bg-red-100 text-red-500 rounded-full" title="Logout">
+                        <LogOut size={18} />
                     </button>
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto p-6">
-                <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-2xl font-bold text-slate-800">BOQ Dashboard</h2>
+            <main className="max-w-7xl mx-auto px-3 py-4 sm:p-6">
+                {/* ── Page header ── */}
+                <div className="flex justify-between items-center mb-4 sm:mb-8">
+                    <h2 className="text-lg sm:text-2xl font-bold text-slate-800">BOQ Dashboard</h2>
                     {user.role === ROLES.ADMIN && (
                         <button
                             onClick={() => setShowAddModal(true)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition"
+                            className="bg-indigo-600 active:bg-indigo-800 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition text-sm font-semibold"
                         >
-                            <Plus size={18} /> New BOQ
+                            <Plus size={15} /> New BOQ
                         </button>
                     )}
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                {/* ── Mobile card list (< md) ── */}
+                <div className="md:hidden space-y-2.5">
+                    {boqs.map(boq => (
+                        <div
+                            key={boq.id}
+                            className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden active:bg-slate-50 transition-colors"
+                            onClick={() => onViewBOQ(boq)}
+                        >
+                            {/* Card top: icon + name + actions */}
+                            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+                                <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600 flex-shrink-0">
+                                    <FileText size={16} />
+                                </div>
+                                <span className="flex-1 font-bold text-slate-800 text-sm truncate">{boq.name}</span>
+                                {user.role === ROLES.ADMIN && (
+                                    <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => setEditBOQ({ id: boq.id, name: boq.name })}
+                                            className="p-2 rounded-full text-slate-400 active:bg-indigo-50 active:text-indigo-600 transition"
+                                            title="Rename BOQ"
+                                        >
+                                            <Edit size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => setDeleteBOQ({ id: boq.id, name: boq.name })}
+                                            className="p-2 rounded-full text-slate-400 active:bg-red-50 active:text-red-600 transition"
+                                            title="Delete BOQ"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Stats grid 2×2 */}
+                            <div className="grid grid-cols-4 border-t border-slate-100 divide-x divide-slate-100">
+                                <div className="flex flex-col items-center py-2.5">
+                                    <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Total</span>
+                                    <span className="text-base font-bold text-slate-700 tabular-nums">{boq.stats?.total || 0}</span>
+                                </div>
+                                <div className="flex flex-col items-center py-2.5">
+                                    <span className="text-[10px] text-orange-400 font-medium uppercase tracking-wide">Pending</span>
+                                    <span className="text-base font-bold text-orange-500 tabular-nums">{boq.stats?.pending || 0}</span>
+                                </div>
+                                <div className="flex flex-col items-center py-2.5">
+                                    <span className="text-[10px] text-blue-400 font-medium uppercase tracking-wide">Produced</span>
+                                    <span className="text-base font-bold text-blue-500 tabular-nums">{boq.stats?.manufactured || 0}</span>
+                                </div>
+                                <div className="flex flex-col items-center py-2.5">
+                                    <span className="text-[10px] text-green-500 font-medium uppercase tracking-wide">Installed</span>
+                                    <span className="text-base font-bold text-green-500 tabular-nums">{boq.stats?.installed || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {boqs.length === 0 && (
+                        <div className="py-16 text-center text-slate-400">
+                            <Package size={40} className="mx-auto mb-3 opacity-40" />
+                            <p className="text-sm">No BOQs found. Tap <span className="font-semibold text-indigo-600">New BOQ</span> to create one.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Desktop table (≥ md) ── */}
+                <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                             <tr>
@@ -594,21 +667,24 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
                 </div>
             </main>
 
+            {/* ── Add BOQ modal ── */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                    <div className="bg-white rounded-t-2xl sm:rounded-xl p-6 w-full sm:max-w-md">
                         <h3 className="text-lg font-bold mb-4">Add New BOQ</h3>
                         <input
                             autoFocus
                             type="text"
-                            className="w-full border p-2 rounded mb-4"
+                            className="w-full border-2 border-slate-200 focus:border-indigo-400 outline-none p-3 rounded-xl mb-4 text-sm transition-colors"
                             placeholder="BOQ Name"
                             value={newBOQName}
                             onChange={e => setNewBOQName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && newBOQName.trim() && document.getElementById('create-boq-btn').click()}
                         />
-                        <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 text-slate-600 font-semibold bg-slate-100 rounded-xl active:bg-slate-200">Cancel</button>
                             <button
+                                id="create-boq-btn"
                                 onClick={async () => {
                                     if (!newBOQName.trim()) return;
                                     try {
@@ -624,7 +700,7 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
                                         setNewBOQName('');
                                     } catch (e) { console.error(e); }
                                 }}
-                                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                                className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl active:bg-indigo-800"
                             >
                                 Create
                             </button>
@@ -633,42 +709,42 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
                 </div>
             )}
 
-            {/* Edit Name Modal */}
+            {/* ── Edit name modal ── */}
             {editBOQ && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                    <div className="bg-white rounded-t-2xl sm:rounded-xl p-6 w-full sm:max-w-md">
                         <h3 className="text-lg font-bold mb-4">Rename BOQ</h3>
                         <input
                             autoFocus
                             type="text"
-                            className="w-full border-2 border-indigo-100 focus:border-indigo-500 outline-none p-3 rounded-lg mb-6 transition-all"
+                            className="w-full border-2 border-indigo-100 focus:border-indigo-500 outline-none p-3 rounded-xl mb-6 transition-all text-sm"
                             value={editBOQ.name}
                             onChange={e => setEditBOQ({ ...editBOQ, name: e.target.value })}
                             onKeyDown={e => e.key === 'Enter' && handleUpdateBOQName()}
                         />
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setEditBOQ(null)} className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-50 rounded-lg">Cancel</button>
-                            <button onClick={handleUpdateBOQName} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm transition">Save Changes</button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setEditBOQ(null)} className="flex-1 py-2.5 text-slate-600 font-semibold bg-slate-100 rounded-xl active:bg-slate-200">Cancel</button>
+                            <button onClick={handleUpdateBOQName} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl active:bg-indigo-800">Save</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Delete Confirmation Modal */}
+            {/* ── Delete confirmation modal ── */}
             {deleteBOQ && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
-                        <div className="flex items-center gap-3 text-red-600 mb-4">
-                            <AlertTriangle size={24} />
+                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                    <div className="bg-white rounded-t-2xl sm:rounded-xl p-6 w-full sm:max-w-md">
+                        <div className="flex items-center gap-3 text-red-600 mb-3">
+                            <AlertTriangle size={22} />
                             <h3 className="text-lg font-bold">Delete BOQ?</h3>
                         </div>
-                        <p className="text-slate-600 mb-6">
+                        <p className="text-slate-600 mb-6 text-sm">
                             Are you sure you want to delete <span className="font-bold text-slate-800">"{deleteBOQ.name}"</span>?
-                            This action cannot be undone and will remove all associated sign records.
+                            This cannot be undone and will remove all associated sign records.
                         </p>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setDeleteBOQ(null)} className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-50 rounded-lg">No, Keep it</button>
-                            <button onClick={handleConfirmDelete} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-sm transition">Yes, Delete BOQ</button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setDeleteBOQ(null)} className="flex-1 py-2.5 text-slate-600 font-semibold bg-slate-100 rounded-xl active:bg-slate-200">Keep it</button>
+                            <button onClick={handleConfirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl active:bg-red-800">Delete</button>
                         </div>
                     </div>
                 </div>
@@ -1401,30 +1477,31 @@ const BOQManager = ({ boq, user, onBack }) => {
                 defaultStage={uploadModal.isFactory ? lastFactoryStage : lastSiteStage}
             />
 
-            <header className="bg-white border-b px-6 py-2 flex items-center justify-between shadow-sm z-20">
-                {/* Header Code (Same as before) */}
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
-                        <ChevronUp className="rotate-[-90deg]" />
+            {/* ── Header ── */}
+            <header className="bg-white border-b px-3 py-2 flex items-center justify-between shadow-sm z-20 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                    <button onClick={onBack} className="p-2 hover:bg-slate-100 active:bg-slate-200 rounded-full text-slate-500 flex-shrink-0">
+                        <ChevronUp className="rotate-[-90deg]" size={18} />
                     </button>
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-800">{boq.name}</h2>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="min-w-0">
+                        <h2 className="text-base font-bold text-slate-800 truncate leading-tight">{boq.name}</h2>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                             <span>{signs.length} items</span>
-                            <span>•</span>
+                            <span>·</span>
                             <span>{filteredSigns.length} filtered</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Column visibility */}
                     <div className="relative">
                         <button
                             onClick={() => setShowColumnSelector(!showColumnSelector)}
-                            className={`p-2 rounded-lg transition ${showColumnSelector ? 'bg-indigo-100 text-indigo-600' : 'text-slate-600 hover:bg-slate-100'}`}
+                            className={`p-2 rounded-lg transition ${showColumnSelector ? 'bg-indigo-100 text-indigo-600' : 'text-slate-500 hover:bg-slate-100 active:bg-slate-200'}`}
                             title="Show/Hide Columns"
                         >
-                            <Eye size={18} />
+                            <Eye size={16} />
                         </button>
                         {showColumnSelector && (
                             <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border p-2 z-50 animate-in fade-in slide-in-from-top-2">
@@ -1447,24 +1524,24 @@ const BOQManager = ({ boq, user, onBack }) => {
                     {user.role === ROLES.ADMIN && (
                         <button
                             onClick={() => setShowSettings(true)}
-                            className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                            className="p-2 text-slate-500 hover:bg-slate-100 active:bg-slate-200 rounded-lg"
                             title="BOQ Settings"
                         >
-                            <Settings size={18} />
+                            <Settings size={16} />
                         </button>
                     )}
                     <button
                         onClick={() => setViewMode('print')}
-                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-2"
+                        className="p-2 text-slate-500 hover:bg-slate-100 active:bg-slate-200 rounded-lg"
                     >
-                        <Printer size={18} /> <span className="hidden sm:inline">Reports</span>
+                        <Printer size={16} />
                     </button>
                     {user.role === ROLES.ADMIN && (
-                        <div className="relative overflow-hidden cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition">
+                        <div className="relative overflow-hidden cursor-pointer bg-indigo-600 active:bg-indigo-800 text-white p-2 rounded-lg flex items-center gap-1 transition">
                             {loadingImport ? (
-                                <span className="animate-spin"><Package size={18} /></span>
-                            ) : <Upload size={18} />}
-                            <span className="hidden sm:inline">Import Data</span>
+                                <span className="animate-spin"><Package size={16} /></span>
+                            ) : <Upload size={16} />}
+                            <span className="hidden sm:inline text-sm font-medium">Import</span>
                             <input
                                 type="file"
                                 multiple
@@ -1477,34 +1554,93 @@ const BOQManager = ({ boq, user, onBack }) => {
                 </div>
             </header>
 
-            <div className="bg-white border-b px-4 py-1.5 flex flex-wrap gap-3 items-center">
-                <div className="flex items-center gap-2 pr-3 border-r">
-                    <Filter size={16} className="text-slate-400" />
-                    <select
-                        className="text-sm bg-transparent border-none focus:ring-0 text-slate-700 font-medium cursor-pointer"
-                        value={filters.status || ''}
-                        onChange={e => setFilters({ ...filters, status: e.target.value })}
-                    >
-                        <option value="">All Statuses</option>
-                        {Object.values(STATUS).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                </div>
-                {columns.filter(c => c.isFilter).map(col => (
-                    <div key={col.key} className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                        <span className="text-xs text-slate-500 font-medium">{col.label}:</span>
+            {/* ── Filter Bar — horizontally scrollable pills on mobile ── */}
+            <div className="bg-white border-b">
+                <div className="flex items-center gap-2 px-3 py-1.5 overflow-x-auto scrollbar-hide">
+                    {/* Status pill */}
+                    <div className={`flex-shrink-0 flex items-center gap-1.5 pl-1.5 pr-0.5 py-1 rounded-full border text-xs font-medium transition whitespace-nowrap ${
+                        filters.status ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}>
+                        <Filter size={11} className="flex-shrink-0" />
                         <select
-                            className="text-sm bg-transparent border-none p-0 focus:ring-0 text-slate-700 max-w-[100px]"
-                            value={filters[col.key] || ''}
-                            onChange={e => setFilters({ ...filters, [col.key]: e.target.value })}
+                            className="bg-transparent border-none focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[130px]"
+                            value={filters.status || ''}
+                            onChange={e => setFilters({ ...filters, status: e.target.value })}
                         >
-                            <option value="">All</option>
-                            {uniqueValues[col.key]?.map(v => <option key={v} value={v}>{v}</option>)}
+                            <option value="">All Statuses</option>
+                            {Object.values(STATUS).map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
-                ))}
-                {Object.keys(filters).some(k => filters[k]) && (
-                    <button onClick={() => setFilters({})} className="text-xs text-red-500 hover:text-red-700 flex items-center font-medium bg-red-50 px-2 py-1 rounded"><X size={12} className="mr-1" /> Clear</button>
-                )}
+
+                    {/* Dynamic filter pills */}
+                    {columns.filter(c => c.isFilter).map(col => (
+                        <div key={col.key} className={`flex-shrink-0 flex items-center gap-1 pl-2 pr-0.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                            filters[col.key] ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                            <span className="opacity-70">{col.label}:</span>
+                            <select
+                                className="bg-transparent border-none p-0 focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[90px]"
+                                value={filters[col.key] || ''}
+                                onChange={e => setFilters({ ...filters, [col.key]: e.target.value })}
+                            >
+                                <option value="">All</option>
+                                {uniqueValues[col.key]?.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        </div>
+                    ))}
+
+                    {/* Clear button */}
+                    {Object.keys(filters).some(k => filters[k]) && (
+                        <button
+                            onClick={() => setFilters({})}
+                            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-600 text-xs font-semibold active:bg-red-100"
+                        >
+                            <X size={11} /> Clear
+                        </button>
+                    )}
+                </div>
+
+                {/* ── Mobile-only sort bar ── */}
+                <div className="md:hidden flex items-center gap-2 px-3 pb-1.5 border-t border-slate-100 pt-1.5">
+                    <ArrowUpDown size={11} className="text-slate-400 flex-shrink-0" />
+                    <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">Sort:</span>
+
+                    {/* Column picker */}
+                    <div className={`flex-1 flex items-center gap-1 pl-2 pr-0.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                        sortConfig?.key ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}>
+                        <select
+                            className="bg-transparent border-none focus:ring-0 text-xs font-medium cursor-pointer pr-1 w-full"
+                            value={sortConfig?.key || ''}
+                            onChange={e => setSortConfig({ key: e.target.value, direction: sortConfig?.direction || 'asc' })}
+                        >
+                            <option value="">No sort</option>
+                            <option value="status">Status</option>
+                            {activeColumns.map(col => (
+                                <option key={col.key} value={col.key}>{col.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Asc / Desc toggle */}
+                    <button
+                        onClick={() => setSortConfig(prev => ({
+                            key: prev?.key || 'status',
+                            direction: prev?.direction === 'asc' ? 'desc' : 'asc'
+                        }))}
+                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-bold transition active:scale-95 ${
+                            sortConfig?.direction === 'desc'
+                                ? 'bg-teal-50 border-teal-200 text-teal-700'
+                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                        }`}
+                        title="Toggle sort direction"
+                    >
+                        {sortConfig?.direction === 'desc'
+                            ? <><ChevronDown size={11} /> DESC</>
+                            : <><ChevronUp size={11} /> ASC</>
+                        }
+                    </button>
+                </div>
             </div>
 
             {selectedSigns.size > 0 && user.role === ROLES.ADMIN && (
@@ -1522,7 +1658,45 @@ const BOQManager = ({ boq, user, onBack }) => {
             )}
 
             <div className="flex-1 overflow-auto relative bg-white">
-                <table className="w-full text-left border-collapse">
+
+                {/* ── Mobile card list (< md) ── */}
+                <div className="md:hidden divide-y divide-slate-100">
+                    {filteredSigns.map(sign => (
+                        <SignCard
+                            key={sign._id}
+                            sign={sign}
+                            columns={activeColumns}
+                            user={user}
+                            selected={selectedSigns.has(sign._id)}
+                            onSelect={(id) => {
+                                const newSet = new Set(selectedSigns);
+                                if (newSet.has(id)) newSet.delete(id);
+                                else newSet.add(id);
+                                setSelectedSigns(newSet);
+                            }}
+                            onUploadRequest={handleUploadRequest}
+                            onDirectUpload={(file, stage, isFactory) => executeUpload(sign, file, stage, isFactory)}
+                            onDelete={async () => {
+                                if (window.confirm('Delete sign?')) {
+                                    try {
+                                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id));
+                                    } catch (err) {
+                                        console.error(err);
+                                        alert("Delete failed: " + err.message);
+                                    }
+                                }
+                            }}
+                            onEdit={() => setEditingSign(sign)}
+                            onViewImage={(images, idx, field) => setLightboxImages({ images, index: idx, signId: sign._id, field })}
+                        />
+                    ))}
+                    {filteredSigns.length === 0 && (
+                        <div className="p-10 text-center text-slate-400 text-sm">No records match the current filters.</div>
+                    )}
+                </div>
+
+                {/* ── Desktop table (≥ md) ── */}
+                <table className="hidden md:table w-full text-left border-collapse">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-slate-500 uppercase tracking-[0.08em] whitespace-nowrap">
                         <tr>
                             <th className="px-1.5 py-1.5 w-8 text-center border-b border-slate-200">
@@ -1603,6 +1777,183 @@ const BOQManager = ({ boq, user, onBack }) => {
     );
 };
 
+// ── Mobile card component ─────────────────────────────────────────────────────
+const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage }) => {
+    const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
+    const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
+
+    const artImages = sign.artworkImages || (sign.artworkImage ? [{ url: sign.artworkImage }] : []);
+    const factImages = sign.factoryImages || [];
+    const siteImages = sign.siteImages || [];
+
+    const statusColor = (s) => {
+        if (s.includes('Ready')) return 'bg-blue-100 text-blue-700';
+        if (s.includes('Approval')) return 'bg-orange-100 text-orange-700';
+        if (s.includes('Completed')) return 'bg-green-100 text-green-700';
+        return 'bg-slate-100 text-slate-600';
+    };
+
+    // ID column and a subset of visible columns for the card body
+    const idCol = columns.find(c => c.isId);
+    const bodyColumns = columns.filter(c => !c.isId && c.visible).slice(0, 6);
+
+    return (
+        <div className={`px-3 py-2.5 transition-colors active:bg-slate-50 ${selected ? 'bg-indigo-50/60' : 'bg-white'}`}>
+            {/* Row 1: Checkbox + ID + Status badge + Actions */}
+            <div className="flex items-center gap-2 mb-1.5">
+                {user.role === ROLES.ADMIN && (
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => onSelect(sign._id)}
+                        className="flex-shrink-0 w-4 h-4 accent-indigo-600"
+                    />
+                )}
+                {/* Sign ID */}
+                {idCol && (
+                    <span className="text-xs font-bold text-slate-800 flex-1 truncate">
+                        {sign[idCol.key]}
+                    </span>
+                )}
+                {/* Status badge */}
+                <span className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide ${statusColor(sign.status)}`}>
+                    {sign.status}
+                </span>
+                {/* Edit button (admin only) */}
+                {user.role === ROLES.ADMIN && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                        className="flex-shrink-0 p-1 rounded text-slate-400 active:bg-blue-50 active:text-blue-600"
+                    >
+                        <Edit size={13} />
+                    </button>
+                )}
+            </div>
+
+            {/* Row 2: Key columns as label: value pairs */}
+            {bodyColumns.length > 0 && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
+                    {bodyColumns.map(col => (
+                        sign[col.key] ? (
+                            <span key={col.key} className="text-[10px] text-slate-500">
+                                <span className="font-semibold text-slate-600">{col.label}:</span> {sign[col.key]}
+                            </span>
+                        ) : null
+                    ))}
+                </div>
+            )}
+
+            {/* Row 3: Photo strips */}
+            <div className="flex items-center gap-3">
+                {/* Artwork */}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide">Art</span>
+                    <div className="flex gap-0.5">
+                        {artImages.length > 0 ? artImages.map((img, idx) => (
+                            <div
+                                key={idx}
+                                onClick={() => onViewImage(artImages, idx, 'artworkImages')}
+                                className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
+                            >
+                                <img src={img.url} alt="" className="w-full h-full object-contain rounded" />
+                            </div>
+                        )) : (
+                            <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300">
+                                <ImageIcon size={12} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Factory */}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide">Fab</span>
+                    <div className="flex gap-0.5">
+                        {factImages.length > 0 ? factImages.map((img, idx) => (
+                            <div
+                                key={idx}
+                                onClick={() => onViewImage(factImages, idx, 'factoryImages')}
+                                className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
+                            >
+                                <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                            </div>
+                        )) : (
+                            <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300">
+                                <Package size={12} />
+                            </div>
+                        )}
+                    </div>
+                    {isFactory && (
+                        <button
+                            onClick={() => onUploadRequest(sign, true)}
+                            className="w-7 h-7 flex items-center justify-center bg-white border rounded-full text-blue-500 active:bg-blue-50 shadow-sm"
+                            title="Add Factory Photo"
+                        >
+                            <Camera size={12} />
+                            <input
+                                id={`file-fact-${sign._id}`}
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => onDirectUpload(e.target.files[0], 'General Production', true)}
+                            />
+                        </button>
+                    )}
+                </div>
+
+                {/* Site */}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide">Site</span>
+                    <div className="flex gap-0.5">
+                        {siteImages.length > 0 ? siteImages.map((img, idx) => (
+                            <div
+                                key={idx}
+                                onClick={() => onViewImage(siteImages, idx, 'siteImages')}
+                                className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
+                            >
+                                <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                            </div>
+                        )) : (
+                            <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300">
+                                <Truck size={12} />
+                            </div>
+                        )}
+                    </div>
+                    {isSite && (
+                        <button
+                            onClick={() => onUploadRequest(sign, false)}
+                            className="w-7 h-7 flex items-center justify-center bg-white border rounded-full text-green-500 active:bg-green-50 shadow-sm"
+                            title="Add Site Photo"
+                        >
+                            <Camera size={12} />
+                            <input
+                                id={`file-site-${sign._id}`}
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => onDirectUpload(e.target.files[0], 'Installation', false)}
+                            />
+                        </button>
+                    )}
+                </div>
+
+                {/* Delete (admin far right) */}
+                {user.role === ROLES.ADMIN && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                        className="ml-auto p-1.5 rounded text-slate-300 active:bg-red-50 active:text-red-500"
+                    >
+                        <Trash2 size={13} />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ── Desktop table row ─────────────────────────────────────────────────────────
 const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
