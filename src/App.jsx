@@ -21,6 +21,8 @@ import Home from './components/Home';
 import TaskManager from './components/TaskManager';
 import ReportingTracker from './components/ReportingTracker';
 import CRMManager from './components/CRMManager';
+import MiscStockTracker from './components/MiscStockTracker';
+import CutListCalculator from './components/CutListCalculator';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -406,6 +408,16 @@ const App = () => {
                 Admin
               </span>
             )}
+            {activeModule === 'misc_stock' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-400">
+                Misc Stock
+              </span>
+            )}
+            {activeModule === 'cut_list' && (
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400">
+                Cut List
+              </span>
+            )}
           </div>
 
           {/* Desktop Navigation */}
@@ -560,6 +572,14 @@ const App = () => {
 
         {activeModule === 'crm' && (
           <CRMManager user={user} userRole={userRole} onOpenLEDCalculator={handleOpenLEDCalculatorFromCRM} />
+        )}
+
+        {activeModule === 'misc_stock' && (
+          <MiscStockTracker user={user} userRole={userRole} />
+        )}
+
+        {activeModule === 'cut_list' && (
+          <CutListCalculator />
         )}
 
         {activeModule === 'admin' && showUsersTab && (

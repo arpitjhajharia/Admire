@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calculator, ListTodo, Users, BarChart, Shield } from 'lucide-react';
+import { Calculator, ListTodo, Users, BarChart, Shield, Archive, Scissors } from 'lucide-react';
 
 const Home = ({ onSelectModule, darkMode, showAdmin }) => {
     const modules = [
@@ -41,6 +41,26 @@ const Home = ({ onSelectModule, darkMode, showAdmin }) => {
             color: 'text-orange-500',
             bgColor: 'bg-orange-50 dark:bg-orange-900/20',
             borderColor: 'border-orange-200 dark:border-orange-800',
+            active: true
+        },
+        {
+            id: 'misc_stock',
+            name: 'Misc Stock',
+            description: 'Track miscellaneous inventory and FIFO ledger',
+            icon: Archive,
+            color: 'text-indigo-500',
+            bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+            borderColor: 'border-indigo-200 dark:border-indigo-800',
+            active: true
+        },
+        {
+            id: 'cut_list',
+            name: 'Cut List',
+            description: '1D/2D Optimiser for sheets and bars',
+            icon: Scissors,
+            color: 'text-amber-500',
+            bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+            borderColor: 'border-amber-200 dark:border-amber-800',
             active: true
         }
     ];
