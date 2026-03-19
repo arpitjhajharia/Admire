@@ -21,6 +21,7 @@ const TaskManager = ({ user, userRole }) => {
     const [tasks, setTasks] = useState([]);
     const [usersList, setUsersList] = useState([]);
     const [projectsList, setProjectsList] = useState([]);
+    const [clientsList, setClientsList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [hideCompleted, setHideCompleted] = useState(false);
     const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
@@ -40,6 +41,7 @@ const TaskManager = ({ user, userRole }) => {
     // Form State
     const [title, setTitle] = useState('');
     const [project, setProject] = useState('');
+    const [clientId, setClientId] = useState('');   // set when project dropdown picks a CRM Client
     const [description, setDescription] = useState('');
     const [assignedTo, setAssignedTo] = useState('');
     const [assignedBy, setAssignedBy] = useState('');
@@ -48,6 +50,19 @@ const TaskManager = ({ user, userRole }) => {
     const [status, setStatus] = useState('open');
     const [priority, setPriority] = useState('normal'); // high, normal
 
+    // Helper: given a selected value, resolve clientId (empty string if it's a Project, not a Client)
+    const resolveClientId = (selectedValue) => {
+        if (!selectedValue) return '';
+        const matched = clientsList.find(c => c.companyName === selectedValue);
+        return matched ? matched.id : '';
+    };
+
+    // Handle project/client dropdown change — sets both project label and clientId
+    const handleProjectChange = (value) => {
+        setProject(value);
+        setClientId(resolveClientId(value));
+    };
+
     // Fetch tasks & users from Firestore
     useEffect(() => {
         if (!user || !db) return;
@@ -55,6 +70,7 @@ const TaskManager = ({ user, userRole }) => {
         const tasksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('tasks');
         const usersRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles');
         const projectsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects');
+        const clientsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('crm_leads');
 
         const unsubTasks = tasksRef.orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
             const tasksData = snapshot.docs.map(doc => ({
@@ -88,10 +104,21 @@ const TaskManager = ({ user, userRole }) => {
             console.error("Error fetching projects:", error);
         });
 
+        const unsubClients = clientsRef.onSnapshot((snapshot) => {
+            const clientsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })).sort((a, b) => (a.companyName || '').localeCompare(b.companyName || ''));
+            setClientsList(clientsData);
+        }, (error) => {
+            console.error("Error fetching clients:", error);
+        });
+
         return () => {
             unsubTasks();
             unsubUsers();
             unsubProjects();
+            unsubClients();
         };
     }, [user]);
 
@@ -102,6 +129,7 @@ const TaskManager = ({ user, userRole }) => {
             setEditingTask(task);
             setTitle(task.title || '');
             setProject(task.project || '');
+            setClientId(task.clientId || '');
             setDescription(task.description || '');
             setAssignedTo(task.assignedTo || '');
             setAssignedBy(task.assignedBy || '');
@@ -113,6 +141,7 @@ const TaskManager = ({ user, userRole }) => {
             setEditingTask({ id: 'new' });
             setTitle('');
             setProject('');
+            setClientId('');
             setDescription('');
             setAssignedTo('');
             setAssignedBy(user?.username || '');
@@ -130,6 +159,12 @@ const TaskManager = ({ user, userRole }) => {
     const handleSaveTask = async () => {
         if (!title || !title.trim()) return;
 
+        // Resolve client linkage: re-check at save time in case clientsList arrived after selection
+        const resolvedClientId = clientId || resolveClientId(project);
+        const resolvedClient = resolvedClientId
+            ? clientsList.find(c => c.id === resolvedClientId)
+            : null;
+
         const taskData = {
             title: title.trim(),
             project: project ? project.trim() : '',
@@ -140,6 +175,9 @@ const TaskManager = ({ user, userRole }) => {
             dueDate: dueDate || '',
             status: status || 'open',
             priority: priority || 'normal',
+            // CRM cross-link fields
+            clientId: resolvedClientId || '',
+            clientName: resolvedClient ? (resolvedClient.companyName || '') : '',
             updatedAt: new Date(),
         };
 
@@ -303,11 +341,20 @@ const TaskManager = ({ user, userRole }) => {
                 <td className="px-1.5 py-1 w-16 align-top">
                     <select
                         value={project}
-                        onChange={(e) => setProject(e.target.value)}
+                        onChange={(e) => handleProjectChange(e.target.value)}
                         className="w-full min-w-[50px] bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     >
                         <option value="">-</option>
-                        {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        {projectsList.length > 0 && (
+                            <optgroup label="── Projects ──">
+                                {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                            </optgroup>
+                        )}
+                        {clientsList.length > 0 && (
+                            <optgroup label="── Clients ──">
+                                {clientsList.map(c => <option key={c.id} value={c.companyName}>{c.companyName}</option>)}
+                            </optgroup>
+                        )}
                     </select>
                 </td>
                 <td className="px-1.5 py-1 w-1/3 min-w-[120px] align-top">
@@ -539,14 +586,23 @@ const TaskManager = ({ user, userRole }) => {
                     {/* Project + Priority row */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Project</label>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Project / Client</label>
                             <select
                                 value={project}
-                                onChange={(e) => setProject(e.target.value)}
+                                onChange={(e) => handleProjectChange(e.target.value)}
                                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
                             >
                                 <option value="">None</option>
-                                {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                {projectsList.length > 0 && (
+                                    <optgroup label="── Projects ──">
+                                        {projectsList.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                    </optgroup>
+                                )}
+                                {clientsList.length > 0 && (
+                                    <optgroup label="── Clients ──">
+                                        {clientsList.map(c => <option key={c.id} value={c.companyName}>{c.companyName}</option>)}
+                                    </optgroup>
+                                )}
                             </select>
                         </div>
                         <div>

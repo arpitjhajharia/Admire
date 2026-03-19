@@ -1,7 +1,7 @@
 import React from 'react';
-import { Eye, Printer, Trash2, FileText, Download, Copy, Edit, Box, Monitor, Sun, Search } from 'lucide-react';
+import { Eye, Printer, Trash2, FileText, Download, Copy, Edit, Box, Monitor, Sun, Search, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
-import { formatCurrency, calculateBOM } from '../lib/utils';
+import { formatCurrency, calculateBOM, generateId } from '../lib/utils';
 import PrintLayout from './PrintLayout';
 import BOMLayout from './BOMLayout';
 
@@ -9,6 +9,51 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
     const [quotes, setQuotes] = React.useState([]);
     const [viewQuote, setViewQuote] = React.useState(null);
     const [searchTerm, setSearchTerm] = React.useState('');
+    const [expandedGroups, setExpandedGroups] = React.useState(new Set());
+
+    const toggleGroup = (ref) => {
+        const next = new Set(expandedGroups);
+        if (next.has(ref)) next.delete(ref);
+        else next.add(ref);
+        setExpandedGroups(next);
+    };
+
+    const groupedQuotes = React.useMemo(() => {
+        const groups = {};
+        // Use full quotes here if searching is applied to the group level, or filteredQuotes
+        // Let's filter first then group.
+        const filtered = quotes.filter(q => {
+            if (!searchTerm.trim()) return true;
+            const term = searchTerm.toLowerCase();
+            return (q.project || '').toLowerCase().includes(term) ||
+                (q.client || '').toLowerCase().includes(term) ||
+                (q.ref || '').toLowerCase().includes(term);
+        });
+
+        filtered.forEach(q => {
+            const key = (q.ref || q.project || 'Untitled');
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(q);
+        });
+
+        return Object.entries(groups).map(([ref, versions]) => {
+            const sorted = [...versions].sort((a,b) => {
+                const at = a.updatedAt?.seconds || 0;
+                const bt = b.updatedAt?.seconds || 0;
+                return bt - at;
+            });
+            return {
+                ref,
+                latest: sorted[0],
+                older: sorted.slice(1),
+                all: sorted
+            };
+        }).sort((a,b) => {
+            const at = a.latest.updatedAt?.seconds || 0;
+            const bt = b.latest.updatedAt?.seconds || 0;
+            return bt - at;
+        });
+    }, [quotes, searchTerm]);
 
     React.useEffect(() => {
         if (!user) return;
@@ -20,8 +65,249 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
         return () => unsub();
     }, [user]);
 
+    const formatDate = (ts) => {
+        if (!ts) return '—';
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        const day = d.getDate();
+        const month = d.toLocaleString('en-IN', { month: 'short' });
+        const year = d.getFullYear();
+        const time = d.toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        return `${day} ${month} ${year}, ${time}`;
+    };
+
+    const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx }) => {
+        const state = quote.calculatorState || {};
+        const isIndoor = state.selectedIndoor === 'true';
+        const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
+        const calcs = quote.allScreensData?.calculations;
+        const versionNum = group.all.length - group.all.indexOf(quote);
+
+        return (
+            <tr
+                className={`group transition-all duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60 ${!isLatest ? 'bg-slate-50 dark:bg-slate-900/40 opacity-90' : ''}`}
+            >
+                {/* Ref & Expand */}
+                <td className="px-3 py-1 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                        {isLatest && group.older.length > 0 && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onToggle(group.ref); }}
+                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                {isExpanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
+                            </button>
+                        )}
+                        {!isLatest && <div className="w-5" />}
+                        <div className="flex flex-col">
+                            <div className="text-[12px] font-mono font-bold text-slate-500 uppercase flex items-center gap-1">
+                                {quote.ref || '—'}
+                                <span className={`text-[10px] px-1 rounded ${isLatest ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
+                                    v{versionNum}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                {/* Project */}
+                <td className="px-3 py-1 max-w-[160px]">
+                    <div className="text-[13px] font-semibold text-slate-800 dark:text-white truncate leading-tight" title={quote.project}>
+                        {quote.project || 'Untitled'}
+                    </div>
+                </td>
+
+                {/* Client */}
+                <td className="px-3 py-1 max-w-[140px]">
+                    <div className="text-[12px] text-slate-500 dark:text-slate-400 truncate leading-tight" title={quote.client}>
+                        {quote.client || '—'}
+                    </div>
+                </td>
+
+                <td className="px-3 py-1 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[10px] font-bold uppercase tracking-wide ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-900/20 dark:text-amber-400'}`}>
+                        {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
+                        {isIndoor ? 'In' : 'Out'}
+                    </span>
+                </td>
+
+                <td className="px-3 py-1 whitespace-nowrap">
+                    {pitch ? <span className="inline-flex items-center px-1 py-px rounded text-[10px] font-bold tracking-wide bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400">P{pitch}</span> : <span className="text-[12px] text-slate-400 italic">—</span>}
+                </td>
+
+                <td className="px-3 py-1 align-top">
+                    <div className="space-y-0.5">
+                        {calcs ? calcs.map((calc, idx) => (
+                            <div key={idx} className="flex items-center gap-1 h-[20px]">
+                                {calcs.length > 1 && <span className="flex-shrink-0 w-3.5 h-3.5 rounded-sm bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500">{idx + 1}</span>}
+                                <span className="text-[12px] font-medium text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
+                                    {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}
+                                </span>
+                            </div>
+                        )) : <span className="text-[12px] text-slate-400 italic">Single screen</span>}
+                    </div>
+                </td>
+
+                <td className="px-3 py-1 align-top">
+                    <div className="space-y-0.5">
+                        {calcs ? calcs.map((calc, idx) => (
+                            <div key={idx} className="flex items-center h-[20px]">
+                                <span className="text-[12px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{calc.finalWidth}×{calc.finalHeight}</span>
+                            </div>
+                        )) : <span className="text-[12px] text-slate-400 italic">—</span>}
+                    </div>
+                </td>
+
+                <td className="px-3 py-1 align-top text-center border-r border-slate-100 dark:border-slate-800">
+                    <div className="space-y-0.5 w-full">
+                        {calcs ? calcs.map((calc, idx) => (
+                            <div key={idx} className="flex items-center justify-center h-[20px]">
+                                <span className="text-[12px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">{calc.screenQty}</span>
+                            </div>
+                        )) : <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300 tabular-nums italic">1</span>}
+                    </div>
+                </td>
+
+                {!readOnly && (
+                    <td className="px-3 py-1 whitespace-nowrap text-right">
+                        <span className="text-[13px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
+                            {formatCurrency(quote.finalAmount, 'INR')}
+                        </span>
+                    </td>
+                )}
+
+                <td className="px-3 py-1 whitespace-nowrap">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                        {formatDate(quote.updatedAt)}
+                    </div>
+                </td>
+
+                <td className="px-3 py-1 whitespace-nowrap text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleView(quote)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="View"><Eye size={14} /></button>
+                        {!readOnly && (
+                            <>
+                                <button onClick={() => onLoadQuote(quote, false)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Edit"><Edit size={14} /></button>
+                                <button onClick={() => handleDownloadExcel(quote)} className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg" title="Download Excel"><Download size={14} /></button>
+                                <button onClick={() => onLoadQuote(quote, true)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Clone"><Copy size={14} /></button>
+                                <button onClick={() => handleDelete(quote.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete"><Trash2 size={14} /></button>
+                            </>
+                        )}
+                    </div>
+                </td>
+            </tr>
+        );
+    };
+
+    const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle }) => {
+        const state = quote.calculatorState || {};
+        const isIndoor = state.selectedIndoor === 'true';
+        const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
+        const versionNum = group.all.length - group.all.indexOf(quote);
+
+        return (
+            <div className={`quote-card-animate group bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)] transition-all duration-200 ease-out overflow-hidden flex flex-col border-t-2 ${isIndoor ? 'border-t-blue-400' : 'border-t-amber-400'} ${!isLatest ? 'bg-slate-50 dark:bg-slate-900/40 opacity-90 scale-[0.98] -mt-1 origin-top' : ''}`}>
+                <div className="p-3 flex-1 flex flex-col">
+                    <div className="flex justify-between items-start gap-2 mb-0.5">
+                        <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-[15px] text-slate-800 dark:text-white leading-snug line-clamp-1 tracking-[-0.01em]" title={quote.project}>
+                                {quote.project || 'Untitled'}
+                                <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded font-mono font-bold bg-purple-50 text-purple-600 dark:bg-purple-900/20">v{versionNum}</span>
+                            </h3>
+                            {quote.ref && (
+                                <p className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 dark:bg-slate-900/40 px-1 rounded border border-slate-100 dark:border-slate-700 w-fit mt-0.5 uppercase">
+                                    {quote.ref}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-bold uppercase tracking-wider ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60'}`}>
+                                {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
+                                {isIndoor ? 'Indoor' : 'Outdoor'}
+                            </span>
+                            {pitch && (
+                                <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-bold tracking-wider bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400 dark:ring-violet-700/40">
+                                    P{pitch}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-2">
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{quote.client || 'No Client'}</p>
+                        <span className="text-slate-300 dark:text-slate-600">·</span>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{formatDate(quote.updatedAt)}</p>
+                    </div>
+
+                    {/* Expand Older Versions Button (Mobile) */}
+                    {isLatest && group.older.length > 0 && (
+                        <button 
+                            onClick={() => onToggle(group.ref)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 mb-2 transition-colors"
+                        >
+                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            {group.older.length} Older Version{group.older.length > 1 ? 's' : ''}
+                        </button>
+                    )}
+
+                    <div className="space-y-1 mb-2 flex-1">
+                        {quote.allScreensData?.calculations ? (
+                            quote.allScreensData.calculations.map((calc, idx) => (
+                                <div key={idx} className="flex justify-between items-center gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">{idx + 1}</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                            {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}ft
+                                            <span className="text-slate-400 dark:text-slate-500 ml-1">/ {calc.finalWidth}×{calc.finalHeight}m</span>
+                                            <span className="text-slate-400 dark:text-slate-500"> ×{calc.screenQty}</span>
+                                        </span>
+                                    </div>
+                                    {!readOnly && <span className="flex-shrink-0 text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(calc.totalProjectSell, 'INR', true)}</span>}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="flex justify-between items-center gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">1</span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Single Screen</span>
+                                </div>
+                                {!readOnly && <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(quote.finalAmount, 'INR', true)}</span>}
+                            </div>
+                        )}
+                    </div>
+
+                    {!readOnly && (
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 mt-auto">
+                            <div className="flex justify-between items-baseline">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estimate</span>
+                                <span className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-white price-shimmer tabular-nums">{formatCurrency(quote.finalAmount, 'INR')}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className={`flex items-center justify-evenly px-2 py-1.5 border-t border-slate-100 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/80`}>
+                    <button onClick={() => handleView(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title={readOnly ? 'View BOM' : 'View'}>{readOnly ? <Box size={16} /> : <Eye size={16} />}</button>
+                    {!readOnly && (
+                        <>
+                            <button onClick={() => onLoadQuote(quote, false)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit"><Edit size={16} /></button>
+                            <button onClick={() => handleDownloadExcel(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" title="Download Excel"><Download size={16} /></button>
+                            <button onClick={() => onLoadQuote(quote, true)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title="Clone"><Copy size={16} /></button>
+                            <button onClick={() => handleDelete(quote.id)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete"><Trash2 size={16} /></button>
+                        </>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     const handleDelete = async (id) => {
         if (confirm("Are you sure you want to delete this quote?")) {
+            const qToDel = quotes.find(q => q.id === id);
+            if (qToDel && qToDel.crmQuoteId && qToDel.clientId) {
+                try {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data')
+                        .collection('crm_leads').doc(qToDel.clientId).collection('quotes').doc(qToDel.crmQuoteId).delete();
+                } catch (err) { console.error("Error deleting CRM quote version:", err); }
+            }
             await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc(id).delete();
         }
     };
@@ -145,24 +431,8 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
         window.URL.revokeObjectURL(url);
     };
 
-    // Format the date nicely
-    const formatDate = (timestamp) => {
-        if (!timestamp?.seconds) return '—';
-        const d = new Date(timestamp.seconds * 1000);
-        const day = d.getDate();
-        const month = d.toLocaleString('en-IN', { month: 'short' });
-        const year = d.getFullYear();
-        const time = d.toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-        return `${day} ${month} ${year}, ${time}`;
-    };
+    // Filter quotes by search - Handled in groupedQuotes Memo now
 
-    // Filter quotes by search
-    const filteredQuotes = quotes.filter(q => {
-        if (!searchTerm.trim()) return true;
-        const term = searchTerm.toLowerCase();
-        return (q.project || '').toLowerCase().includes(term) ||
-            (q.client || '').toLowerCase().includes(term);
-    });
 
     return (
         <div className="p-3 md:p-4">
@@ -244,167 +514,15 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
 
             {/* ── Mobile Layout (Card Grid) ── */}
             <div className="grid grid-cols-1 gap-3 md:hidden">
-                {filteredQuotes.map(quote => {
-                    const state = quote.calculatorState || {};
-                    const isIndoor = state.selectedIndoor === 'true';
-                    const screenCount = quote.allScreensData?.calculations?.length || 1;
-                    const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
-
+                {groupedQuotes.map(group => {
+                    const isExpanded = expandedGroups.has(group.ref);
                     return (
-                        <div
-                            key={quote.id}
-                            className={`quote-card-animate group bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)] transition-all duration-200 ease-out overflow-hidden flex flex-col border-t-2 ${isIndoor ? 'border-t-blue-400' : 'border-t-amber-400'}`}
-                        >
-                            {/* Card Body */}
-                            <div className="p-3 flex-1 flex flex-col">
-                                {/* Top row: Project + Badge */}
-                                <div className="flex justify-between items-start gap-2 mb-0.5">
-                                    <h3
-                                        className="font-bold text-[15px] text-slate-800 dark:text-white leading-snug line-clamp-1 tracking-[-0.01em]"
-                                        title={quote.project}
-                                    >
-                                        {quote.project || 'Untitled'}
-                                    </h3>
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <span className={`
-                                            inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-bold uppercase tracking-wider
-                                            ${isIndoor
-                                                ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
-                                                : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60'
-                                            }
-                                        `}>
-                                            {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
-                                            {isIndoor ? 'Indoor' : 'Outdoor'}
-                                        </span>
-                                        {pitch && (
-                                            <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-bold tracking-wider bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400 dark:ring-violet-700/40">
-                                                P{pitch}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Client + Date on one line */}
-                                <div className="flex items-center gap-2 mb-2">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                                        {quote.client || 'No Client'}
-                                    </p>
-                                    <span className="text-slate-300 dark:text-slate-600">·</span>
-                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                                        {formatDate(quote.updatedAt)}
-                                    </p>
-                                </div>
-
-                                {/* Screen Details */}
-                                <div className="space-y-1 mb-2 flex-1">
-                                    {quote.allScreensData?.calculations ? (
-                                        quote.allScreensData.calculations.map((calc, idx) => (
-                                            <div key={idx} className="flex justify-between items-center gap-2">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="flex-shrink-0 w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                                        {idx + 1}
-                                                    </span>
-                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                                        {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}ft
-                                                        <span className="text-slate-400 dark:text-slate-500 ml-1">
-                                                            / {calc.finalWidth}×{calc.finalHeight}m
-                                                        </span>
-                                                        <span className="text-slate-400 dark:text-slate-500"> ×{calc.screenQty}</span>
-                                                    </span>
-                                                </div>
-                                                {!readOnly && (
-                                                    <span className="flex-shrink-0 text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
-                                                        {formatCurrency(calc.totalProjectSell, 'INR', true)}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="flex justify-between items-center gap-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">1</span>
-                                                <span className="text-[11px] text-slate-500 dark:text-slate-400">Single Screen</span>
-                                            </div>
-                                            {!readOnly && (
-                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
-                                                    {formatCurrency(quote.finalAmount, 'INR', true)}
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Total Estimate */}
-                                {!readOnly && (
-                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 mt-auto">
-                                        <div className="flex justify-between items-baseline">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                Estimate
-                                            </span>
-                                            <span className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-white price-shimmer tabular-nums">
-                                                {formatCurrency(quote.finalAmount, 'INR')}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Action Bar */}
-                            <div className={`
-                                flex items-center justify-evenly px-2 py-1.5
-                                border-t border-slate-100 dark:border-slate-700/60
-                                bg-slate-50/60 dark:bg-slate-800/80
-                            `}>
-                                {/* View */}
-                                <button
-                                    onClick={() => handleView(quote)}
-                                    className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 shadow-none hover:shadow-sm"
-                                    title={readOnly ? 'View BOM' : 'View'}
-                                >
-                                    {readOnly ? <Box size={16} /> : <Eye size={16} />}
-                                </button>
-
-                                {!readOnly && (
-                                    <>
-                                        {/* Edit */}
-                                        <button
-                                            onClick={() => onLoadQuote(quote, false)}
-                                            className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 shadow-none hover:shadow-sm"
-                                            title="Edit"
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-
-                                        {/* Excel */}
-                                        <button
-                                            onClick={() => handleDownloadExcel(quote)}
-                                            className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 shadow-none hover:shadow-sm"
-                                            title="Download Excel"
-                                        >
-                                            <Download size={16} />
-                                        </button>
-
-                                        {/* Clone */}
-                                        <button
-                                            onClick={() => onLoadQuote(quote, true)}
-                                            className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 shadow-none hover:shadow-sm"
-                                            title="Clone"
-                                        >
-                                            <Copy size={16} />
-                                        </button>
-
-                                        {/* Delete */}
-                                        <button
-                                            onClick={() => handleDelete(quote.id)}
-                                            className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shadow-none hover:shadow-sm"
-                                            title="Delete"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                        <React.Fragment key={group.ref}>
+                            <QuoteCard group={group} quote={group.latest} isLatest={true} isExpanded={isExpanded} onToggle={toggleGroup} />
+                            {isExpanded && group.older.map(v => (
+                                <QuoteCard key={v.id} group={group} quote={v} isLatest={false} />
+                            ))}
+                        </React.Fragment>
                     );
                 })}
             </div>
@@ -415,6 +533,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                     <table className="min-w-full border-collapse">
                         <thead>
                             <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
+                                <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Ref</th>
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Project</th>
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Client</th>
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Type</th>
@@ -428,137 +547,15 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                            {filteredQuotes.map((quote, rowIdx) => {
-                                const state = quote.calculatorState || {};
-                                const isIndoor = state.selectedIndoor === 'true';
-                                const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
-                                const calcs = quote.allScreensData?.calculations;
-
+                            {groupedQuotes.map((group, groupIdx) => {
+                                const isExpanded = expandedGroups.has(group.ref);
                                 return (
-                                    <tr
-                                        key={quote.id}
-                                        className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60`}
-                                    >
-                                        {/* Project */}
-                                        <td className="px-3 py-1 max-w-[160px]">
-                                            <div className="text-[13px] font-semibold text-slate-800 dark:text-white truncate leading-tight" title={quote.project}>
-                                                {quote.project || 'Untitled'}
-                                            </div>
-                                        </td>
-
-                                        {/* Client */}
-                                        <td className="px-3 py-1 max-w-[140px]">
-                                            <div className="text-[12px] text-slate-500 dark:text-slate-400 truncate leading-tight" title={quote.client}>
-                                                {quote.client || '—'}
-                                            </div>
-                                        </td>
-
-                                        {/* Type */}
-                                        <td className="px-3 py-1 whitespace-nowrap">
-                                            <span className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[10px] font-bold uppercase tracking-wide ${isIndoor ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-900/20 dark:text-amber-400'}`}>
-                                                {isIndoor ? <Monitor size={10} /> : <Sun size={10} />}
-                                                {isIndoor ? 'In' : 'Out'}
-                                            </span>
-                                        </td>
-
-                                        {/* Pitch */}
-                                        <td className="px-3 py-1 whitespace-nowrap">
-                                            {pitch ? (
-                                                <span className="inline-flex items-center px-1 py-px rounded text-[10px] font-bold tracking-wide bg-violet-50 text-violet-600 ring-1 ring-violet-200/60 dark:bg-violet-900/20 dark:text-violet-400">
-                                                    P{pitch}
-                                                </span>
-                                            ) : (
-                                                <span className="text-[12px] text-slate-400 italic">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* Size (ft) */}
-                                        <td className="px-3 py-1 align-top">
-                                            {calcs ? (
-                                                <div className="space-y-0.5">
-                                                    {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center gap-1 h-[20px]">
-                                                            {calcs.length > 1 && (
-                                                                <span className="flex-shrink-0 w-3.5 h-3.5 rounded-sm bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500">{idx + 1}</span>
-                                                            )}
-                                                            <span className="text-[12px] font-medium text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
-                                                                {(Number(calc.finalWidth) * 3.28084).toFixed(1)}×{(Number(calc.finalHeight) * 3.28084).toFixed(1)}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="text-[12px] text-slate-400 italic">Single screen</span>
-                                            )}
-                                        </td>
-
-                                        {/* Size (m) */}
-                                        <td className="px-3 py-1 align-top">
-                                            {calcs ? (
-                                                <div className="space-y-0.5">
-                                                    {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center h-[20px]">
-                                                            <span className="text-[12px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
-                                                                {calc.finalWidth}×{calc.finalHeight}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="text-[12px] text-slate-400 italic">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* Qty */}
-                                        <td className="px-3 py-1 align-top text-center border-r border-slate-100 dark:border-slate-800">
-                                            {calcs ? (
-                                                <div className="space-y-0.5 w-full">
-                                                    {calcs.map((calc, idx) => (
-                                                        <div key={idx} className="flex items-center justify-center h-[20px]">
-                                                            <span className="text-[12px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
-                                                                {calc.screenQty}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300 tabular-nums italic">1</span>
-                                            )}
-                                        </td>
-
-                                        {/* Estimate */}
-                                        {!readOnly && (
-                                            <td className="px-3 py-1 whitespace-nowrap text-right">
-                                                <span className="text-[13px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
-                                                    {formatCurrency(quote.finalAmount, 'INR')}
-                                                </span>
-                                            </td>
-                                        )}
-
-                                        {/* Date */}
-                                        <td className="px-3 py-1 whitespace-nowrap">
-                                            <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
-                                                {formatDate(quote.updatedAt)}
-                                            </span>
-                                        </td>
-
-                                        {/* Actions */}
-                                        <td className="px-2 py-1 whitespace-nowrap">
-                                            <div className="flex items-center justify-end gap-0">
-                                                <button onClick={() => handleView(quote)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title={readOnly ? 'View BOM' : 'View'}>
-                                                    {readOnly ? <Box size={12} /> : <Eye size={12} />}
-                                                </button>
-                                                {!readOnly && (
-                                                    <>
-                                                        <button onClick={() => onLoadQuote(quote, false)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit"><Edit size={12} /></button>
-                                                        <button onClick={() => handleDownloadExcel(quote)} className="w-6 h-6 rounded flex items-center justify-center text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors" title="Download CSV"><Download size={12} /></button>
-                                                        <button onClick={() => onLoadQuote(quote, true)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Clone"><Copy size={12} /></button>
-                                                        <button onClick={() => handleDelete(quote.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete"><Trash2 size={12} /></button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
+                                    <React.Fragment key={group.ref}>
+                                        <QuoteRow group={group} quote={group.latest} isLatest={true} isExpanded={isExpanded} onToggle={toggleGroup} rowIdx={groupIdx} />
+                                        {isExpanded && group.older.map((v, vIdx) => (
+                                            <QuoteRow key={v.id} group={group} quote={v} isLatest={false} rowIdx={vIdx} />
+                                        ))}
+                                    </React.Fragment>
                                 );
                             })}
                         </tbody>
@@ -566,12 +563,12 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                 </div>
 
                 {/* Footer row count */}
-                {filteredQuotes.length > 0 && (
+                {groupedQuotes.length > 0 && (
                     <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
-                            {filteredQuotes.length === quotes.length
+                            {groupedQuotes.length === quotes.length
                                 ? `${quotes.length} ${quotes.length === 1 ? 'quote' : 'quotes'}`
-                                : `${filteredQuotes.length} of ${quotes.length} quotes`
+                                : `${groupedQuotes.length} groups with ${quotes.length} versions`
                             }
                         </span>
                         {searchTerm && (
@@ -584,7 +581,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
             </div>
 
             {/* Empty State */}
-            {filteredQuotes.length === 0 && (
+            {groupedQuotes.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center mb-4">
                         <FileText className="w-7 h-7 text-slate-300 dark:text-slate-500" />

@@ -12,7 +12,7 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
 
     // Default State
     const [newItem, setNewItem] = React.useState({
-        type: 'module', brand: '', model: '', vendor: '', pitch: '',
+        type: 'module', brand: '', series: '', model: '', vendor: '', pitch: '',
         width: '', height: '', length: '', size: '',
         price: '', carriage: '', currency: 'INR', indoor: true,
         brightness: '', refreshRate: '',
@@ -140,7 +140,7 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
                 await collectionRef.add({ ...itemData, createdAt: new Date() });
                 setNewItem({
                     type: newItem.type,
-                    brand: '', model: '', vendor: '', pitch: '',
+                    brand: '', series: '', model: '', vendor: '', pitch: '',
                     width: '', height: '', length: '', size: '',
                     price: '', carriage: '', currency: 'INR', indoor: true,
                     brightness: '', refreshRate: '',
@@ -160,7 +160,8 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
             carriage: item.carriage || 0,
             length: item.length || '',
             size: item.size || '',
-            brand: item.brand || ''
+            brand: item.brand || '',
+            series: item.series || ''
         });
         setEditingId(item.id);
         setShowForm(true);
@@ -171,7 +172,7 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
         setEditingId(null);
         setShowForm(false);
         setNewItem({
-            type: 'module', brand: '', model: '', vendor: '', pitch: '',
+            type: 'module', brand: '', series: '', model: '', vendor: '', pitch: '',
             width: '', height: '', length: '', size: '',
             price: '', carriage: '', currency: 'INR', indoor: true,
             brightness: '', refreshRate: '',
@@ -379,6 +380,7 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
                     {/* 1. Modules & Ready Units (Core Specs) */}
                     {(newItem.type === 'module' || newItem.type === 'ready') && (
                         <>
+                            <input placeholder="Series (Optional)" className={inputCls} value={newItem.series} onChange={e => setNewItem({ ...newItem, series: e.target.value })} />
                             <input placeholder="Pitch (mm)*" type="number" className={inputCls + " border-teal-500 ring-1 ring-teal-500"} value={newItem.pitch} onChange={e => setNewItem({ ...newItem, pitch: e.target.value })} />
                             <select className={inputCls + " border-teal-500 ring-1 ring-teal-500"} value={newItem.indoor} onChange={e => setNewItem({ ...newItem, indoor: e.target.value })}>
                                 <option value="true">Indoor</option>
@@ -414,6 +416,7 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
                     {/* 2. Cabinets */}
                     {newItem.type === 'cabinet' && (
                         <>
+                            <input placeholder="Series (Optional)" className={inputCls} value={newItem.series} onChange={e => setNewItem({ ...newItem, series: e.target.value })} />
                             <input placeholder="Material (e.g. Die-Cast)" className={inputCls} value={newItem.material} onChange={e => setNewItem({ ...newItem, material: e.target.value })} />
                             <select className={inputCls} value={newItem.indoor} onChange={e => setNewItem({ ...newItem, indoor: e.target.value })}>
                                 <option value="true">Indoor</option>

@@ -26,7 +26,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
             {/* Header */}
             <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
                 <div className="flex gap-4 items-center">
-                    <img src="/AdmireLED/logo.png" alt="Company Logo" className="h-16 w-auto object-contain" />
+                    <img src="/Admire/logo.png" alt="Company Logo" className="h-16 w-auto object-contain" />
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 uppercase tracking-wide">{CONFIG.COMPANY.NAME}</h1>
                         <div className="text-[10px] text-slate-600 mt-1 space-y-0.5">
@@ -137,8 +137,10 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
 
                                 <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mt-4 mb-2">Module & Cabinet</h3>
                                 <div className="grid grid-cols-3 gap-y-1 text-[11px]">
+                                    <span className="font-semibold text-slate-500">Module Series:</span> <span className="col-span-2">{moduleType.series || '-'}</span>
                                     <span className="font-semibold text-slate-500">Module Size:</span> <span className="col-span-2">{moduleType.width} x {moduleType.height} mm</span>
-                                    <span className="font-semibold text-slate-500">Cabinet:</span> <span className="col-span-2">{cabinetType.material || 'Standard'}</span>
+                                    <span className="font-semibold text-slate-500">Cabinet Series:</span> <span className="col-span-2">{cabinetType.series || '-'}</span>
+                                    <span className="font-semibold text-slate-500">Cabinet Type:</span> <span className="col-span-2">{cabinetType.material || 'Standard'}</span>
                                     <span className="font-semibold text-slate-500">Cabinet Size:</span> <span className="col-span-2">{cabinetType.width} x {cabinetType.height} mm</span>
                                     <span className="font-semibold text-slate-500">Cabinet Layout:</span> <span className="col-span-2">{gridCols} x {gridRows} cabinets (WxH)</span>
                                 </div>

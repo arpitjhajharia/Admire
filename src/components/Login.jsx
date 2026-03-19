@@ -36,7 +36,7 @@ const Login = () => {
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
             <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm border border-slate-200">
                 <div className="flex flex-col items-center mb-6">
-                    <img src="/AdmireLED/logo.png" alt="Logo" className="h-12 mb-4" />
+                    <img src="/Admire/logo.png" alt="Logo" className="h-12 mb-4" />
                     <h1 className="text-xl font-bold text-slate-800">Staff Portal</h1>
                     <p className="text-slate-500 text-xs">Please log in to continue</p>
                 </div>

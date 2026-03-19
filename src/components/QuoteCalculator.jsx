@@ -1,7 +1,8 @@
 import React from 'react';
-import { Calculator, Settings, Printer, Plus, Trash2, Monitor, DollarSign, Box, Wrench, Percent, Edit, Copy, Save, FileText, Eye, RefreshCw, X } from 'lucide-react';
+import { Calculator, Settings, Printer, Plus, Trash2, Monitor, DollarSign, Box, Wrench, Percent, Edit, Copy, Save, FileText, Eye, RefreshCw, X, Users } from 'lucide-react';
 import { formatCurrency, generateId, calculateBOM, formatComponentSpecs } from '../lib/utils';
 import { CONFIG } from '../lib/config';
+import { db, appId } from '../lib/firebase';
 import ScreenVisualizer from './ScreenVisualizer';
 import BOMLayout from './BOMLayout';
 import PrintLayout from './PrintLayout';
@@ -485,6 +486,19 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
     const [allScreensTotal, setAllScreensTotal] = React.useState(null);
     const [showPreview, setShowPreview] = React.useState(false);
     const [showBOM, setShowBOM] = React.useState(false);
+    const [crmClients, setCrmClients] = React.useState([]);
+
+    // Fetch CRM leads for the Client dropdown
+    React.useEffect(() => {
+        if (!db) return;
+        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('crm_leads');
+        const unsub = ref.onSnapshot(snap => {
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                .sort((a, b) => (a.companyName || '').localeCompare(b.companyName || ''));
+            setCrmClients(data);
+        }, err => console.error('CRM leads fetch error:', err));
+        return () => unsub();
+    }, []);
 
     // Check Role
     const isSupervisor = userRole === 'supervisor';
@@ -515,7 +529,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
     const handleReset = () => {
         if (confirm("Reset calculator to defaults?")) {
             setState({
-                client: '', project: '', unit: 'ft',
+                client: '', project: '', ref: '', clientId: '', unit: 'ft',
                 screens: [
                     {
                         id: generateId(),
@@ -802,14 +816,70 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                     </div>
 
                     <div className="p-3 space-y-2.5">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {/* QUOTE REF */}
                             <div className="relative group">
-                                <label className="absolute -top-1.5 left-2 bg-white dark:bg-slate-800 px-1 text-[10px] font-bold text-teal-600 dark:text-teal-400">CLIENT</label>
-                                <input value={client} onChange={e => updateState('client', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all" placeholder="Client Name" />
+                                <label className="absolute -top-1.5 left-2 bg-white dark:bg-slate-800 px-1 text-[10px] font-bold text-teal-600 dark:text-teal-400">QUOTE REF</label>
+                                <input 
+                                    value={state.ref || ''} 
+                                    onChange={e => updateState('ref', e.target.value)} 
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all font-mono font-bold uppercase placeholder:font-normal placeholder:italic outline-none ring-teal-500 focus:ring-1" 
+                                    placeholder="e.g. Q-112" 
+                                />
                             </div>
+
+                            {/* PROJECT */}
                             <div className="relative group">
                                 <label className="absolute -top-1.5 left-2 bg-white dark:bg-slate-800 px-1 text-[10px] font-bold text-teal-600 dark:text-teal-400">PROJECT</label>
-                                <input value={project} onChange={e => updateState('project', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all" placeholder="Project Ref" />
+                                <input value={project} onChange={e => updateState('project', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all" placeholder="Project name" />
+                            </div>
+
+                            {/* CLIENT — CRM dropdown + optional free-text */}
+                            <div className="relative group space-y-1">
+                                <label className="absolute -top-1.5 left-2 bg-white dark:bg-slate-800 px-1 text-[10px] font-bold text-teal-600 dark:text-teal-400 z-10">CLIENT</label>
+                                {crmClients.length > 0 ? (
+                                    <>
+                                        <select
+                                            value={state.clientId || (crmClients.find(c => c.companyName === client) ? client : '__other__')}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                if (val === '__other__') {
+                                                    updateState('clientId', '');
+                                                    updateState('client', '');
+                                                } else {
+                                                    const matched = crmClients.find(c => c.id === val);
+                                                    updateState('clientId', val);
+                                                    updateState('client', matched ? matched.companyName : '');
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all"
+                                        >
+                                            <option value="__other__">— Type Manually —</option>
+                                            <optgroup label="── CRM Clients ──">
+                                                {crmClients.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.companyName}</option>
+                                                ))}
+                                            </optgroup>
+                                        </select>
+                                        {/* Show free-text only when "Type Manually" is selected */}
+                                        {!state.clientId && (
+                                            <input
+                                                value={client}
+                                                onChange={e => updateState('client', e.target.value)}
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all"
+                                                placeholder="Client Name"
+                                            />
+                                        )}
+                                    </>
+                                ) : (
+                                    <input value={client} onChange={e => updateState('client', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all" placeholder="Client Name" />
+                                )}
+                                {/* CRM link badge */}
+                                {state.clientId && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                                        <Users size={9} /> Linked to CRM
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -1306,7 +1376,10 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                             {/* HIDE SAVE IF READONLY OR SUPERVISOR PREFERENCE? KEEPING SAVE AS IT DOESN'T SHOW COST */}
                             {!readOnly && (
                                 <button
-                                    onClick={() => onSaveQuote(allScreensTotal ? allScreensTotal.totalProjectSell : calculation?.totalProjectSell)}
+                                    onClick={() => onSaveQuote(
+                                        allScreensTotal ? allScreensTotal.totalProjectSell : calculation?.totalProjectSell,
+                                        state.clientId || ''
+                                    )}
                                     className="flex-[2] bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg shadow-lg shadow-teal-900/20 transition-all flex justify-center items-center gap-2 py-2"
                                 >
                                     <Save size={18} /> Save

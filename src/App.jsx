@@ -35,7 +35,7 @@ const App = () => {
 
   // --- CALCULATOR STATE (Full Original Object) ---
   const initialCalcState = {
-    client: '', project: '', unit: 'ft',
+    client: '', project: '', ref: '', clientId: '', unit: 'ft',
     screens: [
       {
         id: generateId(), screenQty: 0, targetWidth: 0, targetHeight: 0,
@@ -76,6 +76,7 @@ const App = () => {
   };
 
   const [calcState, setCalcState] = useState(initialCalcState);
+  const [lastSavedState, setLastSavedState] = useState(null);
 
   // 1. Auth & Role Init
   useEffect(() => {
@@ -159,8 +160,25 @@ const App = () => {
   };
 
   // --- SAVE LOGIC ---
-  const handleSaveQuote = async (finalAmount) => {
-    if (!calcState.client || !calcState.project) return alert("Please enter Client and Project names.");
+  const handleSaveQuote = async (finalAmount, linkedClientId = '') => {
+    if (!calcState.client && !linkedClientId) return alert("Please enter Client and Project names.");
+    if (!calcState.project) return alert("Please enter a Project name.");
+
+    // Check if anything has changed (ignoring auto-appended -COPY and (Copy))
+    if (lastSavedState) {
+        const s1 = JSON.parse(lastSavedState);
+        const s2 = { ...calcState };
+        
+        // Strip auto-suffixes for comparison
+        if (s2.ref && s2.ref === s1.ref + '-COPY') s2.ref = s1.ref;
+        if (s2.client && s2.client === s1.client + ' (Copy)') s2.client = s1.client;
+        if (s2.project && s2.project === s1.project + ' (Copy)') s2.project = s1.project;
+        
+        if (JSON.stringify(s1) === JSON.stringify(s2)) {
+            alert("No changes detected since the quote was loaded. Version not saved.");
+            return;
+        }
+    }
 
     let allScreensData = null;
     if (calcState.screens && calcState.screens.length > 0) {
@@ -185,19 +203,71 @@ const App = () => {
     }
 
     try {
+      const globalQuoteRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc();
+      let crmQuoteRef = null;
+
+      if (linkedClientId) {
+        crmQuoteRef = db.collection('artifacts').doc(appId).collection('public').doc('data')
+          .collection('crm_leads').doc(linkedClientId).collection('quotes').doc();
+      }
+
       const quoteData = sanitizeForFirestore({
         client: calcState.client,
         project: calcState.project,
+        ref: calcState.ref || '',
         calculatorState: calcState,
-        finalAmount: finalAmount || 0,
+        finalAmount: Math.round(finalAmount || 0),
         screenCount: calcState.screens.length,
         totalScreenQty: allScreensData?.totalScreenQty || 0,
         allScreensData: allScreensData,
+        // CRM cross-link fields
+        clientId: linkedClientId || '',
+        clientName: calcState.client || '',
+        crmQuoteId: crmQuoteRef ? crmQuoteRef.id : '',
         createdBy: user.email,
         updatedAt: new Date()
       });
-      await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').add(quoteData);
-      alert("Quote Saved Successfully!");
+
+      // 1. Always save to the global quotes collection
+      await globalQuoteRef.set(quoteData);
+      
+      // Update last saved state after success
+      setLastSavedState(JSON.stringify(calcState));
+
+      // 2. If linked to a CRM client, also write into that client's quotes subcollection
+      //    so it shows up natively in ClientDashboard
+      if (crmQuoteRef && linkedClientId) {
+        const crmQuoteData = sanitizeForFirestore({
+          ref: calcState.ref || calcState.project,        // Prefer explicit ref
+          projectName: calcState.project,
+          version: 'v1',
+          date: new Date().toISOString().split('T')[0],
+          amount: Math.round(finalAmount || 0),
+          status: 'Sent',
+          items: allScreensData
+            ? allScreensData.screenConfigs.map((s, i) => ({
+                product: `Screen #${i + 1} — ${s.targetWidth}×${s.targetHeight} ${calcState.unit}`,
+                qty: Number(s.screenQty) || 0,
+                uom: 'Nos',
+                rate: Math.round(allScreensData.calculations[i]?.matrix?.sell?.unit || 0),
+                amount: Math.round(allScreensData.calculations[i]?.totalProjectSell || 0),
+              }))
+            : [],
+          subtotal: Math.round(finalAmount || 0),
+          gstPct: 0,
+          taxAmount: 0,
+          grandTotal: Math.round(finalAmount || 0),
+          calculatorRef: true,           // marks this as generated from the Calculator
+          globalQuoteId: globalQuoteRef.id,
+          calculatorState: calcState,     // Save full state for easy restoration
+          createdBy: user.email,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        await crmQuoteRef.set(crmQuoteData);
+      }
+
+      alert("Quote Saved Successfully!" + (linkedClientId ? "\nAlso linked to CRM Client." : ""));
     } catch (e) {
       console.error("Save quote error:", e);
       alert("Error saving quote: " + (e.message || e.code || "Unknown error"));
@@ -215,8 +285,54 @@ const App = () => {
     if (isDuplicate) {
       newState.client = newState.client + ' (Copy)';
       newState.project = newState.project + ' (Copy)';
+      if (newState.ref) newState.ref = newState.ref + '-COPY';
     }
+    
+    // Store original state for comparison (before -COPY)
+    setLastSavedState(JSON.stringify(newState));
+    
     setCalcState(newState);
+    setView('quote');
+    setIsMenuOpen(false);
+  };
+
+  // ── Open a CRM LED quote in the Calculator ──
+  const handleOpenLEDCalculatorFromCRM = async (crmQuote) => {
+    let fullState = crmQuote.calculatorState;
+    
+    // If not in CRM quote directly, try fetching via globalQuoteId
+    if (!fullState && crmQuote.globalQuoteId) {
+      try {
+        const globalDoc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc(crmQuote.globalQuoteId).get();
+        if (globalDoc.exists) {
+            fullState = globalDoc.data().calculatorState;
+        }
+      } catch (e) {
+        console.error("Error fetching global quote details:", e);
+      }
+    }
+
+    if (fullState) {
+      const newState = { ...initialCalcState, ...fullState };
+      newState.terms = {
+        ...initialCalcState.terms,
+        ...(fullState.terms || {}),
+        scope: { ...initialCalcState.terms.scope, ...(fullState.terms?.scope || {}) }
+      };
+      setCalcState(newState);
+      setLastSavedState(JSON.stringify(newState));
+    } else {
+      // Fallback: pre-fill client/project/ref from quote metadata
+      const fallbackState = {
+        ...initialCalcState,
+        ref: crmQuote.ref || '',
+        client: crmQuote.clientName || '',
+        project: crmQuote.projectName || crmQuote.ref || '',
+      };
+      setCalcState(fallbackState);
+      setLastSavedState(JSON.stringify(fallbackState));
+    }
+    setActiveModule('led');
     setView('quote');
     setIsMenuOpen(false);
   };
@@ -241,7 +357,7 @@ const App = () => {
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50 shadow-sm">
         <div className="max-w-[1600px] mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveModule('home')}>
-            <img src="/AdmireLED/logo.png" alt="Logo" className="h-10 w-auto" />
+            <img src="/Admire/logo.png" alt="Logo" className="h-10 w-auto" />
             {activeModule === 'led' && (
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-400">
                 LED Calc
@@ -420,7 +536,7 @@ const App = () => {
         )}
 
         {activeModule === 'crm' && (
-          <CRMManager user={user} userRole={userRole} />
+          <CRMManager user={user} userRole={userRole} onOpenLEDCalculator={handleOpenLEDCalculatorFromCRM} />
         )}
 
         {activeModule === 'admin' && showUsersTab && (

@@ -31,6 +31,7 @@ export const formatComponentSpecs = (item) => {
     if (!item) return [];
 
     if (item.type === 'module' || item.type === 'ready') {
+        if (item.series) specs.push(item.series);
         if (item.pitch) specs.push(`P${item.pitch}`);
         specs.push(item.indoor === 'true' || item.indoor === true ? 'Indoor' : 'Outdoor');
         if (item.ledType) specs.push(item.ledType);
@@ -45,6 +46,7 @@ export const formatComponentSpecs = (item) => {
         if (item.ipFront || item.ipBack) specs.push(`IP: ${item.ipFront}/${item.ipBack}`);
         if (item.weight) specs.push(`${item.weight}kg`);
     } else if (item.type === 'cabinet') {
+        if (item.series) specs.push(item.series);
         if (item.material) specs.push(item.material);
         specs.push(item.indoor === 'true' || item.indoor === true ? 'Indoor' : 'Outdoor');
         if (item.width && item.height) specs.push(`${item.width}×${item.height}mm`);
