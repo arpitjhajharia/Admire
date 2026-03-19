@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Calculator, Sun, Moon, Box, Archive, FileText, Shield, LogOut, Database, Menu, X, DollarSign } from 'lucide-react';
 import { auth, db, appId } from './lib/firebase';
 import { calculateBOM, generateId } from './lib/utils';
+import { getNextQuoteRef } from './lib/quotes';
+
 import { CONFIG } from './lib/config';
+
 
 // Components
 import InventoryManager from './components/InventoryManager';
@@ -165,7 +168,24 @@ const App = () => {
     if (!calcState.project) return alert("Please enter a Project name.");
 
     // Check if anything has changed (ignoring auto-appended -COPY and (Copy))
+    // Check if anything has changed (ignoring auto-appended -COPY and (Copy))
+    let currentRef = calcState.ref;
+    
+    // Auto-generate ref if missing or if it has -COPY suffix
+    if (!currentRef || currentRef.includes('-COPY')) {
+        try {
+            currentRef = await getNextQuoteRef();
+            // Upate state immediately so we don't re-generate next time
+            setCalcState(prev => ({ ...prev, ref: currentRef }));
+        } catch (err) {
+            console.error("Error generating quote ref:", err);
+            // Fallback or alert? Let's just alert and stop for now if we can't get a ref.
+            return alert("Could not generate quote reference. Please try again.");
+        }
+    }
+
     if (lastSavedState) {
+
         const s1 = JSON.parse(lastSavedState);
         const s2 = { ...calcState };
         
@@ -214,8 +234,9 @@ const App = () => {
       const quoteData = sanitizeForFirestore({
         client: calcState.client,
         project: calcState.project,
-        ref: calcState.ref || '',
-        calculatorState: calcState,
+        ref: currentRef,
+        calculatorState: { ...calcState, ref: currentRef },
+
         finalAmount: Math.round(finalAmount || 0),
         screenCount: calcState.screens.length,
         totalScreenQty: allScreensData?.totalScreenQty || 0,
@@ -238,7 +259,8 @@ const App = () => {
       //    so it shows up natively in ClientDashboard
       if (crmQuoteRef && linkedClientId) {
         const crmQuoteData = sanitizeForFirestore({
-          ref: calcState.ref || calcState.project,        // Prefer explicit ref
+          ref: currentRef || calcState.project,        // Prefer explicit ref
+
           projectName: calcState.project,
           version: 'v1',
           date: new Date().toISOString().split('T')[0],
@@ -259,7 +281,8 @@ const App = () => {
           grandTotal: Math.round(finalAmount || 0),
           calculatorRef: true,           // marks this as generated from the Calculator
           globalQuoteId: globalQuoteRef.id,
-          calculatorState: calcState,     // Save full state for easy restoration
+          calculatorState: { ...calcState, ref: currentRef },     // Save full state for easy restoration
+
           createdBy: user.email,
           createdAt: new Date(),
           updatedAt: new Date(),

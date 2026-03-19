@@ -43,7 +43,8 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                 const {
                     finalWidth, finalHeight, totalCabinets,
                     moduleType = {}, cabinetType = {}, processor, screenQty, totalProjectSell,
-                    gridCols, gridRows, commercials, pricingMode, targetSellPrice
+                    gridCols, gridRows, commercials, pricingMode, targetSellPrice,
+                    assemblyMode, breakdown = {}
                 } = config;
 
                 // Technical Calculations
@@ -56,9 +57,9 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                 const resW = pitch > 0 ? Math.round((screenWidthM * 1000) / pitch) : 0;
                 const resH = pitch > 0 ? Math.round((screenHeightM * 1000) / pitch) : 0;
 
-                // Weight & Power Logic
-                const totalModWeight = (moduleType.weight || 0) * areaSqm;
-                const totalCabWeight = (cabinetType.weight || 0) * totalCabinets;
+                // Weight Logic
+                const totalModWeight = Number(moduleType.weight || 0) * (breakdown.qtyModules || 0);
+                const totalCabWeight = assemblyMode === 'ready' ? 0 : Number(cabinetType.weight || 0) * (totalCabinets || 0);
                 const totalWeight = totalModWeight + totalCabWeight;
 
                 const avgPower = (moduleType.avgPower || 0) * areaSqm;
@@ -127,9 +128,10 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                 <div className="grid grid-cols-3 gap-y-1 text-[11px]">
                                     <span className="font-semibold text-slate-500">Client:</span> <span className="col-span-2 font-bold">{clientName}</span>
                                     <span className="font-semibold text-slate-500">Project:</span> <span className="col-span-2 font-bold">{projectName}</span>
+                                    <span className="font-semibold text-slate-500">Series:</span> <span className="col-span-2 font-bold">{moduleType.series || '-'}</span>
                                     <span className="font-semibold text-slate-500">Screen Size:</span>
-                                    <span className="col-span-2">
-                                        {(screenWidthM * 3.28084).toFixed(2)}ft x {(screenHeightM * 3.28084).toFixed(2)}ft <span className="text-slate-400">/ {screenWidthM}m x {screenHeightM}m</span>
+                                    <span className="col-span-2 font-bold text-blue-700">
+                                        {(screenWidthM * 3.28084).toFixed(2)}ft x {(screenHeightM * 3.28084).toFixed(2)}ft <span className="text-slate-400 font-normal">/ {screenWidthM}m x {screenHeightM}m</span>
                                     </span>
                                     <span className="font-semibold text-slate-500">Type:</span> <span className="col-span-2">{moduleType.indoor ? 'Indoor' : 'Outdoor'}</span>
                                     <span className="font-semibold text-slate-500">Quantity:</span> <span className="col-span-2">{screenQty} Nos</span>
@@ -137,9 +139,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
 
                                 <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mt-4 mb-2">Module & Cabinet</h3>
                                 <div className="grid grid-cols-3 gap-y-1 text-[11px]">
-                                    <span className="font-semibold text-slate-500">Module Series:</span> <span className="col-span-2">{moduleType.series || '-'}</span>
                                     <span className="font-semibold text-slate-500">Module Size:</span> <span className="col-span-2">{moduleType.width} x {moduleType.height} mm</span>
-                                    <span className="font-semibold text-slate-500">Cabinet Series:</span> <span className="col-span-2">{cabinetType.series || '-'}</span>
                                     <span className="font-semibold text-slate-500">Cabinet Type:</span> <span className="col-span-2">{cabinetType.material || 'Standard'}</span>
                                     <span className="font-semibold text-slate-500">Cabinet Size:</span> <span className="col-span-2">{cabinetType.width} x {cabinetType.height} mm</span>
                                     <span className="font-semibold text-slate-500">Cabinet Layout:</span> <span className="col-span-2">{gridCols} x {gridRows} cabinets (WxH)</span>
@@ -149,7 +149,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                             <div>
                                 <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mb-2">Screen Specifications</h3>
                                 <div className="grid grid-cols-3 gap-y-1 text-[11px]">
-                                    <span className="font-semibold text-slate-500">Pitch:</span> <span className="col-span-2">P{pitch}</span>
+                                    <span className="font-semibold text-slate-500">Pitch:</span> <span className="col-span-2 font-bold text-blue-700">P{pitch}</span>
                                     <span className="font-semibold text-slate-500">Resolution:</span> <span className="col-span-2">{resW} x {resH} pixels</span>
                                     <span className="font-semibold text-slate-500">Total Area:</span> <span className="col-span-2">{areaSqft.toFixed(2)} Sq.ft / {areaSqm.toFixed(2)} Sq.m</span>
                                     <span className="font-semibold text-slate-500">Total Weight:</span> <span className="col-span-2">{totalWeight.toFixed(1)} kg</span>

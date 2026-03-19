@@ -5,8 +5,11 @@ import {
     Plus, Edit2, CheckCircle2, MoreVertical, Trash2, X, Save,
     ShoppingBag, FileText, CheckSquare, Landmark,
     Building2, User, ChevronDown, ChevronRight,
-    TrendingUp, Clock, AlertCircle, Loader2, Calculator
+    TrendingUp, Clock, AlertCircle, Loader2, Calculator, Printer
 } from 'lucide-react';
+import QuotePrintLayout from './QuotePrintLayout';
+import { getNextQuoteRef } from '../lib/quotes';
+
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -16,17 +19,17 @@ const MILESTONE_STATUSES = ['Upcoming', 'Pending', 'Paid'];
 const PRIORITY_LABELS = { Urgent: 'bg-red-500', High: 'bg-orange-400', Normal: 'bg-sky-400', Low: 'bg-slate-300' };
 
 const quoteStatusStyle = {
-    Draft:    'bg-slate-100 text-slate-500 border border-slate-200',
-    Sent:     'bg-blue-50 text-blue-600 border border-blue-100',
-    Revised:  'bg-amber-50 text-amber-600 border border-amber-100',
+    Draft: 'bg-slate-100 text-slate-500 border border-slate-200',
+    Sent: 'bg-blue-50 text-blue-600 border border-blue-100',
+    Revised: 'bg-amber-50 text-amber-600 border border-amber-100',
     Approved: 'bg-teal-50 text-teal-600 border border-teal-100',
-    Expired:  'bg-slate-100 text-slate-400 border border-slate-200',
+    Expired: 'bg-slate-100 text-slate-400 border border-slate-200',
     Rejected: 'bg-red-50 text-red-400 border border-red-100',
 };
 
 const milestoneStatusStyle = {
-    Paid:     'text-teal-600 bg-teal-50 border-teal-100',
-    Pending:  'text-amber-600 bg-amber-50 border-amber-100',
+    Paid: 'text-teal-600 bg-teal-50 border-teal-100',
+    Pending: 'text-amber-600 bg-amber-50 border-amber-100',
     Upcoming: 'text-slate-400 bg-slate-50 border-slate-200',
 };
 
@@ -192,7 +195,20 @@ function QuoteModal({ leadId, quote, onClose }) {
         if (!form.items.some(it => it.product?.trim())) return;
         setSaving(true);
         try {
-            const data = buildData();
+            let data = buildData();
+            
+            // Auto-generate ref for brand new quotes if empty
+            if (!quote?.id && !data.ref) {
+                try {
+                    const newRef = await getNextQuoteRef();
+                    data.ref = newRef;
+                    setForm(f => ({ ...f, ref: newRef }));
+                } catch (err) {
+                    console.error("Error generating quote ref:", err);
+                    return alert("Could not generate quote reference.");
+                }
+            }
+
             if (quote?.id && !asNewVersion) {
                 // Edit original in place
                 await quotesRef(leadId).doc(quote.id).update(data);
@@ -200,6 +216,7 @@ function QuoteModal({ leadId, quote, onClose }) {
                 // New quote OR "Save as Version" — always creates a new doc (same ref = new version)
                 await quotesRef(leadId).add({ ...data, date: todayStr(), createdAt: new Date() });
             }
+
             onClose();
         } catch (e) { console.error(e); }
         setSaving(false);
@@ -214,7 +231,7 @@ function QuoteModal({ leadId, quote, onClose }) {
                 </div>
                 <div className="p-5 space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                        <Field label="Quote Ref"><input className={inputCls} value={form.ref} onChange={e => set('ref', e.target.value)} placeholder="Q-1024 (same ref = new version)" /></Field>
+                        <Field label="Quote Ref"><input className={inputCls} value={form.ref} onChange={e => set('ref', e.target.value)} placeholder="Auto-generated on Save" /></Field>
                         <Field label="GST %"><input type="number" className={inputCls} value={form.gstPct} onChange={e => set('gstPct', e.target.value)} placeholder="18" /></Field>
                         <Field label="Status">
                             <select className={selectCls} value={form.status} onChange={e => set('status', e.target.value)}>
@@ -241,11 +258,11 @@ function QuoteModal({ leadId, quote, onClose }) {
                             {form.items.map((it, i) => (
                                 <div key={i} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 sm:flex-row sm:items-center sm:bg-transparent sm:p-0 sm:border-0 sm:gap-1.5">
                                     <div className="flex-1 min-w-0">
-                                        <textarea 
-                                            className="w-full px-2.5 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:ring-1 focus:ring-violet-400 focus:outline-none bg-white font-medium resize-none min-h-[34px] leading-tight"
-                                            value={it.product} 
-                                            onChange={e => setItem(i, 'product', e.target.value)} 
-                                            placeholder="Product or service description"
+                                        <textarea
+                                            className="w-full px-2.5 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:ring-1 focus:ring-violet-400 focus:outline-none bg-white font-medium resize-none min-h-[44px] leading-tight"
+                                            value={it.product}
+                                            onChange={e => setItem(i, 'product', e.target.value)}
+                                            placeholder="Description (use - for bullet points)"
                                             rows={1}
                                             onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                                         />
@@ -295,7 +312,7 @@ function QuoteModal({ leadId, quote, onClose }) {
                         </div>
                     </div>
 
-                    <Field label="Notes"><textarea className={inputCls} rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes…" /></Field>
+                    <Field label="Terms and Conditions"><textarea className={inputCls} rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes…" /></Field>
                     <div className="flex gap-2 pt-1">
                         <button onClick={onClose} className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
                         {quote?.id ? (
@@ -354,7 +371,17 @@ function POModal({ leadId, po, onClose }) {
     const addItem = () => setForm(f => ({ ...f, items: [...f.items, emptyPoItem()] }));
     const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
 
-    const setMs = (i, k, v) => setForm(f => { const ms = [...f.milestones]; ms[i] = { ...ms[i], [k]: v }; return { ...f, milestones: ms }; });
+    const setMs = (i, k, v) => setForm(f => {
+        const ms = [...f.milestones];
+        const updated = { ...ms[i], [k]: v };
+        if (k === 'pct' && grandTotal > 0) {
+            updated.amount = parseFloat(((Number(v) || 0) / 100 * grandTotal).toFixed(0));
+        } else if (k === 'amount' && grandTotal > 0) {
+            updated.pct = parseFloat(((Number(v) || 0) / grandTotal * 100).toFixed(2));
+        }
+        ms[i] = updated;
+        return { ...f, milestones: ms };
+    });
     const addMs = () => setForm(f => ({ ...f, milestones: [...f.milestones, emptyMilestone()] }));
     const removeMs = (i) => setForm(f => ({ ...f, milestones: f.milestones.filter((_, idx) => idx !== i) }));
 
@@ -363,7 +390,10 @@ function POModal({ leadId, po, onClose }) {
     const taxAmount = parseFloat((subtotal * gst / 100).toFixed(2));
     const grandTotal = parseFloat((subtotal + taxAmount).toFixed(2));
     const totalPct = form.milestones.reduce((s, m) => s + (Number(m.pct) || 0), 0);
-    const pctValid = totalPct === 100;
+    const totalMsAmount = form.milestones.reduce((s, m) => s + (Number(m.amount) || 0), 0);
+    const pctDiff = 100 - totalPct;
+    const amountDiff = grandTotal - totalMsAmount;
+    const pctValid = Math.abs(pctDiff) < 0.01;
 
     const handleSave = async () => {
         if (!form.items.some(it => it.product?.trim())) return;
@@ -434,11 +464,11 @@ function POModal({ leadId, po, onClose }) {
                             {form.items.map((it, i) => (
                                 <div key={i} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 sm:flex-row sm:items-center sm:bg-transparent sm:p-0 sm:border-0 sm:gap-1.5">
                                     <div className="flex-1 min-w-0">
-                                        <textarea 
-                                            className="w-full px-2.5 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:ring-1 focus:ring-violet-400 focus:outline-none bg-white font-medium resize-none min-h-[34px] leading-tight"
-                                            value={it.product} 
-                                            onChange={e => setItem(i, 'product', e.target.value)} 
-                                            placeholder="PO Description"
+                                        <textarea
+                                            className="w-full px-2.5 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:ring-1 focus:ring-violet-400 focus:outline-none bg-white font-medium resize-none min-h-[44px] leading-tight"
+                                            value={it.product}
+                                            onChange={e => setItem(i, 'product', e.target.value)}
+                                            placeholder="Description (use - for bullet points)"
                                             rows={1}
                                             onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                                         />
@@ -499,9 +529,13 @@ function POModal({ leadId, po, onClose }) {
                                 <div key={i} className="flex flex-col sm:flex-row gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100 min-w-max sm:min-w-0">
                                     <input className="min-w-[120px] px-2.5 py-1.5 text-[11px] border border-slate-200 rounded-lg" value={ms.label} onChange={e => setMs(i, 'label', e.target.value)} placeholder="Label" />
                                     <div className="flex gap-1.5 items-center">
-                                        <input type="number" className="w-14 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg text-center" value={ms.pct} onChange={e => setMs(i, 'pct', e.target.value)} placeholder="%" />
-                                        <div className="w-24 flex items-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-semibold tabular-nums text-teal-600 whitespace-nowrap overflow-hidden">
-                                            ₹{fmtNum(parseFloat(((Number(ms.pct) || 0) / 100 * grandTotal).toFixed(0)))}
+                                        <div className="flex flex-col">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-0.5">Percent %</label>
+                                            <input type="number" className="w-14 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg text-center" value={ms.pct} onChange={e => setMs(i, 'pct', e.target.value)} placeholder="%" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-0.5">Amount ₹</label>
+                                            <input type="number" className="w-28 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg font-semibold tabular-nums text-teal-600" value={ms.amount || ''} onChange={e => setMs(i, 'amount', e.target.value)} placeholder="Amount" />
                                         </div>
                                     </div>
                                     <div className="flex gap-1.5 items-center">
@@ -515,16 +549,26 @@ function POModal({ leadId, po, onClose }) {
                             ))}
                         </div>
                         {/* % total validation row */}
-                        <div className={`flex items-center justify-between mt-2 px-2 py-1.5 rounded-lg text-[11px] font-bold ${pctValid ? 'bg-teal-50 text-teal-600' : 'bg-red-50 text-red-500'}`}>
-                            <span>Total Milestone %</span>
-                            <span className="tabular-nums">{totalPct}%{pctValid ? ' ✓' : ' — must equal 100%'}</span>
+                        <div className={`flex flex-col gap-1 mt-2 px-3 py-2 rounded-lg text-[10px] font-bold ${pctValid ? 'bg-teal-50 text-teal-600' : 'bg-red-50 text-red-500'}`}>
+                            <div className="flex items-center justify-between uppercase tracking-wider">
+                                <span>Milestones Total</span>
+                                <span className="tabular-nums">{totalPct.toFixed(2)}% {pctValid ? '✓' : ''}</span>
+                            </div>
+                            <div className="flex items-center justify-between font-mono bg-white/40 px-1.5 py-0.5 rounded">
+                                <span>Sum of Amounts</span>
+                                <span className="tabular-nums">₹{fmtNum(totalMsAmount)} / ₹{fmtNum(grandTotal)}</span>
+                            </div>
                         </div>
                     </div>
 
                     <div className="space-y-1.5 pt-1">
                         {!pctValid && (
-                            <p className="text-[11px] text-red-500 font-semibold text-center">
-                                Milestone percentages must add up to exactly 100% (currently {totalPct}%)
+                            <p className="text-[10px] text-red-600 font-bold text-center uppercase tracking-tight">
+                                {amountDiff > 0 ? (
+                                    <>Deficit: ₹{fmtNum(amountDiff)} ({pctDiff.toFixed(2)}% remaining)</>
+                                ) : (
+                                    <>Excess: ₹{fmtNum(Math.abs(amountDiff))} ({(Math.abs(pctDiff)).toFixed(2)}% over)</>
+                                )}
                             </p>
                         )}
                         <div className="flex gap-2">
@@ -532,11 +576,10 @@ function POModal({ leadId, po, onClose }) {
                             <button
                                 onClick={handleSave}
                                 disabled={saving || !pctValid}
-                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${
-                                    !pctValid
+                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${!pctValid
                                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                         : 'bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60'
-                                }`}
+                                    }`}
                             >
                                 {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save PO
                             </button>
@@ -759,6 +802,17 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
         return () => unsubs.forEach(u => u());
     }, [leadId]);
 
+    const [printingQuote, setPrintingQuote] = useState(null);
+
+    const handlePrint = useCallback((q) => {
+        setPrintingQuote(q);
+        // Increased delay to ensure Portal and data are fully rendered in the DOM
+        setTimeout(() => {
+            window.print();
+            setPrintingQuote(null);
+        }, 500);
+    }, []);
+
     const toggleTask = useCallback(async (task) => {
         const newStatus = task.status === 'done' ? 'open' : 'done';
         try { await tasksRef().doc(task.id).update({ status: newStatus, updatedAt: new Date() }); }
@@ -828,7 +882,7 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                 </div>
                 {q.items.map((it, i) => (
                     <div key={i} className="grid px-2 py-2 border-b border-slate-50 last:border-0 text-[11px] items-start" style={{ gridTemplateColumns: '1fr 34px 34px 64px 74px' }}>
-                        <span className="text-slate-700 font-medium leading-tight whitespace-normal break-words pr-1">{it.product || '—'}</span>
+                        <span className="text-slate-700 font-medium leading-tight whitespace-pre-wrap break-words pr-1">{it.product || '—'}</span>
                         <span className="text-center text-slate-500 tabular-nums">{it.qty || '—'}</span>
                         <span className="text-center text-slate-400 uppercase">{it.uom || '—'}</span>
                         <span className="text-right text-slate-500 tabular-nums">₹{fmtNum(it.rate)}</span>
@@ -861,7 +915,7 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
             </div>
         ) : null
     );
-    const paymentPending  = pos.flatMap(p => (p.milestones || []).map(m => ({ ...m, _gt: p.grandTotal || p.total || 0 }))).filter(m => m.status === 'Pending').reduce((s, m)  => s + ((Number(m.pct) || 0) / 100 * m._gt), 0);
+    const paymentPending = pos.flatMap(p => (p.milestones || []).map(m => ({ ...m, _gt: p.grandTotal || p.total || 0 }))).filter(m => m.status === 'Pending').reduce((s, m) => s + ((Number(m.pct) || 0) / 100 * m._gt), 0);
     const paymentUpcoming = pos.flatMap(p => (p.milestones || []).map(m => ({ ...m, _gt: p.grandTotal || p.total || 0 }))).filter(m => m.status === 'Upcoming').reduce((s, m) => s + ((Number(m.pct) || 0) / 100 * m._gt), 0);
     const visibleTasks = hideCompleted ? tasks.filter(t => t.status !== 'done') : tasks;
     const completedCount = tasks.filter(t => t.status === 'done').length;
@@ -870,6 +924,8 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 size={22} className="animate-spin text-violet-500" />
+                {/* Hidden Print Component */}
+                {printingQuote && <QuotePrintLayout quote={printingQuote} lead={lead} />}
             </div>
         );
     }
@@ -925,11 +981,10 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                         <div className="min-w-0 flex flex-col">
                             <span className="text-sm font-bold text-slate-800 truncate">{lead.companyName || 'Client'}</span>
                             <div className="flex items-center gap-2">
-                                <span className={`px-1 py-0 shadow-sm rounded text-[9px] font-bold uppercase tracking-wider ${
-                                    lead.stage === 'Won' ? 'bg-teal-50 text-teal-600' :
-                                    lead.stage === 'Lost' ? 'bg-red-50 text-red-400' :
-                                    'bg-violet-50 text-violet-600'
-                                }`}>{lead.stage}</span>
+                                <span className={`px-1 py-0 shadow-sm rounded text-[9px] font-bold uppercase tracking-wider ${lead.stage === 'Won' ? 'bg-teal-50 text-teal-600' :
+                                        lead.stage === 'Lost' ? 'bg-red-50 text-red-400' :
+                                            'bg-violet-50 text-violet-600'
+                                    }`}>{lead.stage}</span>
                                 {lead.location && (
                                     <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
                                         <MapPin size={9} /> {lead.location}
@@ -1072,19 +1127,27 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                                             <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{fmtDateShort(latest.date)}</span>
                                             <span className="text-[11px] text-slate-600 font-medium truncate flex-1">{latest.projectName || ''}</span>
                                             <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${quoteStatusStyle[latest.status] || quoteStatusStyle.Sent}`}>{latest.status}</span>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                            <div className="flex items-center gap-1.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handlePrint(latest); }}
+                                                    className="p-1 px-1.5 bg-slate-50 border border-slate-100 text-slate-400 hover:text-violet-600 hover:border-violet-100 rounded flex items-center gap-1 transition-all"
+                                                    title="Print PDF"
+                                                >
+                                                    <Printer size={11} />
+                                                    <span className="text-[9px] font-bold uppercase hidden sm:inline">Print</span>
+                                                </button>
                                                 {latest.calculatorRef ? (
                                                     <button
                                                         title="Open in LED Calculator"
-                                                        onClick={() => onOpenLEDCalculator && onOpenLEDCalculator(latest)}
+                                                        onClick={(e) => { e.stopPropagation(); onOpenLEDCalculator?.(latest); }}
                                                         className="flex items-center gap-0.5 text-[11px] font-bold text-teal-600 hover:text-teal-800 px-1 py-0.5 rounded bg-teal-50 hover:bg-teal-100 transition-colors"
                                                     >
                                                         <Calculator size={9} /> Open in Calculator
                                                     </button>
                                                 ) : (
-                                                    <button onClick={() => openModal('quote', latest)} className="text-slate-400 hover:text-violet-500"><Edit2 size={10} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); openModal('quote', latest); }} className="text-slate-400 hover:text-violet-500 p-1"><Edit2 size={11} /></button>
                                                 )}
-                                                <button onClick={() => deleteQuote(latest.id)} className="text-slate-300 hover:text-red-400"><Trash2 size={10} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); deleteQuote(latest.id); }} className="text-slate-300 hover:text-red-400 p-1"><Trash2 size={11} /></button>
                                             </div>
                                         </div>
                                         {/* Line items for latest */}
@@ -1104,24 +1167,28 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                                                 <div className="mt-1 pl-2 border-l-2 border-slate-100 space-y-1.5">
                                                     {older.map(q => (
                                                         <div key={q.id}
-                                                            className="rounded-lg border border-slate-100 hover:border-slate-200 transition-colors"
+                                                            onClick={() => q.calculatorRef ? onOpenLEDCalculator?.(q) : openModal('quote', q)}
+                                                            className="rounded-lg border border-slate-100 bg-white hover:border-violet-200 hover:bg-violet-50/30 transition-all cursor-pointer group active:scale-[0.99]"
                                                         >
-                                                            <div className="flex items-center gap-2 px-2 py-1.5">
+                                                            <div className="flex items-center gap-2 px-2 py-2">
                                                                 <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0">{q.ref || '—'}</span>
                                                                 <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{fmtDateShort(q.date)}</span>
-                                                                <span className="text-[11px] text-slate-500 whitespace-normal break-words flex-1 leading-tight">{q.projectName || ''}</span>
-                                                                <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${quoteStatusStyle[q.status] || quoteStatusStyle.Sent}`}>{q.status}</span>
-                                                                {q.calculatorRef ? (
+                                                                <span className="text-[11px] text-slate-500 whitespace-pre-wrap break-words flex-1 leading-tight">{q.projectName || ''}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${quoteStatusStyle[q.status] || quoteStatusStyle.Sent}`}>{q.status}</span>
+                                                                <div className="flex items-center gap-1.5 ml-1">
                                                                     <button
-                                                                        title="Open in LED Calculator"
-                                                                        onClick={() => onOpenLEDCalculator && onOpenLEDCalculator(q)}
-                                                                        className="text-teal-500 hover:text-teal-700 opacity-0 group-hover:opacity-100"
+                                                                        onClick={(e) => { e.stopPropagation(); handlePrint(q); }}
+                                                                        className="p-1 text-slate-400 hover:text-violet-600"
+                                                                        title="Print this version"
                                                                     >
-                                                                        <Calculator size={10} />
+                                                                        <Printer size={12} />
                                                                     </button>
-                                                                ) : (
-                                                                    <button onClick={() => openModal('quote', q)} className="text-slate-300 hover:text-violet-400 opacity-0 group-hover:opacity-100"><Edit2 size={10} /></button>
-                                                                )}
+                                                                    {q.calculatorRef ? (
+                                                                        <Calculator size={11} className="text-teal-500" />
+                                                                    ) : (
+                                                                        <Edit2 size={10} className="text-slate-300 group-hover:text-violet-500" />
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1247,7 +1314,7 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                                 {/* PO header row */}
                                 <div className="flex items-center gap-2 px-2 py-1.5 border-b border-slate-100 group">
                                     <span className="text-[11px] font-mono font-bold text-violet-500 shrink-0">{po.poNumber || '—'}</span>
-                                    {po.projectName && <span className="text-[11px] font-medium text-slate-700 flex-1 whitespace-normal break-words leading-tight">{po.projectName}</span>}
+                                    {po.projectName && <span className="text-[11px] font-medium text-slate-700 flex-1 whitespace-pre-wrap break-words leading-tight">{po.projectName}</span>}
                                     {!po.projectName && <span className="flex-1" />}
                                     <span className="text-[11px] font-bold text-teal-600 tabular-nums shrink-0 ml-1">₹{fmtNum(po.grandTotal || po.total)}</span>
                                     {po.taxPct > 0 && <span className="text-[11px] text-slate-400 shrink-0">+{po.taxPct}% GST</span>}
@@ -1264,7 +1331,7 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
                                         </div>
                                         {po.items.map((it, i) => (
                                             <div key={i} className="grid px-2 py-2 border-b border-slate-50 last:border-0 text-[11px] items-start" style={{ gridTemplateColumns: '1fr 34px 34px 64px 74px' }}>
-                                                <span className="text-slate-700 font-medium leading-tight whitespace-normal break-words pr-1">{it.product || '—'}</span>
+                                                <span className="text-slate-700 font-medium leading-tight whitespace-pre-wrap break-words pr-1">{it.product || '—'}</span>
                                                 <span className="text-center text-slate-500 tabular-nums">{it.qty || '—'}</span>
                                                 <span className="text-center text-slate-400 uppercase">{it.uom || '—'}</span>
                                                 <span className="text-right text-slate-500 tabular-nums">₹{fmtNum(it.rate)}</span>

@@ -46,7 +46,6 @@ export const formatComponentSpecs = (item) => {
         if (item.ipFront || item.ipBack) specs.push(`IP: ${item.ipFront}/${item.ipBack}`);
         if (item.weight) specs.push(`${item.weight}kg`);
     } else if (item.type === 'cabinet') {
-        if (item.series) specs.push(item.series);
         if (item.material) specs.push(item.material);
         specs.push(item.indoor === 'true' || item.indoor === true ? 'Indoor' : 'Outdoor');
         if (item.width && item.height) specs.push(`${item.width}×${item.height}mm`);
@@ -73,6 +72,28 @@ export const formatComponentSpecs = (item) => {
 };
 
 export const generateId = () => Math.random().toString(36).substr(2, 9).toUpperCase();
+
+/**
+ * Gets the Indian financial year string (e.g., "26-27") for a given date.
+ * Financial year starts on April 1st.
+ */
+export const getFinancialYear = (date = new Date()) => {
+    const d = new Date(date);
+    const m = d.getMonth() + 1; // 1-indexed (Jan=1, Apr=4)
+    const y = d.getFullYear();
+    const startYear = m >= 4 ? y : y - 1;
+    const endYear = startYear + 1;
+    return `${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
+};
+
+/**
+ * Formats a sequence number and FY into the ASD/###/YY-YY format.
+ */
+export const formatQuoteRef = (seq, fy) => {
+    const padded = String(seq).padStart(3, '0');
+    return `ASD/${padded}/${fy}`;
+};
+
 
 // Helper: Shared Calculation Logic
 export const calculateBOM = (state, inventory, transactions, exchangeRate) => {

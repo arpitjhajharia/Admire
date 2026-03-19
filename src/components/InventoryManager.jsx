@@ -416,7 +416,6 @@ const InventoryManager = ({ user, userRole, transactions = [], readOnly = false,
                     {/* 2. Cabinets */}
                     {newItem.type === 'cabinet' && (
                         <>
-                            <input placeholder="Series (Optional)" className={inputCls} value={newItem.series} onChange={e => setNewItem({ ...newItem, series: e.target.value })} />
                             <input placeholder="Material (e.g. Die-Cast)" className={inputCls} value={newItem.material} onChange={e => setNewItem({ ...newItem, material: e.target.value })} />
                             <select className={inputCls} value={newItem.indoor} onChange={e => setNewItem({ ...newItem, indoor: e.target.value })}>
                                 <option value="true">Indoor</option>

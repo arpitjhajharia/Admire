@@ -823,8 +823,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <input 
                                     value={state.ref || ''} 
                                     onChange={e => updateState('ref', e.target.value)} 
-                                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all font-mono font-bold uppercase placeholder:font-normal placeholder:italic outline-none ring-teal-500 focus:ring-1" 
-                                    placeholder="e.g. Q-112" 
+                                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 rounded text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:text-white transition-all font-mono font-bold uppercase placeholder:font-normal placeholder:italic outline-none ring-teal-500 focus:ring-1" 
+                                    placeholder="Auto-generated on Save" 
                                 />
                             </div>
 
