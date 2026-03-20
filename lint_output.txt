@@ -1,0 +1,546 @@
+
+> admire@0.0.0 lint
+> eslint .
+
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/App.jsx
+  141:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  139 |   useEffect(() => {
+  140 |     if (userRole === 'labour' && view === 'quote') {
+> 141 |       setView('saved');
+      |       ^^^^^^^ Avoid calling setState() directly within an effect
+  142 |     }
+  143 |   }, [userRole, view]);
+  144 |  react-hooks/set-state-in-effect
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/BOMLayout.jsx
+    3:10  error  'formatCurrency' is defined but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+    3:26  error  'generateId' is defined but never used. Allowed unused vars must match /^[A-Z_]/u            no-unused-vars
+   18:55  error  'cabinetType' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  106:52  error  'screenIndex' is defined but never used                                                      no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/CRMManager.jsx
+  166:38  error  'onStageChange' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/ClientDashboard.jsx
+  733:27  error  'Icon' is defined but never used                                                               no-unused-vars
+  741:76  error  'userRole' is defined but never used                                                           no-unused-vars
+  754:12  error  'quotesOpen' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u     no-unused-vars
+  754:24  error  'setQuotesOpen' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/ClientDashboardMockup.jsx
+   28:49  error  'client' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+   87:31  error  'Icon' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  228:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  226 |                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 shrink-0">
+  227 |                         <div className="flex items-center justify-between mb-1.5">
+> 228 |                             <SecLabel icon={FileText} label="Quotes Sent" />
+      |                              ^^^^^^^^ This component is created during render
+  229 |                             <button className="text-[11px] text-violet-600 font-bold flex items-center gap-0.5 hover:underline -mt-2">
+  230 |                                 <Plus size={9} /> New
+  231 |                             </button>
+
+  85 |
+  86 |     // ── Sub-components ──
+> 87 |     const SecLabel = ({ icon: Icon, label }) => (
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 88 |         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 89 |             <Icon size={11} />{label}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 90 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 91 |     );
+     | ^^^^^^ The component is created during render here
+  92 |
+  93 |     const QuoteRow = ({ q, highlighted }) => (
+  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/static-components
+  233:26  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  231 |                             </button>
+  232 |                         </div>
+> 233 |                         <QuoteRow q={latestQuote} highlighted />
+      |                          ^^^^^^^^ This component is created during render
+  234 |                         <button
+  235 |                             onClick={() => setQuotesOpen(o => !o)}
+  236 |                             className="flex items-center gap-0.5 mt-1.5 text-[11px] text-slate-400 hover:text-slate-600 font-semibold transition-colors"
+
+   91 |     );
+   92 |
+>  93 |     const QuoteRow = ({ q, highlighted }) => (
+      |                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+>  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  95 |             <span className="text-[11px] font-mono font-bold text-slate-400 w-12 shrink-0">{q.id}</span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  96 |             <span className="px-1 py-0.5 bg-slate-100 rounded text-[11px] font-bold text-slate-500 w-6 text-center shrink-0">{q.ver}</span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  97 |             <span className="text-[11px] text-slate-500 tabular-nums flex-1">{q.date}</span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  98 |             <span className="text-[11px] font-semibold text-slate-700 tabular-nums shrink-0">{q.amount}</span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  99 |             <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${statusStyles[q.status]}`}>{q.status}</span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 100 |             <button className="text-[11px] text-violet-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity shrink-0">PDF</button>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 101 |         </div>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 102 |     );
+      | ^^^^^^ The component is created during render here
+  103 |
+  104 |     return (
+  105 |         <div className="h-screen flex flex-col bg-slate-100 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>  react-hooks/static-components
+  251:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  249 |                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex-1">
+  250 |                         <div className="flex items-center justify-between mb-2">
+> 251 |                             <SecLabel icon={ShoppingBag} label="Purchase Orders" />
+      |                              ^^^^^^^^ This component is created during render
+  252 |                             <button className="text-[11px] text-violet-600 font-bold flex items-center gap-0.5 hover:underline -mt-2">
+  253 |                                 <Plus size={11} /> Add PO
+  254 |                             </button>
+
+  85 |
+  86 |     // ── Sub-components ──
+> 87 |     const SecLabel = ({ icon: Icon, label }) => (
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 88 |         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 89 |             <Icon size={11} />{label}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 90 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 91 |     );
+     | ^^^^^^ The component is created during render here
+  92 |
+  93 |     const QuoteRow = ({ q, highlighted }) => (
+  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/static-components
+  290:26  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  288 |                     {/* Company */}
+  289 |                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 shrink-0">
+> 290 |                         <SecLabel icon={Building2} label="Company" />
+      |                          ^^^^^^^^ This component is created during render
+  291 |                                 <p className="text-[11px] text-slate-700 font-medium leading-snug">{company.registeredName}</p>
+  292 |                                 <p className="text-[11px] text-slate-500 leading-snug mt-1">{company.billingAddress}</p>
+  293 |                         <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
+
+  85 |
+  86 |     // ── Sub-components ──
+> 87 |     const SecLabel = ({ icon: Icon, label }) => (
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 88 |         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 89 |             <Icon size={11} />{label}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 90 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 91 |     );
+     | ^^^^^^ The component is created during render here
+  92 |
+  93 |     const QuoteRow = ({ q, highlighted }) => (
+  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        react-hooks/static-components
+  307:26  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  305 |                     {/* Bank */}
+  306 |                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 shrink-0">
+> 307 |                         <SecLabel icon={Landmark} label="Bank Details" />
+      |                          ^^^^^^^^ This component is created during render
+  308 |                         <div className="space-y-1">
+  309 |                             {[['Bank', company.bank.name], ['A/C', company.bank.acNo], ['IFSC', company.bank.ifsc]].map(([lbl, val]) => (
+  310 |                                 <div key={lbl} className="flex justify-between items-center gap-2">
+
+  85 |
+  86 |     // ── Sub-components ──
+> 87 |     const SecLabel = ({ icon: Icon, label }) => (
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 88 |         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 89 |             <Icon size={11} />{label}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 90 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 91 |     );
+     | ^^^^^^ The component is created during render here
+  92 |
+  93 |     const QuoteRow = ({ q, highlighted }) => (
+  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/static-components
+  321:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  319 |                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex-1">
+  320 |                         <div className="flex items-center justify-between mb-2">
+> 321 |                             <SecLabel icon={User} label="Contacts" />
+      |                              ^^^^^^^^ This component is created during render
+  322 |                             <button className="text-[11px] text-violet-600 font-bold flex items-center gap-0.5 hover:underline -mt-2 shrink-0">
+  323 |                                 <Plus size={11} /> Add
+  324 |                             </button>
+
+  85 |
+  86 |     // ── Sub-components ──
+> 87 |     const SecLabel = ({ icon: Icon, label }) => (
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 88 |         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 89 |             <Icon size={11} />{label}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 90 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 91 |     );
+     | ^^^^^^ The component is created during render here
+  92 |
+  93 |     const QuoteRow = ({ q, highlighted }) => (
+  94 |         <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${highlighted ? 'bg-white border border-slate-200 shadow-sm' : 'hover:bg-slate-50'}`}>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/static-components
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/CutListCalculator.jsx
+  84:18  error  'err' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/Home.jsx
+  4:33  error  'darkMode' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/InventoryLedger.jsx
+  5:28  error  'user' is defined but never used      no-unused-vars
+  5:34  error  'userRole' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/InventoryManager.jsx
+   6:35  error  'userRole' is defined but never used  no-unused-vars
+  39:31  error  'type' is defined but never used      no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/MiscStockTracker.jsx
+   17:29  error  'user' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     no-unused-vars
+   55:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  53 |             });
+  54 |
+> 55 |         setLoading(false);
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  56 |         return () => { unsubItems(); unsubTx(); };
+  57 |     }, []);
+  58 |  react-hooks/set-state-in-effect
+  168:17  error  'id' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+  168:21  error  'createdAt' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  168:32  error  'updatedAt' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  168:43  error  'qty' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  168:48  error  'value' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                no-unused-vars
+  168:55  error  'avgRate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-unused-vars
+  177:17  error  'id' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+  177:21  error  'createdAt' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  177:32  error  'updatedAt' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  177:43  error  'qty' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  177:48  error  'value' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                no-unused-vars
+  177:55  error  'avgRate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/PrintLayout.jsx
+  4:26  error  'generateId' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  8:64  error  'exchangeRate' is defined but never used                                           no-unused-vars
+  8:78  error  'date' is defined but never used                                                   no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/ProjectManager.jsx
+  5:27  error  'user' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/QuoteCalculator.jsx
+   21:53   error    'updateState' is defined but never used                                                                                no-unused-vars
+   21:66   error    'updateExtra' is defined but never used                                                                                no-unused-vars
+  479:28   error    'user' is defined but never used                                                                                       no-unused-vars
+  479:100  error    'setExchangeRate' is defined but never used                                                                            no-unused-vars
+  481:26   error    'screenQty' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                              no-unused-vars
+  481:37   error    'targetWidth' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                            no-unused-vars
+  481:50   error    'targetHeight' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                           no-unused-vars
+  482:39   error    'sizingMode' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                             no-unused-vars
+  482:59   error    'extras' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                 no-unused-vars
+  482:67   error    'overrides' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                              no-unused-vars
+  482:78   error    'editingRow' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                             no-unused-vars
+  616:11   error    'removeScreen' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                           no-unused-vars
+  638:11   error    'duplicateScreen' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+  691:8    warning  React Hook React.useEffect has a missing dependency: 'transactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  722:8    warning  React Hook React.useEffect has a missing dependency: 'transactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/QuotePrintLayout.jsx
+  16:99  error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  14 |     if (!quote) return null;
+  15 |
+> 16 |     const date = quote.createdAt?.toDate ? quote.createdAt.toDate() : new Date(quote.createdAt || Date.now());
+     |                                                                                                   ^^^^^^^^^^ Cannot call impure function
+  17 |     const dateStr = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  18 |
+  19 |     const renderContent = (isPrint) => (  react-hooks/purity
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/ReportingTracker.jsx
+   206:13  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')
+   857:8   warning  React Hook useEffect has missing dependencies: 'boq' and 'user.role'. Either include them or remove the dependency array   react-hooks/exhaustive-deps
+   868:8   warning  React Hook useEffect has a missing dependency: 'visibleColumnKeys.size'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  1084:27  error    'br' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                         no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/SavedQuotesManager.jsx
+  4:40  error  'generateId' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/ScreenVisualizer.jsx
+  3:58  error  'unit' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/TaskManager.jsx
+   20:30  error  'userRole' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+  689:15  error  'dueDateClass' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  833:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  831 |                         <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
+  832 |                             <th scope="col" className="px-1.5 py-1.5 w-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">State</th>
+> 833 |                             <SortableHeader label="Project" columnKey="project" className="w-16" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  834 |                             <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
+  835 |                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+  836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {      react-hooks/static-components
+  834:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  832 |                             <th scope="col" className="px-1.5 py-1.5 w-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">State</th>
+  833 |                             <SortableHeader label="Project" columnKey="project" className="w-16" />
+> 834 |                             <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  835 |                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+  836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+  837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {  react-hooks/static-components
+  835:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  833 |                             <SortableHeader label="Project" columnKey="project" className="w-16" />
+  834 |                             <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
+> 835 |                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+  837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+  838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                                                    react-hooks/static-components
+  836:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  834 |                             <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
+  835 |                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+> 836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+  838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+  839 |                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                                                        react-hooks/static-components
+  837:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  835 |                             <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+  836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+> 837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+  839 |                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
+  840 |                             <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                                                               react-hooks/static-components
+  838:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  836 |                             <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
+  837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+> 838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  839 |                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
+  840 |                             <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
+  841 |                             <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                         react-hooks/static-components
+  839:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  837 |                             <SortableHeader label="Priority" columnKey="priority" className="w-16" />
+  838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+> 839 |                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  840 |                             <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
+  841 |                             <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+  842 |                         </tr>
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                                                                                                      react-hooks/static-components
+  840:30  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  838 |                             <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
+  839 |                             <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
+> 840 |                             <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
+      |                              ^^^^^^^^^^^^^^ This component is created during render
+  841 |                             <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+  842 |                         </tr>
+  843 |                     </thead>
+
+  238 |     };
+  239 |
+> 240 |     const SortableHeader = ({ label, columnKey, className = "" }) => (
+      |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 241 |         <th
+      | ^^^^^^^^^^^
+> 242 |             scope="col"
+      …
+      | ^^^^^^^^^^^
+> 250 |         </th>
+      | ^^^^^^^^^^^
+> 251 |     );
+      | ^^^^^^ The component is created during render here
+  252 |
+  253 |     // Grouping Tasks
+  254 |     const { myTasks, otherTasks, completedTasks } = useMemo(() => {                                                                                                                                                                                                               react-hooks/static-components
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/components/UserManager.jsx
+  5:24  error  'user' is defined but never used  no-unused-vars
+
+/Users/arpitjhajharia/Library/CloudStorage/OneDrive-Personal/AI Vibe Coding Apps/Antigravity Modular Apps/LED Calculator Antigravity/admire-led-calculator/src/lib/utils.js
+  106:9   error  'selectedIndoor' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u         no-unused-vars
+  106:39  error  'selectedPitch' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u          no-unused-vars
+  344:11  error  'sellServicesPerScreen' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+✖ 78 problems (73 errors, 5 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

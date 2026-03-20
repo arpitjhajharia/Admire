@@ -103,7 +103,7 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
     // 1. Destructure state, but rename screenQty to rawScreenQty to avoid naming conflict
     const {
         screenQty: rawScreenQty, targetWidth, targetHeight, unit,
-        selectedIndoor, assemblyMode, selectedPitch, selectedModuleId,
+        assemblyMode, selectedModuleId,
         selectedCabinetId, selectedCardId, selectedSMPSId, selectedProcId,
         sizingMode, readyId, margin, extras, overrides, extraComponents,
         pricingMode, targetSellPrice, commercials, terms
@@ -341,7 +341,7 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
     }
 
     const totalServiceSell = sellProcTotal + sellInstallTotal + sellStructureTotal;
-    const sellServicesPerScreen = totalServiceSell / screenQty;
+    // Removed unused sellServicesPerScreen
 
     // 2. Calculate LED Panel Sell Price
     let sellLEDPerScreen = 0;

@@ -854,7 +854,7 @@ const BOQManager = ({ boq, user, onBack }) => {
             }
         });
         return () => unsubscribe();
-    }, [boq.id]);
+    }, [boq.id, user.role]);
 
     useEffect(() => {
         if (boq.columns) {
@@ -865,7 +865,7 @@ const BOQManager = ({ boq, user, onBack }) => {
                 setVisibleColumnKeys(initialKeys);
             }
         }
-    }, [boq]);
+    }, [boq, visibleColumnKeys.size]);
 
     const toggleColumnVisibility = (key) => {
         const newSet = new Set(visibleColumnKeys);

@@ -498,7 +498,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
             setCrmClients(data);
         }, err => console.error('CRM leads fetch error:', err));
         return () => unsub();
-    }, []);
+    }, [db, appId]);
 
     // Check Role
     const isSupervisor = userRole === 'supervisor';
@@ -688,7 +688,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
 
         const result = calculateBOM(calcState, inventory, transactions, exchangeRate);
         setCalculation(result);
-    }, [debouncedState, inventory, exchangeRate]);
+    }, [debouncedState, inventory, transactions, exchangeRate]);
 
     // 2. All Screens Total
     React.useEffect(() => {
@@ -719,7 +719,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
 
         const totals = calculateAllScreens();
         setAllScreensTotal(totals);
-    }, [debouncedState, inventory, exchangeRate]);
+    }, [debouncedState, inventory, transactions, exchangeRate]);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative items-start">

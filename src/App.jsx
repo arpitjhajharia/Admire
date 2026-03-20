@@ -138,7 +138,8 @@ const App = () => {
   // 5. LABOUR REDIRECT: If Labour tries to view Calculator, push them to Saved Quotes
   useEffect(() => {
     if (userRole === 'labour' && view === 'quote') {
-      setView('saved');
+      // Defer to next tick to avoid synchronous setState warning
+      Promise.resolve().then(() => setView('saved'));
     }
   }, [userRole, view]);
 

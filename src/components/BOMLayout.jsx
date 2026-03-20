@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { formatCurrency, generateId, formatComponentSpecs } from '../lib/utils';
+import { formatComponentSpecs } from '../lib/utils';
 
 const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) => {
     // 1. Data Validation
@@ -15,7 +15,7 @@ const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) 
 
     // 2. Helper to render a single screen's BOM table
     const renderScreenBOM = (calc, screenIndex, screenConfig) => {
-        const { detailedItems, screenQty, moduleType, cabinetType, finalWidth, finalHeight } = calc;
+        const { detailedItems, screenQty, moduleType, finalWidth, finalHeight } = calc;
 
         return (
             <div key={screenIndex} className="mb-8 break-inside-avoid print-break-avoid">
@@ -103,7 +103,7 @@ const BOMLayout = ({ data, allScreensData, inventory = [], transactions = [] }) 
         // Helper to get stock
         const getStock = (id) => transactions ? transactions.filter(t => t.itemId === id).reduce((acc, t) => acc + (t.type === 'in' ? Number(t.qty) : -Number(t.qty)), 0) : 0;
 
-        allScreensData.calculations.forEach((calc, screenIndex) => {
+        allScreensData.calculations.forEach((calc) => {
             calc.detailedItems.forEach(item => {
                 // Key by Inventory ID if possible, else by name+spec
                 const key = item.inventoryId ? item.inventoryId : `${item.name}_${item.spec}`;

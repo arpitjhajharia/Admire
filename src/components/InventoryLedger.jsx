@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 
-const InventoryLedger = ({ user, userRole, inventory = [], transactions = [], readOnly = false }) => {
+const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }) => {
     // 1. Updated State to include 'batch'
     const [newTx, setNewTx] = useState({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '', batch: '' });
     const [editingId, setEditingId] = useState(null);

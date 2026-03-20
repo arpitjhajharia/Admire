@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, appId, secondaryApp } from '../lib/firebase';
 import { Trash2, UserPlus, Shield, Edit2, Save, X, Check, Users } from 'lucide-react';
 
-const UserManager = ({ user }) => {
+const UserManager = () => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showForm, setShowForm] = useState(false);

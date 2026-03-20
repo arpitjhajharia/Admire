@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { 
-    Layout, 
-    Layers, 
-    Plus, 
-    Trash2, 
-    Download, 
-    Upload, 
-    Calculator, 
-    Maximize, 
-    Minimize, 
-    RotateCw, 
-    Settings, 
-    FileSpreadsheet, 
-    Box, 
+import {
+    Layout,
+    Layers,
+    Plus,
+    Trash2,
+    Download,
+    Upload,
+    Calculator,
+    Maximize,
+    Minimize,
+    RotateCw,
+    Settings,
+    FileSpreadsheet,
+    Box,
     BarChart3,
     ArrowRightCircle,
     Copy,
@@ -28,17 +28,15 @@ import html2canvas from 'html2canvas';
 import { db } from '../lib/firebase';
 
 const CutListCalculator = () => {
-    const [mode, setMode] = useState('2D'); // '1D' or '2D'
+    const [mode, setMode] = useState('2D');
     const [projectName, setProjectName] = useState('Untitled Project');
     const [saving, setSaving] = useState(false);
-    const [kerf, setKerf] = useState(3.5); // Default kerf in mm
-    
-    // Stock inputs
+    const [kerf, setKerf] = useState(3.5);
+
     const [stock, setStock] = useState([
         { id: 101, length: 2440, width: 1220, quantity: 5, remarks: 'Standard Plywood' }
     ]);
-    
-    // Required pieces
+
     const [required, setRequired] = useState([
         { id: 201, length: 1200, width: 600, quantity: 4, remarks: 'Side Panel' },
         { id: 202, length: 800, width: 400, quantity: 6, remarks: 'Drawer Bottom' }
@@ -47,10 +45,9 @@ const CutListCalculator = () => {
     const [results, setResults] = useState(null);
     const [calculating, setCalculating] = useState(false);
 
-    // Stock/Required Handlers
     const addStockRow = () => setStock([...stock, { id: Date.now(), length: '', width: '', quantity: 1, remarks: '' }]);
     const addRequiredRow = () => setRequired([...required, { id: Date.now(), length: '', width: '', quantity: 1, remarks: '' }]);
-    
+
     const updateRow = (setData, data, id, field, value) => {
         setData(data.map(row => row.id === id ? { ...row, [field]: value } : row));
     };
@@ -64,7 +61,7 @@ const CutListCalculator = () => {
         if (!file) return;
         try {
             const { cuttingList, materialList } = await importFromExcel(file);
-            
+
             if (cuttingList.length > 0) {
                 setRequired(cuttingList.map((d, i) => ({
                     id: Date.now() + i + 1000,
@@ -91,7 +88,6 @@ const CutListCalculator = () => {
 
     const handleCalculate = () => {
         setCalculating(true);
-        // Add a slight delay for "calculating" vibe
         setTimeout(() => {
             if (mode === '2D') {
                 const res = optimizeSheet(stock, required, kerf);
@@ -101,7 +97,6 @@ const CutListCalculator = () => {
                 setResults(res);
             }
             setCalculating(false);
-            // Smooth scroll to results
             document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
         }, 300);
     };
@@ -128,67 +123,257 @@ const CutListCalculator = () => {
         }
     };
 
+    // ─── PDF Export ────────────────────────────────────────────────────────────
     const handleExportPDF = async () => {
-        const element = document.getElementById('results-section');
-        if (!element) return;
-        
+        if (!results) return;
+
         try {
-            // Force the element to full height temporarily for better capture
-            const originalStyle = element.style.height;
-            element.style.height = 'auto';
-            
-            const canvas = await html2canvas(element, {
-                scale: 2,
-                useCORS: true,
-                logging: false,
-                backgroundColor: '#ffffff',
-                windowWidth: element.scrollWidth,
-                windowHeight: element.scrollHeight,
-                y: window.scrollY // Capture from start of results
-            });
-            
-            element.style.height = originalStyle;
-            
-            const imgData = canvas.toDataURL('image/png');
+            const margin = 10;
+
+            // A4 dimensions
+            const A4_P = { w: 210, h: 297 }; // portrait
+            const A4_L = { w: 297, h: 210 }; // landscape
+
+            // ── Step 1: Pre-render all layout cards to canvas ───────────────
+            // We do this BEFORE creating the PDF so we can inspect each card's
+            // aspect ratio and decide the best page orientation for it.
+            const layoutEls = document.querySelectorAll('.layout-card');
+            const renderedCards = await Promise.all(
+                Array.from(layoutEls).map(async (el) => {
+                    const canvas = await html2canvas(el, {
+                        scale: 1.5,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                    });
+                    const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                    const aspectRatio = canvas.width / canvas.height; // >1 = landscape card
+                    return { imgData, canvas, aspectRatio };
+                })
+            );
+
+            // ── Step 2: Determine starting orientation ──────────────────────
+            // Use portrait for the cover/summary page (it's always text).
+            // Cards will switch orientation per-page as needed.
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            
-            const imgWidth = pageWidth - 20;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            // If the image is taller than a single A4 page, we should ideally split it.
-            // For now, let's just shrink it to fit width and handle multiple pages if needed.
-            let heightLeft = imgHeight;
-            let position = 10;
+            let orientation = 'p';
+            let pageW = A4_P.w;
+            let pageH = A4_P.h;
+            let usableW = pageW - margin * 2;
+            let cursorY = margin;
 
-            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-            heightLeft -= (pageHeight - 20);
+            // Helper: recalculate page dimensions after orientation switch
+            const getDims = (ori) => ({
+                pageW: ori === 'l' ? A4_L.w : A4_P.w,
+                pageH: ori === 'l' ? A4_L.h : A4_P.h,
+                usableW: (ori === 'l' ? A4_L.w : A4_P.w) - margin * 2,
+            });
 
-            while (heightLeft > 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 10, position + 10, imgWidth, imgHeight);
-                heightLeft -= (pageHeight - 20);
+            // Helper: add a new page with a specific orientation, update dims
+            const addPage = (ori) => {
+                pdf.addPage('a4', ori === 'l' ? 'landscape' : 'portrait');
+                orientation = ori;
+                ({ pageW, pageH, usableW } = getDims(ori));
+                cursorY = margin;
+            };
+
+            // Helper: ensure space on current page, switching orientation if needed
+            const ensureSpace = (neededMM, preferredOri = orientation) => {
+                if (cursorY + neededMM > pageH - margin) {
+                    addPage(preferredOri);
+                }
+            };
+
+            // ── 3. Cover page: Header + Stock table + Stats ─────────────────
+            // Always portrait for the summary page
+            const drawHeader = (pW, uw) => {
+                pdf.setFillColor(79, 70, 229);
+                pdf.rect(margin, cursorY, uw, 12, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(projectName, margin + 3, cursorY + 8);
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'normal');
+                const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const modeLabel = mode === '2D' ? '2D Sheet Optimizer' : '1D Linear Optimizer';
+                pdf.text(`${modeLabel}  ·  Kerf: ${kerf}mm  ·  ${dateStr}`, pW - margin - 3, cursorY + 8, { align: 'right' });
+                cursorY += 16;
+            };
+            drawHeader(pageW, usableW);
+
+            // Stock required table
+            const stockGroups = results.bins.reduce((acc, bin) => {
+                const key = mode === '2D' ? `${bin.w} × ${bin.h} mm` : `${bin.length} mm`;
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+            const stockRows = Object.entries(stockGroups);
+            const tableRowH = 7;
+            const tableHeaderH = 7;
+
+            pdf.setTextColor(40, 40, 40);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('STOCK REQUIRED', margin, cursorY);
+            cursorY += 4;
+
+            pdf.setFillColor(226, 232, 240);
+            pdf.rect(margin, cursorY, usableW, tableHeaderH, 'F');
+            pdf.setTextColor(80, 80, 80);
+            pdf.setFontSize(7.5);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Stock Dimensions', margin + 3, cursorY + 4.8);
+            pdf.text('Qty', pageW - margin - 3, cursorY + 4.8, { align: 'right' });
+            cursorY += tableHeaderH;
+
+            stockRows.forEach(([dim, qty], i) => {
+                if (i % 2 === 0) {
+                    pdf.setFillColor(248, 250, 252);
+                    pdf.rect(margin, cursorY, usableW, tableRowH, 'F');
+                }
+                pdf.setDrawColor(226, 232, 240);
+                pdf.line(margin, cursorY + tableRowH, margin + usableW, cursorY + tableRowH);
+                pdf.setTextColor(30, 30, 30);
+                pdf.setFontSize(8.5);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(dim, margin + 3, cursorY + 5);
+                pdf.setFontSize(9);
+                pdf.setTextColor(16, 185, 129);
+                pdf.text(String(qty), pageW - margin - 3, cursorY + 5, { align: 'right' });
+                cursorY += tableRowH;
+            });
+
+            pdf.setFillColor(79, 70, 229);
+            pdf.rect(margin, cursorY, usableW, tableRowH, 'F');
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(8.5);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('TOTAL', margin + 3, cursorY + 5);
+            pdf.text(String(results.bins.length), pageW - margin - 3, cursorY + 5, { align: 'right' });
+            cursorY += tableRowH + 4;
+
+            pdf.setTextColor(80, 80, 80);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            const statsText = mode === '2D'
+                ? `Yield: ${(100 - results.summary.wastePercent).toFixed(1)}%  |  Waste: ${results.summary.wastePercent.toFixed(1)}%  |  Total Area: ${(results.summary.totalArea / 1000000).toFixed(2)} m²`
+                : `Yield: ${(100 - results.summary.wastePercent).toFixed(1)}%  |  Waste: ${results.summary.wastePercent.toFixed(1)}%  |  Total Length: ${(results.summary.totalUsedLength / 1000).toFixed(1)} m`;
+            pdf.text(statsText, margin, cursorY);
+            cursorY += 8;
+
+            // ── 4. Layout cards — orientation-aware placement ───────────────
+            // For each card:
+            //   • aspectRatio > 1.2  → card is landscape → use landscape page
+            //   • aspectRatio < 0.85 → card is portrait  → use portrait page
+            //   • in between         → use portrait (fits comfortably either way)
+            //
+            // 2-column packing still applies but only when BOTH cards in a pair
+            // share the same orientation AND each fits within 120mm at half-width.
+
+            const HALF_PAGE_THRESHOLD = 120; // mm
+
+            const placeCard = (card, x, y, printW) => {
+                const printH = (card.canvas.height * printW) / card.canvas.width;
+                pdf.addImage(card.imgData, 'JPEG', x, y, printW, printH);
+                return printH;
+            };
+
+            const cardOrientation = (card) =>
+                card.aspectRatio > 1.2 ? 'l' : 'p';
+
+            if (mode === '2D') {
+                let i = 0;
+                while (i < renderedCards.length) {
+                    const cardA = renderedCards[i];
+                    const oriA = cardOrientation(cardA);
+                    const dimsA = getDims(oriA);
+                    const uw = dimsA.usableW;
+                    const colW = (uw - 4) / 2;
+                    const halfH_A = (cardA.canvas.height * colW) / cardA.canvas.width;
+                    const fullH_A = (cardA.canvas.height * uw) / cardA.canvas.width;
+
+                    // Try to pair with next card if same orientation and both compact
+                    if (
+                        halfH_A <= HALF_PAGE_THRESHOLD &&
+                        i + 1 < renderedCards.length
+                    ) {
+                        const cardB = renderedCards[i + 1];
+                        const oriB = cardOrientation(cardB);
+                        const halfH_B = (cardB.canvas.height * colW) / cardB.canvas.width;
+
+                        if (oriA === oriB && halfH_B <= HALF_PAGE_THRESHOLD) {
+                            const rowH = Math.max(halfH_A, halfH_B);
+                            // Switch orientation if needed, then check space
+                            if (oriA !== orientation) {
+                                addPage(oriA);
+                            } else {
+                                ensureSpace(rowH + 4, oriA);
+                            }
+                            placeCard(cardA, margin, cursorY, colW);
+                            placeCard(cardB, margin + colW + 4, cursorY, colW);
+                            cursorY += rowH + 4;
+                            i += 2;
+                            continue;
+                        }
+                    }
+
+                    // Single card — full width in its preferred orientation
+                    if (oriA !== orientation) {
+                        addPage(oriA);
+                    } else {
+                        ensureSpace(fullH_A + 4, oriA);
+                    }
+                    placeCard(cardA, margin, cursorY, uw);
+                    cursorY += fullH_A + 4;
+                    i++;
+                }
+
+            } else {
+                // 1D: always portrait, full width
+                for (const card of renderedCards) {
+                    const fullH = (card.canvas.height * usableW) / card.canvas.width;
+                    ensureSpace(fullH + 3, 'p');
+                    placeCard(card, margin, cursorY, usableW);
+                    cursorY += fullH + 3;
+                }
             }
-            
-            pdf.save(`${projectName.replace(/\s+/g, '_')}_Results.pdf`);
-        } catch (error) {
-            console.error('PDF Generation Error:', error);
-            alert('Could not generate PDF. Try browser Print (Cmd+P) instead.');
+
+            // ── 5. Unplaced pieces warning ──────────────────────────────────
+            if (results.unplaced.length > 0) {
+                ensureSpace(12);
+                pdf.setFillColor(254, 242, 242);
+                pdf.rect(margin, cursorY, usableW, 8, 'F');
+                pdf.setTextColor(185, 28, 28);
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(
+                    `⚠  ${results.unplaced.length} piece(s) could not be placed — insufficient stock`,
+                    margin + 3,
+                    cursorY + 5.5
+                );
+            }
+
+            pdf.save(`${projectName.replace(/\s+/g, '_')}_CutPlan.pdf`);
+
+        } catch (err) {
+            console.error('PDF Export Error:', err);
+            alert('PDF export failed. Try browser Print (Cmd+P) as a fallback.');
         }
     };
+    // ── End PDF Export ─────────────────────────────────────────────────────────
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] p-2 md:p-4 font-sans transition-colors duration-300">
-            {/* Header - More Compact */}
+
+            {/* Header */}
             <header className="max-w-full mx-auto mb-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
                         <Scissors className="text-white w-5 h-5" />
                     </div>
                     <div>
-                        <input 
+                        <input
                             value={projectName}
                             onChange={(e) => setProjectName(e.target.value)}
                             className="text-xl font-black bg-transparent border-none focus:ring-0 p-0 text-slate-900 dark:text-white leading-none placeholder:text-slate-300"
@@ -200,7 +385,7 @@ const CutListCalculator = () => {
 
                 <div className="flex items-center gap-2 p-1 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                     {results && (
-                        <button 
+                        <button
                             onClick={handleSave}
                             disabled={saving}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded-lg transition-colors border-r border-slate-200 dark:border-slate-700 pr-3 disabled:opacity-50"
@@ -209,13 +394,13 @@ const CutListCalculator = () => {
                         </button>
                     )}
                     <div className="flex bg-slate-100 dark:bg-slate-900 rounded-lg p-0.5 mr-2">
-                        <button 
+                        <button
                             onClick={() => setMode('2D')}
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${mode === '2D' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             <Layers size={14} /> 2D
                         </button>
-                        <button 
+                        <button
                             onClick={() => setMode('1D')}
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${mode === '1D' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
@@ -223,13 +408,13 @@ const CutListCalculator = () => {
                         </button>
                     </div>
 
-                    <button 
+                    <button
                         onClick={() => downloadTemplate(mode)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase text-slate-500 hover:text-indigo-600 transition-colors border-r border-slate-200 dark:border-slate-700 pr-3"
                     >
                         <FileSpreadsheet size={14} /> Download Format
                     </button>
-                    
+
                     <label className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors">
                         <Upload size={14} /> Full Import
                         <input type="file" className="hidden" accept=".xlsx" onChange={handleFileUpload} />
@@ -238,10 +423,11 @@ const CutListCalculator = () => {
             </header>
 
             <main className="max-w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4">
-                {/* Left: Input Dashboard */}
+
+                {/* Left: Input Panel */}
                 <div className="lg:col-span-12 xl:col-span-4 flex flex-col gap-4">
-                    
-                    {/* Settings Card - Compact */}
+
+                    {/* Global Settings */}
                     <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3 text-slate-400">
                             <h2 className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
@@ -251,16 +437,16 @@ const CutListCalculator = () => {
                         <div className="flex items-center gap-4">
                             <div className="flex-1">
                                 <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Blade Kerf (mm)</label>
-                                <input 
-                                    type="number" 
-                                    value={kerf} 
+                                <input
+                                    type="number"
+                                    value={kerf}
                                     onChange={(e) => setKerf(Number(e.target.value))}
                                     className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
                                 />
                             </div>
                             <div className="flex-1">
                                 <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Calculations</label>
-                                <button 
+                                <button
                                     onClick={handleCalculate}
                                     disabled={calculating}
                                     className="w-full h-[38px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
@@ -272,14 +458,14 @@ const CutListCalculator = () => {
                         </div>
                     </section>
 
-                    {/* Stock Entry - Compact */}
+                    {/* Stock Entry */}
                     <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
                                 <Box size={14} /> Materials
                             </h2>
                             <div className="flex gap-2">
-                                <button 
+                                <button
                                     onClick={addStockRow}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors"
                                 >
@@ -326,14 +512,14 @@ const CutListCalculator = () => {
                         </div>
                     </section>
 
-                    {/* Required pieces Entry - Compact */}
+                    {/* Required Pieces Entry */}
                     <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
                                 <Layers size={14} /> Cutting List
                             </h2>
                             <div className="flex gap-2">
-                                <button 
+                                <button
                                     onClick={addRequiredRow}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors"
                                 >
@@ -342,7 +528,7 @@ const CutListCalculator = () => {
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                             <table className="w-full text-left">
                                 <thead className="sticky top-0 bg-white dark:bg-slate-800 z-10">
                                     <tr className="border-b border-slate-100 dark:border-slate-700">
@@ -381,42 +567,42 @@ const CutListCalculator = () => {
                     </section>
                 </div>
 
-                {/* Right: Visualization & Results - Compact */}
+                {/* Right: Results Panel */}
                 <div id="results-section" className="lg:col-span-12 xl:col-span-8 flex flex-col gap-4">
                     {results ? (
                         <>
-                            {/* Summary Dashboard */}
+                            {/* Summary Dashboard — shown on screen only, NOT in PDF */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <SummaryBadge 
-                                    label="Total Needed" 
-                                    value={mode === '2D' ? results.summary.totalSheets : results.summary.totalStock} 
+                                <SummaryBadge
+                                    label="Total Needed"
+                                    value={mode === '2D' ? results.summary.totalSheets : results.summary.totalStock}
                                     sub={mode === '2D' ? 'Sheets' : 'Bars'}
                                     icon={<Box size={20} className="text-indigo-500" />}
                                 />
-                                <SummaryBadge 
-                                    label="Yield" 
-                                    value={`${(100 - results.summary.wastePercent).toFixed(1)}%`} 
-                                    sub="Used Area" 
+                                <SummaryBadge
+                                    label="Yield"
+                                    value={`${(100 - results.summary.wastePercent).toFixed(1)}%`}
+                                    sub="Used Area"
                                     icon={<BarChart3 size={20} className="text-emerald-500" />}
                                     color="emerald"
                                 />
-                                <SummaryBadge 
-                                    label="Waste" 
-                                    value={`${results.summary.wastePercent.toFixed(1)}%`} 
-                                    sub="Off-cut mass" 
+                                <SummaryBadge
+                                    label="Waste"
+                                    value={`${results.summary.wastePercent.toFixed(1)}%`}
+                                    sub="Off-cut mass"
                                     icon={<Minimize size={20} className="text-rose-500" />}
                                     color="rose"
                                 />
-                                <SummaryBadge 
-                                    label={mode === '2D' ? 'Total Area' : 'Total Length'} 
-                                    value={mode === '2D' ? `${(results.summary.totalArea / 1000000).toFixed(2)} m²` : `${(results.summary.totalUsedLength / 1000).toFixed(1)} m`} 
-                                    sub="Material Volume" 
+                                <SummaryBadge
+                                    label={mode === '2D' ? 'Total Area' : 'Total Length'}
+                                    value={mode === '2D' ? `${(results.summary.totalArea / 1000000).toFixed(2)} m²` : `${(results.summary.totalUsedLength / 1000).toFixed(1)} m`}
+                                    sub="Material Volume"
                                     icon={<Maximize size={20} className="text-amber-500" />}
                                     color="amber"
                                 />
                             </div>
 
-                            {/* Required Stocks Table - Requested UI */}
+                            {/* Required Stocks Table */}
                             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
                                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 uppercase tracking-wider flex items-center gap-2">
                                     <Box size={16} className="text-indigo-500" /> Required Stocks
@@ -445,21 +631,23 @@ const CutListCalculator = () => {
                                 </div>
                             </div>
 
-                            {/* Main Visualizer Card - Compact */}
+                            {/* Optimization Results Visualizer */}
                             <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
                                 <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                                     <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                                         Optimization Results
                                     </h2>
                                     <div className="flex gap-2">
-                                        <button 
+                                        <button
                                             onClick={handleExportPDF}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" 
-                                            title="Download PDF Visuals"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            title="Download PDF"
                                         >
                                             <Download size={18} />
                                         </button>
-                                        <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"><Copy size={18} /></button>
+                                        <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
+                                            <Copy size={18} />
+                                        </button>
                                     </div>
                                 </div>
 
@@ -495,7 +683,7 @@ const CutListCalculator = () => {
                                             ))}
                                         </div>
                                     )}
-                                    
+
                                     {results.unplaced.length > 0 && (
                                         <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 p-4 rounded-xl">
                                             <h3 className="text-red-700 dark:text-red-400 text-xs font-bold mb-2 flex items-center gap-2">
@@ -505,9 +693,9 @@ const CutListCalculator = () => {
                                                 {results.unplaced.map((up, i) => (
                                                     <div key={i} className="text-xs bg-white dark:bg-slate-900 p-2 rounded-lg border border-rose-100 dark:border-rose-900/40 text-rose-500 font-medium">
                                                         {mode === '1D' ? (
-                                                            <span>{up.quantity}x {up.length} mm - Length Cluster too large</span>
+                                                            <span>{up.quantity}x {up.length} mm — Length too large for stock</span>
                                                         ) : (
-                                                            <span>{up.w}x {up.h} mm - Does not fit in any stock</span>
+                                                            <span>{up.w}×{up.h} mm — Does not fit in any stock</span>
                                                         )}
                                                     </div>
                                                 ))}
@@ -523,7 +711,9 @@ const CutListCalculator = () => {
                                 <Calculator className="text-slate-300 dark:text-slate-600" size={32} />
                             </div>
                             <h3 className="text-lg font-bold text-slate-400">No calculation results yet</h3>
-                            <p className="text-slate-300 dark:text-slate-500 text-sm max-w-[280px] text-center mt-2">Enter your stock measurements and required pieces to generate an optimized cut plan.</p>
+                            <p className="text-slate-300 dark:text-slate-500 text-sm max-w-[280px] text-center mt-2">
+                                Enter your stock measurements and required pieces to generate an optimized cut plan.
+                            </p>
                         </div>
                     )}
                 </div>
@@ -532,7 +722,7 @@ const CutListCalculator = () => {
     );
 };
 
-// --- Subcomponents ---
+// ─── Sub-components ────────────────────────────────────────────────────────────
 
 const SummaryBadge = ({ label, value, sub, icon, color = 'indigo' }) => {
     const colorClasses = {
@@ -552,25 +742,26 @@ const SummaryBadge = ({ label, value, sub, icon, color = 'indigo' }) => {
     );
 };
 
+// NOTE: The "layout-card" class on the outer div is required by handleExportPDF
+// to find and individually capture each layout for the PDF without page-break cutoffs.
+
 const SheetVisualizer = ({ bin }) => {
-    // Horizontal Layout Optimization:
-    // If Height > Width, we "rotate" the view for the chart to be horizontal
     const isVertical = bin.h > bin.w;
     const displayW = isVertical ? bin.h : bin.w;
     const displayH = isVertical ? bin.w : bin.h;
-
-    // Relative scaling to fit container width
-    const containerWidth = 800; // Reference width
+    const containerWidth = 800;
     const scale = containerWidth / displayW;
 
     return (
-        <div className="bg-white dark:bg-slate-900/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="layout-card bg-white dark:bg-slate-900/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex justify-between items-center mb-2 px-1">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Layout #{bin.displayIndex} ({bin.w}x{bin.h} mm)</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Layout #{bin.displayIndex} ({bin.w}×{bin.h} mm)
+                    </span>
                     {bin.quantity > 1 && (
                         <span className="bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                            x{bin.quantity} SHEETS
+                            ×{bin.quantity} SHEETS
                         </span>
                     )}
                 </div>
@@ -578,35 +769,32 @@ const SheetVisualizer = ({ bin }) => {
                     {((bin.usedRects.reduce((s, r) => s + r.w * r.h, 0) / (bin.w * bin.h)) * 100).toFixed(1)}% Yield
                 </span>
             </div>
-            
-            <div 
-                className="relative bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 shadow-sm overflow-hidden" 
+
+            <div
+                className="relative bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 shadow-sm overflow-hidden"
                 style={{ width: displayW * scale, height: displayH * scale }}
             >
-                {/* Stage 1: Strip Lines */}
-                {bin.strips.map((strip, i) => {
-                    const linePos = isVertical ? strip.y + strip.h : strip.y + strip.h; // Simplified for this logic
-                    return (
-                        <div 
-                            key={`strip-${i}`} 
-                            className={`absolute border-slate-200 dark:border-slate-800 ${isVertical ? 'border-r border-dashed h-full' : 'border-b border-dashed w-full'}`}
-                            style={isVertical ? { left: (strip.y + strip.h) * scale, width: 1 } : { top: (strip.y + strip.h) * scale, height: 1 }}
-                        />
-                    );
-                })}
+                {bin.strips.map((strip, i) => (
+                    <div
+                        key={`strip-${i}`}
+                        className={`absolute border-slate-200 dark:border-slate-800 ${isVertical ? 'border-r border-dashed h-full' : 'border-b border-dashed w-full'}`}
+                        style={isVertical
+                            ? { left: (strip.y + strip.h) * scale, width: 1 }
+                            : { top: (strip.y + strip.h) * scale, height: 1 }
+                        }
+                    />
+                ))}
 
-                {/* Stage 2: Pieces */}
                 {bin.usedRects.map((rect, i) => {
-                    // Coordinates mapping for horizontal view
                     const top = isVertical ? rect.x * scale : rect.y * scale;
                     const left = isVertical ? rect.y * scale : rect.x * scale;
                     const width = isVertical ? rect.h * scale : rect.w * scale;
                     const height = isVertical ? rect.w * scale : rect.h * scale;
 
                     return (
-                        <div 
+                        <div
                             key={i}
-                            className="absolute bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 flex items-center justify-center overflow-hidden hover:bg-indigo-100 transition-colors group"
+                            className="absolute bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 flex items-center justify-center overflow-hidden hover:bg-indigo-100 transition-colors"
                             style={{ left, top, width, height }}
                         >
                             <div className="flex flex-col items-center justify-center text-center px-1 w-full">
@@ -623,10 +811,12 @@ const SheetVisualizer = ({ bin }) => {
                     );
                 })}
             </div>
-            
+
             <div className="mt-2 flex justify-between px-1">
                 <div className="text-[10px] font-bold text-slate-400 uppercase">Items: {bin.usedRects.length}</div>
-                <div className="text-[10px] font-bold text-red-400 uppercase">Waste: {((1 - (bin.usedRects.reduce((s, r) => s + r.w * r.h, 0) / (bin.w * bin.h))) * 100).toFixed(1)}%</div>
+                <div className="text-[10px] font-bold text-red-400 uppercase">
+                    Waste: {((1 - (bin.usedRects.reduce((s, r) => s + r.w * r.h, 0) / (bin.w * bin.h))) * 100).toFixed(1)}%
+                </div>
             </div>
         </div>
     );
@@ -634,13 +824,15 @@ const SheetVisualizer = ({ bin }) => {
 
 const LinearVisualizer = ({ bin }) => {
     return (
-        <div className="bg-white dark:bg-slate-900/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="layout-card bg-white dark:bg-slate-900/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex justify-between items-center mb-2 px-1">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Layout #{bin.displayIndex} ({bin.length} mm)</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Layout #{bin.displayIndex} ({bin.length} mm)
+                    </span>
                     {bin.quantity > 1 && (
                         <span className="bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                            x{bin.quantity} QTY
+                            ×{bin.quantity} QTY
                         </span>
                     )}
                 </div>
@@ -648,12 +840,12 @@ const LinearVisualizer = ({ bin }) => {
                     {((bin.used / bin.length) * 100).toFixed(1)}% Yield
                 </span>
             </div>
-            
+
             <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex shadow-inner">
                 {bin.cuts.map((cut, i) => (
-                    <div 
+                    <div
                         key={i}
-                        className="h-full bg-indigo-500/20 border-r border-indigo-500/40 relative group hover:bg-indigo-500/30 transition-all"
+                        className="h-full bg-indigo-500/20 border-r border-indigo-500/40 relative hover:bg-indigo-500/30 transition-all"
                         style={{ width: `${(cut.length / bin.length) * 100}%` }}
                     >
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-1 overflow-hidden">
@@ -666,15 +858,18 @@ const LinearVisualizer = ({ bin }) => {
                                 </span>
                             )}
                         </div>
-                        {/* Kerf line indicator */}
                         <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-slate-400/20" />
                     </div>
                 ))}
             </div>
-            
+
             <div className="mt-2 flex justify-between">
-                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Usage: {bin.used} mm / {bin.length} mm</div>
-                <div className="text-[9px] font-bold text-rose-400 uppercase tracking-tighter">Waste: {bin.remaining} mm</div>
+                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                    Usage: {bin.used} mm / {bin.length} mm
+                </div>
+                <div className="text-[9px] font-bold text-rose-400 uppercase tracking-tighter">
+                    Waste: {bin.remaining} mm
+                </div>
             </div>
         </div>
     );

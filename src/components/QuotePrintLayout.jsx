@@ -13,7 +13,9 @@ const fmt = (v) => {
 const QuotePrintLayout = ({ quote, lead }) => {
     if (!quote) return null;
 
-    const date = quote.createdAt?.toDate ? quote.createdAt.toDate() : new Date(quote.createdAt || Date.now());
+    const date = React.useMemo(() => {
+        return quote.createdAt?.toDate ? quote.createdAt.toDate() : new Date(quote.createdAt || Date.now());
+    }, [quote.createdAt]);
     const dateStr = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
     const renderContent = (isPrint) => (

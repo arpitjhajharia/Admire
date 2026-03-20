@@ -23,7 +23,30 @@ const MiscStockTracker = ({ user, userRole }) => {
     // Toggle Forms
     const [showItemForm, setShowItemForm] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    const [itemForm, setItemForm] = useState({ name: '', sku: '', vendor: '', rate: '', specs: [] });
+    const [itemForm, setItemForm] = useState({ 
+        type: 'custom', 
+        product: '',
+        name: '', 
+        sku: '', 
+        vendor: '', 
+        rate: '', 
+        specs: [],
+        drawingId: '',
+        weightPerM: '',
+        length: '',
+        ratePerKg: '',
+        brand: '',
+        watts: '',
+        colour: '',
+        wattage: '',
+        voltage: '',
+        ipRating: '',
+        acpLength: '',
+        acpWidth: '',
+        thickness: '',
+        foil: '',
+        rateSft: ''
+    });
     const [sourceItem, setSourceItem] = useState(null); // Ref for duplication check
     // For manual spec adding
     const [newSpec, setNewSpec] = useState({ name: '', value: '' });
@@ -84,16 +107,54 @@ const MiscStockTracker = ({ user, userRole }) => {
 
     // --- HANDLERS ---
     const handleSaveItem = async () => {
-        if (!itemForm.name) return alert("Product Name is required");
+        // --- Validation ---
+        if (!itemForm.product) return alert("Product is required");
+        
+        if (itemForm.type === 'profile') {
+            if (!itemForm.vendor || !itemForm.sku || !itemForm.drawingId || !itemForm.name || !itemForm.weightPerM || !itemForm.length || !itemForm.ratePerKg) {
+                return alert("Compulsory fields for Profile: Vendor, SKU, Drawing ID, Description, Weight/m, Length, and Rate/kg.");
+            }
+        } else if (itemForm.type === 'led_module') {
+            if (!itemForm.vendor || !itemForm.sku || !itemForm.name || !itemForm.watts || !itemForm.rate) {
+                return alert("Compulsory fields for LED Module: Vendor, SKU, Description, Watts, and Rate/pc.");
+            }
+        } else if (itemForm.type === 'smps') {
+            if (!itemForm.vendor || !itemForm.sku || !itemForm.brand || !itemForm.name || !itemForm.wattage || !itemForm.voltage || !itemForm.rate) {
+                return alert("Compulsory fields for SMPS: Vendor, SKU, Brand, Description, Wattage, Voltage, and Rate/pc.");
+            }
+        } else if (itemForm.type === 'acp') {
+            if (!itemForm.vendor || !itemForm.sku || !itemForm.name || !itemForm.acpLength || !itemForm.acpWidth || !itemForm.thickness || !itemForm.rateSft) {
+                return alert("Compulsory fields for ACP: Vendor, SKU, Description, Length, Width, Thickness, and Rate/sft.");
+            }
+        } else {
+            if (!itemForm.name) return alert("Description is required");
+        }
         
         // --- Duplicate Check ---
         if (sourceItem) {
             const isIdentical = JSON.stringify(itemForm) === JSON.stringify({
+                type: sourceItem.type || 'custom',
+                product: sourceItem.product || '',
                 name: sourceItem.name,
                 sku: sourceItem.sku,
                 vendor: sourceItem.vendor,
                 rate: sourceItem.rate || '',
-                specs: sourceItem.specs
+                specs: sourceItem.specs,
+                drawingId: sourceItem.drawingId || '',
+                weightPerM: sourceItem.weightPerM || '',
+                length: sourceItem.length || '',
+                ratePerKg: sourceItem.ratePerKg || '',
+                brand: sourceItem.brand || '',
+                watts: sourceItem.watts || '',
+                colour: sourceItem.colour || '',
+                wattage: sourceItem.wattage || '',
+                voltage: sourceItem.voltage || '',
+                ipRating: sourceItem.ipRating || '',
+                acpLength: sourceItem.acpLength || '',
+                acpWidth: sourceItem.acpWidth || '',
+                thickness: sourceItem.thickness || '',
+                foil: sourceItem.foil || '',
+                rateSft: sourceItem.rateSft || ''
             });
             if (isIdentical) return alert("Please make some changes before saving the duplicated product.");
             
@@ -110,9 +171,17 @@ const MiscStockTracker = ({ user, userRole }) => {
 
         try {
             const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_inventory');
+            
+            let finalRate = Number(itemForm.rate) || 0;
+            if (itemForm.type === 'profile') {
+                finalRate = (Number(itemForm.ratePerKg) || 0) * (Number(itemForm.weightPerM) || 0) * (Number(itemForm.length) || 0) / 1000;
+            } else if (itemForm.type === 'acp') {
+                finalRate = (Number(itemForm.acpLength) || 0) * (Number(itemForm.acpWidth) || 0) * (Number(itemForm.rateSft) || 0);
+            }
+
             const data = { 
                 ...itemForm, 
-                rate: Number(itemForm.rate) || 0,
+                rate: finalRate,
                 updatedAt: new Date() 
             };
             if (editingItem) {
@@ -123,7 +192,7 @@ const MiscStockTracker = ({ user, userRole }) => {
             setShowItemForm(false);
             setEditingItem(null);
             setSourceItem(null);
-            setItemForm({ name: '', sku: '', vendor: '', rate: '', specs: [] });
+            setItemForm({ type: 'custom', product: '', name: '', sku: '', vendor: '', rate: '', specs: [], drawingId: '', weightPerM: '', length: '', ratePerKg: '', brand: '', watts: '', colour: '', wattage: '', voltage: '', ipRating: '', acpLength: '', acpWidth: '', thickness: '', foil: '', rateSft: '' });
         } catch (e) { console.error(e); }
     };
 
@@ -166,7 +235,26 @@ const MiscStockTracker = ({ user, userRole }) => {
 
     const handleDuplicateItem = (item) => {
         const { id, createdAt, updatedAt, qty, value, avgRate, ...cleanData } = item;
-        setItemForm({ ...cleanData, rate: cleanData.rate || '' });
+        setItemForm({ 
+            type: item.type || 'custom',
+            drawingId: item.drawingId || '', 
+            weightPerM: item.weightPerM || '', 
+            length: item.length || '', 
+            ratePerKg: item.ratePerKg || '',
+            brand: item.brand || '',
+            watts: item.watts || '',
+            colour: item.colour || '',
+            wattage: item.wattage || '',
+            voltage: item.voltage || '',
+            ipRating: item.ipRating || '',
+            acpLength: item.acpLength || '',
+            acpWidth: item.acpWidth || '',
+            thickness: item.thickness || '',
+            foil: item.foil || '',
+            rateSft: item.rateSft || '',
+            ...cleanData, 
+            rate: cleanData.rate || '' 
+        });
         setSourceItem(item);
         setEditingItem(null);
         setShowItemForm(true);
@@ -175,7 +263,26 @@ const MiscStockTracker = ({ user, userRole }) => {
 
     const handleEditItem = (item) => {
         const { id, createdAt, updatedAt, qty, value, avgRate, ...cleanData } = item;
-        setItemForm({ ...cleanData, rate: cleanData.rate || '' });
+        setItemForm({ 
+            type: item.type || 'custom',
+            drawingId: item.drawingId || '', 
+            weightPerM: item.weightPerM || '', 
+            length: item.length || '', 
+            ratePerKg: item.ratePerKg || '',
+            brand: item.brand || '',
+            watts: item.watts || '',
+            colour: item.colour || '',
+            wattage: item.wattage || '',
+            voltage: item.voltage || '',
+            ipRating: item.ipRating || '',
+            acpLength: item.acpLength || '',
+            acpWidth: item.acpWidth || '',
+            thickness: item.thickness || '',
+            foil: item.foil || '',
+            rateSft: item.rateSft || '',
+            ...cleanData, 
+            rate: cleanData.rate || '' 
+        });
         setEditingItem(item);
         setSourceItem(null);
         setShowItemForm(true);
@@ -192,6 +299,7 @@ const MiscStockTracker = ({ user, userRole }) => {
     // Filter Logic
     const filteredItems = Object.values(stockData).filter(item => 
         !searchTerm || 
+        (item.product || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.vendor.toLowerCase().includes(searchTerm.toLowerCase())
@@ -200,6 +308,7 @@ const MiscStockTracker = ({ user, userRole }) => {
     const sortedTransactions = [...transactions]
         .map(tx => ({ 
             ...tx, 
+            itemProduct: stockData[tx.itemId]?.product || '-',
             itemName: stockData[tx.itemId]?.name || 'Unknown Item',
             itemSKU: stockData[tx.itemId]?.sku || 'NO SKU',
             itemRate: stockData[tx.itemId]?.rate || 0
@@ -208,6 +317,7 @@ const MiscStockTracker = ({ user, userRole }) => {
 
     const filteredTransactions = sortedTransactions.filter(tx => 
         !searchTerm || 
+        tx.itemProduct.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.remarks.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -272,7 +382,7 @@ const MiscStockTracker = ({ user, userRole }) => {
                                 if (activeTab === 'inventory') {
                                     setShowItemForm(!showItemForm);
                                     setEditingItem(null);
-                                    setItemForm({ name: '', sku: '', vendor: '', rate: '', specs: [] });
+                                    setItemForm({ type: 'custom', product: '', name: '', sku: '', vendor: '', rate: '', specs: [], drawingId: '', weightPerM: '', length: '', ratePerKg: '', brand: '', watts: '', colour: '', wattage: '', voltage: '', ipRating: '', acpLength: '', acpWidth: '', thickness: '', foil: '', rateSft: '' });
                                 } else {
                                     setShowTxForm(!showTxForm);
                                     setEditingTx(null);
@@ -291,66 +401,295 @@ const MiscStockTracker = ({ user, userRole }) => {
             {/* ── Inline Product Form ── */}
             {activeTab === 'inventory' && showItemForm && (
                 <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 duration-200">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                        <div className="md:col-span-1">
-                            <label className={labelCls}>SKU / Model</label>
-                            <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="PC-001" />
-                        </div>
-                        <div className="md:col-span-1">
-                            <label className={labelCls}>Product Name*</label>
-                            <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="e.g. Master Cable" />
-                        </div>
-                        <div>
-                            <label className={labelCls}>Vendor</label>
-                            <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Supplier Name" />
-                        </div>
-                        <div>
-                            <label className={labelCls}>Rate / pc (₹)</label>
-                            <input type="number" className={inputCls + " w-full"} value={itemForm.rate} onChange={e => setItemForm({...itemForm, rate: e.target.value})} placeholder="0.00" />
-                        </div>
-                        
-                        <div className="md:col-span-5 border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
-                            <div className="flex items-center justify-between mb-2">
-                                <label className={labelCls}>Technical Specs</label>
-                                <span className="text-[12px] text-slate-400 font-bold uppercase">Editable</span>
-                            </div>
-
-                            <div className="space-y-2 mb-3">
-                                {itemForm.specs.map((s, i) => (
-                                    <div key={i} className="flex gap-2 items-center animate-in fade-in slide-in-from-left-2 duration-200">
-                                        <input 
-                                            className={inputCls + " flex-1 !py-1 !px-2.5 text-[12px] font-bold"} 
-                                            value={s.name} 
-                                            onChange={e => updateSpec(i, 'name', e.target.value)} 
-                                            placeholder="Spec name"
-                                        />
-                                        <input 
-                                            className={inputCls + " flex-1 !py-1 !px-2.5 text-[12px]"} 
-                                            value={s.value} 
-                                            onChange={e => updateSpec(i, 'value', e.target.value)} 
-                                            placeholder="Value"
-                                        />
-                                        <button onClick={() => removeSpec(i)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
-                                            <Trash2 size={13}/>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="flex gap-2 p-2 bg-slate-100 dark:bg-slate-900 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
-                                <input className={inputCls + " flex-1 !py-1 !border-none !bg-transparent"} value={newSpec.name} onChange={e => setNewSpec({...newSpec, name: e.target.value})} placeholder="New Spec..." />
-                                <input className={inputCls + " flex-1 !py-1 !border-none !bg-transparent"} value={newSpec.value} onChange={e => setNewSpec({...newSpec, value: e.target.value})} placeholder="Value..." />
-                                <button onClick={addSpec} className="px-2 bg-slate-800 dark:bg-slate-700 rounded text-white hover:bg-black transition-all"><Plus size={14}/></button>
-                            </div>
-                        </div>
-
-                        <div className="md:col-span-5 flex justify-end gap-2 mt-2">
-                            <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
-                            <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
-                                {editingItem ? 'Update Product' : 'Create Product'}
-                            </button>
-                        </div>
+                    <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
+                        <button 
+                            onClick={() => setItemForm({...itemForm, type: 'custom'})}
+                            className={`px-3 py-1 text-[11px] font-bold uppercase rounded-md transition-all ${itemForm.type === 'custom' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                            Custom Item
+                        </button>
+                        <button 
+                            onClick={() => setItemForm({...itemForm, type: 'profile', product: 'PROFILE'})}
+                            className={`px-3 py-1 text-[11px] font-bold uppercase rounded-md transition-all ${itemForm.type === 'profile' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                            Profile
+                        </button>
+                        <button 
+                            onClick={() => setItemForm({...itemForm, type: 'led_module', product: 'LED MODULE'})}
+                            className={`px-3 py-1 text-[11px] font-bold uppercase rounded-md transition-all ${itemForm.type === 'led_module' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                            LED Module
+                        </button>
+                        <button 
+                            onClick={() => setItemForm({...itemForm, type: 'smps', product: 'SMPS'})}
+                            className={`px-3 py-1 text-[11px] font-bold uppercase rounded-md transition-all ${itemForm.type === 'smps' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                            SMPS
+                        </button>
+                        <button 
+                            onClick={() => setItemForm({...itemForm, type: 'acp', product: 'ACP'})}
+                            className={`px-3 py-1 text-[11px] font-bold uppercase rounded-md transition-all ${itemForm.type === 'acp' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                            ACP
+                        </button>
                     </div>
+
+                    {itemForm.type === 'acp' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-11 gap-3">
+                            <div>
+                                <label className={labelCls}>Product*</label>
+                                <input className={inputCls + " w-full bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed"} value={itemForm.product} readOnly placeholder="ACP" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Vendor*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Vendor" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>SKU*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="SKU-001" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={labelCls}>Description*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="ACP description" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Length (ft)*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.acpLength} onChange={e => setItemForm({...itemForm, acpLength: e.target.value})} placeholder="0" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Width (ft)*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.acpWidth} onChange={e => setItemForm({...itemForm, acpWidth: e.target.value})} placeholder="0" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Thickness (mm)*</label>
+                                <input type="number" className={inputCls + " w-full border-blue-200 focus:ring-blue-300"} value={itemForm.thickness} onChange={e => setItemForm({...itemForm, thickness: e.target.value})} placeholder="0" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Foil (Opt.)</label>
+                                <input className={inputCls + " w-full"} value={itemForm.foil} onChange={e => setItemForm({...itemForm, foil: e.target.value})} placeholder="Foil" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Color (Opt.)</label>
+                                <input className={inputCls + " w-full"} value={itemForm.colour} onChange={e => setItemForm({...itemForm, colour: e.target.value})} placeholder="Color" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Rate/sft*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.rateSft} onChange={e => setItemForm({...itemForm, rateSft: e.target.value})} placeholder="0.00" />
+                            </div>
+                            <div className="md:col-span-4 lg:col-span-11 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
+                                <div className="text-[12px] font-bold text-slate-500">
+                                    Calculated Rate/pc: <span className="text-slate-900 dark:text-white ml-1">
+                                        {formatCurrency((Number(itemForm.acpLength) || 0) * (Number(itemForm.acpWidth) || 0) * (Number(itemForm.rateSft) || 0))}
+                                    </span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                                    <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
+                                        {editingItem ? 'Update ACP' : 'Create ACP'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : itemForm.type === 'smps' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-10 gap-3">
+                            <div>
+                                <label className={labelCls}>Product*</label>
+                                <input className={inputCls + " w-full bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed"} value={itemForm.product} readOnly placeholder="SMPS" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Vendor*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Vendor" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>SKU*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="SKU-001" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={labelCls}>Description*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="SMPS Model name" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Brand*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.brand} onChange={e => setItemForm({...itemForm, brand: e.target.value})} placeholder="Brand" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Wattage*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.wattage} onChange={e => setItemForm({...itemForm, wattage: e.target.value})} placeholder="e.g. 400W" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Voltage*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.voltage} onChange={e => setItemForm({...itemForm, voltage: e.target.value})} placeholder="e.g. 12V / 24V" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>IP Rating</label>
+                                <input className={inputCls + " w-full"} value={itemForm.ipRating} onChange={e => setItemForm({...itemForm, ipRating: e.target.value})} placeholder="IP67" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Rate/pc*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.rate} onChange={e => setItemForm({...itemForm, rate: e.target.value})} placeholder="0.00" />
+                            </div>
+                            <div className="md:col-span-4 lg:col-span-10 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
+                                <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                                <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
+                                    {editingItem ? 'Update SMPS' : 'Create SMPS'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : itemForm.type === 'led_module' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3">
+                            <div>
+                                <label className={labelCls}>Product*</label>
+                                <input className={inputCls + " w-full bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed"} value={itemForm.product} readOnly placeholder="LED MODULE" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Vendor*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Vendor" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>SKU*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="SKU-001" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={labelCls}>Description*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="LED Module name" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Brand (Opt.)</label>
+                                <input className={inputCls + " w-full"} value={itemForm.brand} onChange={e => setItemForm({...itemForm, brand: e.target.value})} placeholder="Brand" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Watts*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.watts} onChange={e => setItemForm({...itemForm, watts: e.target.value})} placeholder="e.g. 1.2W" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Colour (Opt.)</label>
+                                <input className={inputCls + " w-full"} value={itemForm.colour} onChange={e => setItemForm({...itemForm, colour: e.target.value})} placeholder="e.g. 6000K" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Rate/pc*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.rate} onChange={e => setItemForm({...itemForm, rate: e.target.value})} placeholder="0.00" />
+                            </div>
+                            <div className="md:col-span-4 lg:col-span-9 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
+                                <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                                <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
+                                    {editingItem ? 'Update LED Module' : 'Create LED Module'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : itemForm.type === 'profile' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3">
+                            <div>
+                                <label className={labelCls}>Product*</label>
+                                <input className={inputCls + " w-full bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed"} value={itemForm.product} readOnly placeholder="PROFILE" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Vendor*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Vendor" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>SKU*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="SKU-001" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Drawing ID*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.drawingId} onChange={e => setItemForm({...itemForm, drawingId: e.target.value})} placeholder="DRW-001" />
+                            </div>
+                            <div className="md:col-span-2 lg:col-span-2">
+                                <label className={labelCls}>Description*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="Profile description" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Weight/m (kg)*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.weightPerM} onChange={e => setItemForm({...itemForm, weightPerM: e.target.value})} placeholder="0.000" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Length (mm)*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.length} onChange={e => setItemForm({...itemForm, length: e.target.value})} placeholder="0" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Rate/kg*</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.ratePerKg} onChange={e => setItemForm({...itemForm, ratePerKg: e.target.value})} placeholder="0.00" />
+                            </div>
+                            <div className="md:col-span-4 lg:col-span-9 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
+                                <div className="text-[12px] font-bold text-slate-500">
+                                    Calculated Rate/pc: <span className="text-slate-900 dark:text-white ml-1">
+                                        {formatCurrency((Number(itemForm.ratePerKg) || 0) * (Number(itemForm.weightPerM) || 0) * (Number(itemForm.length) || 0) / 1000)}
+                                    </span>
+                                </div>
+                                <div className="flex gap-2 mt-2 sm:mt-0">
+                                    <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                                    <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
+                                        {editingItem ? 'Update Profile' : 'Create Profile'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                            <div>
+                                <label className={labelCls}>Product*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.product} onChange={e => setItemForm({...itemForm, product: e.target.value})} placeholder="e.g. CABLE" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Description*</label>
+                                <input className={inputCls + " w-full"} value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} placeholder="e.g. Master Cable" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>SKU / Model</label>
+                                <input className={inputCls + " w-full"} value={itemForm.sku} onChange={e => setItemForm({...itemForm, sku: e.target.value})} placeholder="PC-001" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Vendor</label>
+                                <input className={inputCls + " w-full"} value={itemForm.vendor} onChange={e => setItemForm({...itemForm, vendor: e.target.value})} placeholder="Supplier Name" />
+                            </div>
+                            <div>
+                                <label className={labelCls}>Rate / pc (₹)</label>
+                                <input type="number" className={inputCls + " w-full"} value={itemForm.rate} onChange={e => setItemForm({...itemForm, rate: e.target.value})} placeholder="0.00" />
+                            </div>
+                            
+                            <div className="md:col-span-6 border-t border-slate-200 dark:border-slate-700 pt-3 mt-1">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className={labelCls}>Technical Specs</label>
+                                    <span className="text-[12px] text-slate-400 font-bold uppercase">Editable</span>
+                                </div>
+
+                                <div className="space-y-2 mb-3">
+                                    {itemForm.specs.map((s, i) => (
+                                        <div key={i} className="flex gap-2 items-center animate-in fade-in slide-in-from-left-2 duration-200">
+                                            <input 
+                                                className={inputCls + " flex-1 !py-1 !px-2.5 text-[12px] font-bold"} 
+                                                value={s.name} 
+                                                onChange={e => updateSpec(i, 'name', e.target.value)} 
+                                                placeholder="Spec name"
+                                            />
+                                            <input 
+                                                className={inputCls + " flex-1 !py-1 !px-2.5 text-[12px]"} 
+                                                value={s.value} 
+                                                onChange={e => updateSpec(i, 'value', e.target.value)} 
+                                                placeholder="Value"
+                                            />
+                                            <button onClick={() => removeSpec(i)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
+                                                <Trash2 size={13}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="flex gap-2 p-2 bg-slate-100 dark:bg-slate-900 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+                                    <input className={inputCls + " flex-1 !py-1 !border-none !bg-transparent"} value={newSpec.name} onChange={e => setNewSpec({...newSpec, name: e.target.value})} placeholder="New Spec..." />
+                                    <input className={inputCls + " flex-1 !py-1 !border-none !bg-transparent"} value={newSpec.value} onChange={e => setNewSpec({...newSpec, value: e.target.value})} placeholder="Value..." />
+                                    <button onClick={addSpec} className="px-2 bg-slate-800 dark:bg-slate-700 rounded text-white hover:bg-black transition-all"><Plus size={14}/></button>
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-5 flex justify-end gap-2 mt-2">
+                                <button onClick={() => { setShowItemForm(false); setEditingItem(null); }} className="px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                                <button onClick={handleSaveItem} className="bg-slate-800 dark:bg-slate-600 text-white px-5 py-1.5 rounded-lg text-[12px] font-bold hover:bg-slate-900">
+                                    {editingItem ? 'Update Product' : 'Create Product'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -406,7 +745,9 @@ const MiscStockTracker = ({ user, userRole }) => {
                         <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
                             {activeTab === 'inventory' ? (
                                 <>
-                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">SKU / Product</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Product</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Description</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">SKU</th>
                                     <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Vendor</th>
                                     <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Specs</th>
                                     <th className="px-3 py-1.5 text-center font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Stock</th>
@@ -416,7 +757,9 @@ const MiscStockTracker = ({ user, userRole }) => {
                             ) : (
                                 <>
                                     <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Date</th>
-                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">SKU / Product</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Product</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Description</th>
+                                    <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">SKU</th>
                                     <th className="px-3 py-1.5 text-center font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Type</th>
                                     <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Qty</th>
                                     <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Rate/pc</th>
@@ -433,10 +776,13 @@ const MiscStockTracker = ({ user, userRole }) => {
                             filteredItems.map((item, idx) => (
                                 <tr key={item.id} className={`group ${idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60`}>
                                     <td className="px-3 py-2">
-                                        <div className="flex flex-col min-w-[150px]">
-                                            <span className="font-bold text-slate-800 dark:text-white truncate uppercase tracking-tight">{item.sku || 'NO SKU'}</span>
-                                            <span className="text-slate-400 font-medium truncate">{item.name}</span>
-                                        </div>
+                                        <span className="text-slate-800 dark:text-white font-black truncate block min-w-[100px] uppercase tracking-tighter">{item.product || '-'}</span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="text-slate-500 dark:text-slate-400 font-bold truncate block min-w-[120px]">{item.name}</span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="font-bold text-slate-400 tabular-nums truncate uppercase tracking-tight block">{item.sku || 'NO SKU'}</span>
                                     </td>
                                     <td className="px-3 py-2">
                                         <span className="text-teal-600 dark:text-teal-400 font-bold uppercase tracking-tight truncate block max-w-[120px]">
@@ -445,12 +791,86 @@ const MiscStockTracker = ({ user, userRole }) => {
                                     </td>
                                     <td className="px-3 py-2">
                                         <div className="flex flex-wrap gap-1 max-w-[250px]">
+                                            {item.type === 'profile' && (
+                                                <>
+                                                    <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 rounded font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                                                        DRW:{item.drawingId}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                        {item.weightPerM}kg/m
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                        {item.length}mm
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                        {item.ratePerKg}₹/kg
+                                                    </span>
+                                                </>
+                                            )}
+                                            {item.type === 'led_module' && (
+                                                <>
+                                                    {item.brand && (
+                                                        <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                                            {item.brand}
+                                                        </span>
+                                                    )}
+                                                    <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-800 rounded font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                                        {item.watts}
+                                                    </span>
+                                                    {item.colour && (
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                            {item.colour}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                            {item.type === 'smps' && (
+                                                <>
+                                                    <span className="px-1.5 py-0.5 bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-800 rounded font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                                                        {item.brand}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-800 rounded font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                                        {item.wattage}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                        {item.voltage}
+                                                    </span>
+                                                    {item.ipRating && (
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                            {item.ipRating}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                            {item.type === 'acp' && (
+                                                <>
+                                                    <span className="px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/30 border border-sky-100 dark:border-sky-800 rounded font-bold text-sky-600 dark:text-sky-400 whitespace-nowrap">
+                                                        {item.acpLength}'x{item.acpWidth}'
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-800 rounded font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                                        {item.thickness}mm
+                                                    </span>
+                                                    {item.foil && (
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                            Foil:{item.foil}
+                                                        </span>
+                                                    )}
+                                                    {item.colour && (
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                            {item.colour}
+                                                        </span>
+                                                    )}
+                                                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 whitespace-nowrap">
+                                                        {item.rateSft}₹/sft
+                                                    </span>
+                                                </>
+                                            )}
                                             {item.specs?.map((s, i) => (
                                                 <span key={i} className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                                     {s.name}:{s.value}
                                                 </span>
                                             ))}
-                                            {(!item.specs || item.specs.length === 0) && <span className="text-slate-300">-</span>}
+                                            {(!item.specs || item.specs.length === 0) && item.type !== 'profile' && <span className="text-slate-300">-</span>}
                                         </div>
                                     </td>
                                     <td className="px-3 py-2 text-center">
@@ -492,10 +912,13 @@ const MiscStockTracker = ({ user, userRole }) => {
                                         <span className="font-bold text-slate-400 tabular-nums uppercase whitespace-nowrap">{formatDate(tx.date)}</span>
                                     </td>
                                     <td className="px-3 py-2">
-                                        <div className="flex flex-col min-w-[150px]">
-                                            <span className="font-bold text-slate-800 dark:text-white truncate uppercase tracking-tight">{tx.itemSKU}</span>
-                                            <span className="text-slate-400 font-medium truncate">{tx.itemName}</span>
-                                        </div>
+                                        <span className="text-slate-800 dark:text-white font-black truncate block min-w-[100px] uppercase tracking-tighter">{tx.itemProduct}</span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="text-slate-500 dark:text-slate-400 font-bold truncate block min-w-[120px]">{tx.itemName}</span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="font-bold text-slate-400 tabular-nums truncate uppercase tracking-tight block">{tx.itemSKU}</span>
                                     </td>
                                     <td className="px-3 py-2 text-center">
                                         <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider border ${tx.type === 'in' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : 'bg-red-50 text-red-600 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'}`}>
@@ -532,7 +955,7 @@ const MiscStockTracker = ({ user, userRole }) => {
                         {/* Empty States */}
                         {(activeTab === 'inventory' ? filteredItems.length === 0 : filteredTransactions.length === 0) && (
                             <tr>
-                                <td colSpan={activeTab === 'inventory' ? 7 : 7} className="py-12 text-center bg-white dark:bg-slate-800 rounded-b-xl border-t border-slate-100 dark:border-slate-700">
+                                <td colSpan={10} className="py-12 text-center bg-white dark:bg-slate-800 rounded-b-xl border-t border-slate-100 dark:border-slate-700">
                                     <div className="flex flex-col items-center">
                                         <Package className="w-8 h-8 text-slate-200 dark:text-slate-700 mb-2" />
                                         <p className="font-bold text-slate-400 uppercase tracking-widest">No matching {activeTab === 'inventory' ? 'products' : 'records'}</p>

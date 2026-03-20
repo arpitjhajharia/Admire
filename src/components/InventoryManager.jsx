@@ -3,7 +3,7 @@ import { Box, Edit, Plus, Trash2, X, Layers, Search, Package, ChevronDown, Chevr
 import { db, appId } from '../lib/firebase';
 import { formatCurrency, formatComponentSpecs } from '../lib/utils';
 
-const InventoryManager = ({ user, userRole, transactions = [], readOnly = false, exchangeRate = 1 }) => {
+const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeRate = 1 }) => {
     const [items, setItems] = React.useState([]);
     const [editingId, setEditingId] = React.useState(null);
     const [showForm, setShowForm] = React.useState(false);

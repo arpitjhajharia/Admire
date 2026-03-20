@@ -3,7 +3,6 @@
  * Goal: Minimize distinct lengths in the cut plan to reduce machine setup changes.
  */
 export const optimizeLinear = (stock, pieces, kerf = 0) => {
-    // 1. Flatten pieces into individual items to preserve unique remarks
     let items = [];
     pieces.forEach(p => {
         const qty = Number(p.quantity);
@@ -12,21 +11,24 @@ export const optimizeLinear = (stock, pieces, kerf = 0) => {
         }
     });
 
-    // Sort descending for better packing
     items.sort((a, b) => b.length - a.length);
 
-    // Stock management
     let availableStock = [];
     stock.forEach(s => {
         for (let i = 0; i < s.quantity; i++) {
-            availableStock.push({ length: Number(s.length), id: s.id, used: 0, cuts: [], remaining: Number(s.length) });
+            availableStock.push({
+                length: Number(s.length),
+                id: s.id,
+                used: 0,
+                cuts: [],
+                remaining: Number(s.length)
+            });
         }
     });
 
     let bins = [];
     let unplaced = [];
 
-    // Process each stock item (bin)
     for (let bin of availableStock) {
         let binModified = false;
         let changed = true;
@@ -42,7 +44,6 @@ export const optimizeLinear = (stock, pieces, kerf = 0) => {
 
                 if (bin.remaining >= needed) {
                     const currentWaste = bin.remaining - needed;
-                    // Batching heuristic: prioritize same length OR same remarks
                     const isSameLength = bin.cuts.some(c => c.length === item.length);
                     const score = isSameLength ? currentWaste - 1000 : currentWaste;
 
@@ -56,10 +57,10 @@ export const optimizeLinear = (stock, pieces, kerf = 0) => {
             if (bestIdx !== -1) {
                 const item = items.splice(bestIdx, 1)[0];
                 const actualNeeded = item.length + (bin.cuts.length > 0 ? kerf : 0);
-                bin.cuts.push({ 
-                    length: item.length, 
-                    start: bin.used + (bin.cuts.length > 0 ? kerf : 0), 
-                    remarks: item.remarks 
+                bin.cuts.push({
+                    length: item.length,
+                    start: bin.used + (bin.cuts.length > 0 ? kerf : 0),
+                    remarks: item.remarks
                 });
                 bin.used += actualNeeded;
                 bin.remaining -= actualNeeded;
@@ -78,9 +79,9 @@ export const optimizeLinear = (stock, pieces, kerf = 0) => {
     const actualPieceLength = bins.reduce((sum, b) => sum + b.cuts.reduce((s, c) => s + c.length, 0), 0);
     const waste = totalUsedLength - actualPieceLength;
 
-    return { 
-        bins, 
-        unplaced, 
+    return {
+        bins,
+        unplaced,
         summary: {
             totalStock: bins.length,
             totalUsedLength,
@@ -158,7 +159,7 @@ export const optimizeSheet = (stock, pieces, kerf = 0) => {
                 placed = true;
                 break;
             }
-            
+
             const neededHRot = item.w + (bin.strips.length > 0 ? kerf : 0);
             if (bin.remainingH >= neededHRot) {
                 const stripY = bin.h - bin.remainingH + (bin.strips.length > 0 ? kerf : 0);

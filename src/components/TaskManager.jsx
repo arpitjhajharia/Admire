@@ -17,6 +17,27 @@ import {
     Save
 } from 'lucide-react';
 
+// Move SortableHeader outside to avoid "Cannot create components during render"
+const SortableHeader = ({ label, columnKey, sortConfig, onSort, className = "" }) => {
+    const getSortIcon = (columnKey) => {
+        if (sortConfig.key !== columnKey) return <ArrowUpDown className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />;
+        return sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-teal-400" /> : <ChevronDown className="w-3 h-3 text-teal-400" />;
+    };
+
+    return (
+        <th
+            scope="col"
+            className={`px-1.5 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer hover:bg-slate-800/80 dark:hover:bg-slate-900/50 group transition-colors select-none ${className}`}
+            onClick={() => onSort(columnKey)}
+        >
+            <div className="flex items-center gap-1.5">
+                {label}
+                {getSortIcon(columnKey)}
+            </div>
+        </th>
+    );
+};
+
 const TaskManager = ({ user, userRole }) => {
     const [tasks, setTasks] = useState([]);
     const [usersList, setUsersList] = useState([]);
@@ -232,23 +253,7 @@ const TaskManager = ({ user, userRole }) => {
         setSortConfig({ key, direction });
     };
 
-    const getSortIcon = (columnKey) => {
-        if (sortConfig.key !== columnKey) return <ArrowUpDown className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />;
-        return sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-teal-400" /> : <ChevronDown className="w-3 h-3 text-teal-400" />;
-    };
-
-    const SortableHeader = ({ label, columnKey, className = "" }) => (
-        <th
-            scope="col"
-            className={`px-1.5 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer hover:bg-slate-800/80 dark:hover:bg-slate-900/50 group transition-colors select-none ${className}`}
-            onClick={() => handleSort(columnKey)}
-        >
-            <div className="flex items-center gap-1.5">
-                {label}
-                {getSortIcon(columnKey)}
-            </div>
-        </th>
-    );
+    // Shared sort icon logic removed as it's now inside the outside SortableHeader component
 
     // Grouping Tasks
     const { myTasks, otherTasks, completedTasks } = useMemo(() => {
@@ -830,14 +835,14 @@ const TaskManager = ({ user, userRole }) => {
                     <thead>
                         <tr className="bg-slate-900 dark:bg-slate-950 border-b border-slate-700">
                             <th scope="col" className="px-1.5 py-1.5 w-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">State</th>
-                            <SortableHeader label="Project" columnKey="project" className="w-16" />
-                            <SortableHeader label="Task" columnKey="title" className="w-1/3 min-w-[120px]" />
-                            <SortableHeader label="Description" columnKey="description" className="hidden xl:table-cell w-2/3 min-w-[180px]" />
-                            <SortableHeader label="Assigned To" columnKey="assignedTo" className="w-20" />
-                            <SortableHeader label="Priority" columnKey="priority" className="w-16" />
-                            <SortableHeader label="By" columnKey="assignedBy" className="w-14" />
-                            <SortableHeader label="Due" columnKey="dueDate" className="w-14" />
-                            <SortableHeader label="Created" columnKey="assignedOn" className="w-14" />
+                            <SortableHeader label="Project" columnKey="project" sortConfig={sortConfig} onSort={handleSort} className="w-16" />
+                            <SortableHeader label="Task" columnKey="title" sortConfig={sortConfig} onSort={handleSort} className="w-1/3 min-w-[120px]" />
+                            <SortableHeader label="Description" columnKey="description" sortConfig={sortConfig} onSort={handleSort} className="hidden xl:table-cell w-2/3 min-w-[180px]" />
+                            <SortableHeader label="Assigned To" columnKey="assignedTo" sortConfig={sortConfig} onSort={handleSort} className="w-20" />
+                            <SortableHeader label="Priority" columnKey="priority" sortConfig={sortConfig} onSort={handleSort} className="w-16" />
+                            <SortableHeader label="By" columnKey="assignedBy" sortConfig={sortConfig} onSort={handleSort} className="w-14" />
+                            <SortableHeader label="Due" columnKey="dueDate" sortConfig={sortConfig} onSort={handleSort} className="w-14" />
+                            <SortableHeader label="Created" columnKey="assignedOn" sortConfig={sortConfig} onSort={handleSort} className="w-14" />
                             <th scope="col" className="px-1.5 py-1.5 w-12 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
                         </tr>
                     </thead>
