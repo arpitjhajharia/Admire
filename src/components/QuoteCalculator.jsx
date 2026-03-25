@@ -135,13 +135,13 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
     const areaSqFt = calculation?.matrix?.sqft?.perScreen || 1;
 
     let displayItems = calculation ? calculation.detailedItems : (assemblyMode === 'assembled' ? [
-        { id: 'modules', type: 'led', name: 'Modules', qty: 0, unit: 0, total: 0 },
+        { id: 'modules', type: 'led', name: 'Modules', qty: 0, unit: 0, total: 0, warranty: activeScreen.selectedModuleId ? inventory.find(i => i.id === activeScreen.selectedModuleId)?.warrantyPeriod : undefined },
         { id: 'cabinets', type: 'led', name: 'Cabinets', qty: 0, unit: 0, total: 0 },
         { id: 'cards', type: 'led', name: 'Receiving Cards', qty: 0, unit: 0, total: 0 },
         { id: 'smps', type: 'led', name: 'SMPS', qty: 0, unit: 0, total: 0 },
         { id: 'processor', type: 'service', name: 'Processor', qty: 1, unit: 0, total: 0 }
     ] : [
-        { id: 'ready', type: 'led', name: 'Ready Unit', qty: 0, unit: 0, total: 0 },
+        { id: 'ready', type: 'led', name: 'Ready Unit', qty: 0, unit: 0, total: 0, warranty: activeScreen.readyId ? inventory.find(i => i.id === activeScreen.readyId)?.warrantyPeriod : undefined },
         { id: 'processor', type: 'service', name: 'Processor', qty: 1, unit: 0, total: 0 }
     ]);
 
@@ -189,14 +189,36 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
     const renderDesktopRow = (item) => (
         <tr key={item.id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${item.isOverridden ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
             <td className="p-2 pl-4">
-                <div className="flex items-center gap-2">
-                    <div className="flex-1">{renderComponentCell(item)}</div>
-                    {/* HIDE EDIT/OVERRIDE FOR SUPERVISOR (Financials) */}
-                    {calculation && !isSupervisor && (
-                        <>
-                            <button type="button" onClick={() => setEditingRow(editingRow === item.id ? null : item.id)} className={`p-1 rounded ${editingRow === item.id ? 'bg-teal-100 text-teal-700' : 'text-slate-300 hover:text-teal-600'}`}><Edit size={12} /></button>
-                            {item.isOverridden && <button type="button" onClick={() => onClearOverride(item.id)} className="text-amber-500 hover:text-red-500"><RefreshCw size={12} /></button>}
-                        </>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1">{renderComponentCell(item)}</div>
+                        {/* HIDE EDIT/OVERRIDE FOR SUPERVISOR (Financials). Allow edit for warranty even if calculation is pending. */}
+                        {(!isSupervisor) && (
+                            <>
+                                <button type="button" onClick={() => setEditingRow(editingRow === item.id ? null : item.id)} className={`p-1 rounded ${editingRow === item.id ? 'bg-teal-100 text-teal-700' : 'text-slate-300 hover:text-teal-600'}`}><Edit size={12} /></button>
+                                {item.isOverridden && <button type="button" onClick={() => onClearOverride(item.id)} className="text-amber-500 hover:text-red-500"><RefreshCw size={12} /></button>}
+                            </>
+                        )}
+                    </div>
+                    {item.warranty !== undefined && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                            <span className="text-[9px] font-extrabold text-blue-500/80 uppercase tracking-tighter">Warranty Period:</span>
+                            {editingRow === item.id && !isSupervisor ? (
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        type="number"
+                                        className="w-12 p-0.5 text-xs border border-blue-200 rounded bg-blue-50 text-blue-800 font-bold focus:ring-1 focus:ring-blue-400 outline-none"
+                                        value={overrides[item.id]?.warranty ?? item.warranty ?? 0}
+                                        onChange={e => onOverride(item.id, 'warranty', e.target.value)}
+                                    />
+                                    <span className="text-[9px] font-bold text-blue-400 uppercase">Yrs</span>
+                                </div>
+                            ) : (
+                                <span className={`text-[11px] font-bold ${item.warranty > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+                                    {item.warranty || 0} {item.warranty === 1 ? 'Year' : 'Years'}
+                                </span>
+                            )}
+                        </div>
                     )}
                 </div>
             </td>
@@ -237,7 +259,36 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
 
             <div className="mb-3">
                 {renderComponentCell(item)}
+                {item.warranty !== undefined && (
+                    <div className="mt-2 flex items-center justify-between p-1.5 bg-blue-50 dark:bg-blue-900/10 rounded-md border border-blue-100 dark:border-blue-800/50">
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Warranty Period</span>
+                        {editingRow === item.id && !isSupervisor ? (
+                           <div className="flex items-center gap-1">
+                               <input 
+                                   type="number" 
+                                   className="w-14 p-1 text-right text-xs border border-blue-300 rounded bg-white text-blue-900 font-bold" 
+                                   value={overrides[item.id]?.warranty ?? item.warranty ?? 0} 
+                                   onChange={e => onOverride(item.id, 'warranty', e.target.value)} 
+                               />
+                               <span className="text-xs font-bold text-blue-500">Yrs</span>
+                           </div>
+                        ) : (
+                            <span className="text-xs font-extrabold text-blue-700 dark:text-blue-300">{item.warranty || 0} Years</span>
+                        )}
+                    </div>
+                )}
             </div>
+            {/* Show Edit button for mobile too */}
+            {!isSupervisor && !editingRow && (
+                <button type="button" onClick={() => setEditingRow(item.id)} className="flex items-center gap-1 text-[10px] font-bold text-teal-600 uppercase mt-2">
+                    <Edit size={10} /> Override Warranty/Price
+                </button>
+            )}
+            {editingRow === item.id && (
+                <button type="button" onClick={() => setEditingRow(null)} className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase mt-2">
+                    <X size={10} /> Close Editor
+                </button>
+            )}
 
             <div className={`grid ${isSupervisor ? 'grid-cols-1' : 'grid-cols-3'} gap-2 text-xs bg-slate-50 dark:bg-slate-700/50 p-1.5 rounded`}>
                 {!isSupervisor && (
@@ -1157,7 +1208,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <span className="text-teal-600 text-xs group-open:hidden">Show Details</span>
                             </summary>
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                                <div><label className="text-[10px] uppercase font-bold text-slate-400">Price Basis</label><input value={state.terms?.price} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, price: e.target.value } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" /></div>
+                                <div><label className="text-[10px] uppercase font-bold text-slate-400">Price Basis</label><textarea rows={2} value={state.terms?.price} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, price: e.target.value } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" /></div>
                                 <div><label className="text-[10px] uppercase font-bold text-slate-400">Delivery Weeks</label><input type="number" value={state.terms?.deliveryWeeks} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, deliveryWeeks: e.target.value } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" /></div>
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="text-[10px] uppercase font-bold text-slate-400 block mb-2">Payment Milestones</label>
@@ -1175,7 +1226,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <div className="col-span-1 md:col-span-2 space-y-4 pt-4 border-t border-slate-100 dark:border-slate-700">
                                     <div>
                                         <label className="text-[10px] uppercase font-bold text-slate-400">Validity</label>
-                                        <input value={state.terms?.validity} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, validity: e.target.value } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <textarea rows={2} value={state.terms?.validity} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, validity: e.target.value } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] uppercase font-bold text-slate-400">Warranty Terms</label>
@@ -1188,7 +1239,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                             {Object.entries(state.terms?.scope || {}).map(([key, val]) => (
                                                 <div key={key}>
                                                     <span className="text-[9px] font-bold text-slate-400 uppercase">{key === 'elec' ? 'Electricity' : key === 'net' ? 'Internet' : key === 'soft' ? 'Software' : key === 'perm' ? 'Permissions' : key === 'pc' ? 'Computer' : key}</span>
-                                                    <textarea rows={2} value={val} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, scope: { ...p.terms.scope, [key]: e.target.value } } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                                    <textarea rows={3} value={val} onChange={e => setState(p => ({ ...p, terms: { ...p.terms, scope: { ...p.terms.scope, [key]: e.target.value } } }))} className="w-full p-2 border rounded text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                                 </div>
                                             ))}
                                         </div>

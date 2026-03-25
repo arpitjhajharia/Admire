@@ -17,7 +17,8 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
         price: '', carriage: '', currency: 'INR', indoor: true,
         brightness: '', refreshRate: '',
         ledType: '', lampMake: '', material: '', weight: '', avgPower: '', maxPower: '',
-        contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: ''
+        contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: '',
+        warrantyPeriod: ''
     });
 
     const [loading, setLoading] = React.useState(true);
@@ -130,6 +131,7 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                 ports: newItem.ports ? parseInt(newItem.ports) : 0,
                 amps: newItem.amps ? Number(newItem.amps) : 0,
                 voltage: newItem.voltage ? Number(newItem.voltage) : 0,
+                warrantyPeriod: newItem.warrantyPeriod ? Number(newItem.warrantyPeriod) : 0,
                 updatedAt: new Date()
             };
 
@@ -146,7 +148,8 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                     price: '', carriage: '', currency: 'INR', indoor: true,
                     brightness: '', refreshRate: '',
                     ledType: '', lampMake: '', material: '', weight: '', avgPower: '', maxPower: '',
-                    contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: ''
+                    contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: '',
+                    warrantyPeriod: ''
                 });
                 alert("Item Added!");
             }
@@ -162,7 +165,8 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
             length: item.length || '',
             size: item.size || '',
             brand: item.brand || '',
-            series: item.series || ''
+            series: item.series || '',
+            warrantyPeriod: item.warrantyPeriod || ''
         });
         setEditingId(item.id);
         setShowForm(true);
@@ -178,7 +182,8 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
             price: '', carriage: '', currency: 'INR', indoor: true,
             brightness: '', refreshRate: '',
             ledType: '', lampMake: '', material: '', weight: '', avgPower: '', maxPower: '',
-            contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: ''
+            contrast: '', viewAngleH: '', viewAngleV: '', ipFront: '', ipBack: '', ports: '', amps: '', voltage: '',
+            warrantyPeriod: ''
         });
     };
 
@@ -414,6 +419,7 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                                 <input placeholder="IP Rating (Front)*" className={inputCls + " flex-1"} value={newItem.ipFront} onChange={e => setNewItem({ ...newItem, ipFront: e.target.value })} />
                                 <input placeholder="IP Rating (Back)*" className={inputCls + " flex-1"} value={newItem.ipBack} onChange={e => setNewItem({ ...newItem, ipBack: e.target.value })} />
                             </div>
+                            <input placeholder="Warranty (Years)*" type="number" className={inputCls + " border-blue-400"} value={newItem.warrantyPeriod} onChange={e => setNewItem({ ...newItem, warrantyPeriod: e.target.value })} />
                         </>
                     )}
 

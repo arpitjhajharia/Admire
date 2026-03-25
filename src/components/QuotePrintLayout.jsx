@@ -108,10 +108,10 @@ const QuotePrintLayout = ({ quote, lead }) => {
                 <div className="text-[10px] text-slate-600 space-y-4">
                     <div className="grid grid-cols-[110px_1fr] gap-x-6 gap-y-3 leading-relaxed">
                         <div className="font-bold text-slate-800 uppercase">PRICE</div>
-                        <div className="text-slate-700 font-medium">{quote.priceBasis || CONFIG.DEFAULTS.PRICE_BASIS}</div>
+                        <div className="text-slate-700 font-medium whitespace-pre-wrap">{quote.priceBasis || CONFIG.DEFAULTS.PRICE_BASIS}</div>
 
                         <div className="font-bold text-slate-800 uppercase">PAYMENT</div>
-                        <div className="flex items-center flex-wrap gap-x-2">
+                        <div className="flex items-center flex-wrap gap-x-2 whitespace-pre-wrap">
                             {(quote.paymentTerms || CONFIG.DEFAULTS.PAYMENT_TERMS).map((p, i) => (
                                 <span key={i} className="flex items-center gap-1">
                                     <span className="font-bold text-slate-900">{p.percent}%</span>
@@ -122,10 +122,10 @@ const QuotePrintLayout = ({ quote, lead }) => {
                         </div>
 
                         <div className="font-bold text-slate-800 uppercase">WARRANTY</div>
-                        <div className="text-justify leading-snug">{quote.warranty || CONFIG.TEXT.WARRANTY}</div>
+                        <div className="text-justify leading-snug whitespace-pre-wrap">{quote.warranty || CONFIG.TEXT.WARRANTY}</div>
 
                         <div className="font-bold text-slate-800 uppercase">VALIDITY</div>
-                        <div>{quote.validity || CONFIG.TEXT.VALIDITY}</div>
+                        <div className="whitespace-pre-wrap">{quote.validity || CONFIG.TEXT.VALIDITY}</div>
                     </div>
                 </div>
 

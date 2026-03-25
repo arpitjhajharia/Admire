@@ -46,6 +46,7 @@ export const formatComponentSpecs = (item) => {
         if (item.viewAngleH && item.viewAngleV) specs.push(`VA: ${item.viewAngleH}°/${item.viewAngleV}°`);
         if (item.ipFront || item.ipBack) specs.push(`IP: ${item.ipFront}/${item.ipBack}`);
         if (item.weight) specs.push(`${item.weight}kg`);
+        if (item.warrantyPeriod) specs.push(`Warranty: ${item.warrantyPeriod} yr${item.warrantyPeriod > 1 ? 's' : ''}`);
     } else if (item.type === 'cabinet') {
         if (item.material) specs.push(item.material);
         specs.push(item.indoor === 'true' || item.indoor === true ? 'Indoor' : 'Outdoor');
@@ -187,7 +188,7 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         }
 
         rawItems = [
-            { id: 'modules', inventoryId: selectedModuleId, name: 'Modules', spec: `${module.brand} ${module.model}`, qty: totalModules, unit: getPriceInInr(module), total: totalModules * getPriceInInr(module), type: 'led' },
+            { id: 'modules', inventoryId: selectedModuleId, name: 'Modules', spec: `${module.brand} ${module.model}`, qty: totalModules, unit: getPriceInInr(module), total: totalModules * getPriceInInr(module), type: 'led', warranty: module.warrantyPeriod },
             { id: 'cabinets', inventoryId: selectedCabinetId, name: 'Cabinets', spec: `${cabinet.brand} ${cabinet.model}`, qty: totalCabinetsPerScreen, unit: getPriceInInr(cabinet), total: totalCabinetsPerScreen * getPriceInInr(cabinet), type: 'led' },
             { id: 'cards', inventoryId: selectedCardId, name: 'Cards', spec: card ? card.brand : '-', qty: totalCabinetsPerScreen, unit: getPriceInInr(card), total: totalCabinetsPerScreen * getPriceInInr(card), type: 'led' },
             {
@@ -203,7 +204,7 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         ];
     } else {
         rawItems = [
-            { id: 'ready', inventoryId: readyId, name: 'LED Panels (Ready)', spec: `${cabinet.brand} ${cabinet.model}`, qty: totalCabinetsPerScreen, unit: getPriceInInr(cabinet), total: totalCabinetsPerScreen * getPriceInInr(cabinet), type: 'led' }
+            { id: 'ready', inventoryId: readyId, name: 'LED Panels (Ready)', spec: `${cabinet.brand} ${cabinet.model}`, qty: totalCabinetsPerScreen, unit: getPriceInInr(cabinet), total: totalCabinetsPerScreen * getPriceInInr(cabinet), type: 'led', warranty: cabinet.warrantyPeriod }
         ];
         totalModules = totalCabinetsPerScreen;
     }
@@ -257,7 +258,15 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
             const ov = overrides[item.id];
             const finalQty = ov.qty !== undefined && ov.qty !== '' ? Number(ov.qty) : item.qty;
             const finalRate = ov.rate !== undefined && ov.rate !== '' ? Number(ov.rate) : item.unit;
-            return { ...item, qty: finalQty, unit: finalRate, total: finalQty * finalRate, isOverridden: true };
+            const finalWarranty = ov.warranty !== undefined && ov.warranty !== '' ? Number(ov.warranty) : item.warranty;
+            return {
+                ...item,
+                qty: finalQty,
+                unit: finalRate,
+                total: finalQty * finalRate,
+                warranty: finalWarranty,
+                isOverridden: true
+            };
         }
         return item;
     });
@@ -365,10 +374,14 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
     const totalProjectSell = totalLEDSell + totalServiceSell;
     const totalMargin = totalProjectSell - totalProjectCost;
 
+    const ledRow = finalItems.find(i => i.id === 'modules' || i.id === 'ready');
+    const finalWarrantyValue = ledRow?.warranty !== undefined ? ledRow.warranty : (module ? (module.warrantyPeriod || 0) : 0);
+
     return {
         gridCols: cols, gridRows: rows,
         finalWidth: (finalW_mm / 1000).toFixed(2), finalHeight: (finalH_mm / 1000).toFixed(2),
         totalCabinets: totalCabinetsPerScreen, moduleType: module, cabinetType: cabinet, processor: proc,
+        finalWarranty: finalWarrantyValue,
         breakdown: {
             qtyModules: totalModules,
             ledOps: ledOpsCost,

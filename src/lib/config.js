@@ -12,7 +12,7 @@ export const CONFIG = {
         EXCHANGE_RATE: 90,
         GST_RATE: 18,
         DELIVERY_WEEKS: 10,
-        PRICE_BASIS: "Ex-works Mumbai",
+        PRICE_BASIS: "Ex-works Mumbai. Based on minimum quantity and sizes specified.",
         PAYMENT_TERMS: [
             { name: "Advance with PO", percent: 60 },
             { name: "Before dispatch", percent: 30 },

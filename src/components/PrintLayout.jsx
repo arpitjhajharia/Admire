@@ -44,7 +44,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                     finalWidth, finalHeight, totalCabinets,
                     moduleType = {}, cabinetType = {}, processor, screenQty, totalProjectSell,
                     gridCols, gridRows, commercials, pricingMode, targetSellPrice,
-                    assemblyMode, breakdown = {}
+                    assemblyMode, breakdown = {}, finalWarranty
                 } = config;
 
                 // Technical Calculations
@@ -135,6 +135,12 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                     </span>
                                     <span className="font-semibold text-slate-500">Type:</span> <span className="col-span-2">{moduleType.indoor ? 'Indoor' : 'Outdoor'}</span>
                                     <span className="font-semibold text-slate-500">Quantity:</span> <span className="col-span-2">{screenQty} Nos</span>
+                                    {finalWarranty !== undefined && (
+                                        <>
+                                            <span className="font-semibold text-slate-500 uppercase tracking-tighter text-[9px]">Warranty Period:</span>
+                                            <span className="col-span-2 font-bold text-blue-700">{finalWarranty} Year{finalWarranty !== 1 ? 's' : ''}</span>
+                                        </>
+                                    )}
                                 </div>
 
                                 <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mt-4 mb-2">Module & Cabinet</h3>
@@ -155,12 +161,18 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                                     <span className="font-semibold text-slate-500">Total Weight:</span> <span className="col-span-2">{totalWeight.toFixed(1)} kg</span>
                                     <span className="font-semibold text-slate-500">Avg Power:</span> <span className="col-span-2">{(avgPower).toFixed(0)} Watts</span>
                                     <span className="font-semibold text-slate-500">Max Power:</span> <span className="col-span-2">{(maxPower).toFixed(0)} Watts</span>
-                                    <span className="font-semibold text-slate-500">Brightness:</span> <span className="col-span-2">{moduleType.brightness} nits</span>
-                                    <span className="font-semibold text-slate-500">Refresh Rate:</span> <span className="col-span-2">{moduleType.refreshRate} Hz</span>
+                                    <span className="font-semibold text-slate-500">Brightness:</span> <span className="col-span-2 font-bold text-blue-700">{moduleType.brightness} nits</span>
+                                    <span className="font-semibold text-slate-500">Refresh Rate:</span> <span className="col-span-2 font-bold text-blue-700">{moduleType.refreshRate} Hz</span>
                                     <span className="font-semibold text-slate-500">Contrast:</span> <span className="col-span-2">{moduleType.contrast || '-'}</span>
                                     <span className="font-semibold text-slate-500">Controller:</span> <span className="col-span-2">{processor ? `${processor.brand} ${processor.model}` : 'Standard'}</span>
                                     <span className="font-semibold text-slate-500">Viewing:</span> <span className="col-span-2">H: {moduleType.viewAngleH}° / V: {moduleType.viewAngleV}°</span>
-                                    <span className="font-semibold text-slate-500">IP Rating:</span> <span className="col-span-2">Front: IP{moduleType.ipFront} / Back: IP{moduleType.ipBack}</span>
+                                    <span className="font-semibold text-slate-500 text-[10px]">IP Rating:</span> <span className="col-span-2 font-bold text-blue-700">Front: IP{moduleType.ipFront} / Back: IP{moduleType.ipBack}</span>
+                                    {finalWarranty !== undefined && (
+                                        <>
+                                            <span className="font-semibold text-slate-500">Warranty:</span> 
+                                            <span className="col-span-2 font-bold text-blue-700">{finalWarranty} Year{finalWarranty !== 1 ? 's' : ''}</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -227,26 +239,26 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                 <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mb-2 pb-1">Terms & Conditions</h3>
                 <div className="text-[10px] text-slate-600 space-y-3">
                     <div className="grid grid-cols-[100px_1fr] gap-y-2 gap-x-4">
-                        <div className="font-bold text-slate-800">PRICE</div><div>{terms.price}</div>
-                        <div className="font-bold text-slate-800">PAYMENT</div>
-                        <div>{(terms.payment || []).map((p, i) => <span key={i}>{p.percent}% {p.name}{i < (terms.payment || []).length - 1 ? ', ' : ''}</span>)}</div>
-                        <div className="font-bold text-slate-800">DELIVERY</div><div>{terms.deliveryWeeks} weeks</div>
-                        <div className="font-bold text-slate-800">GST</div>
-                        <div>Extra as applicable (currently {CONFIG.DEFAULTS.GST_RATE}%)</div>
-                        <div className="font-bold text-slate-800">WARRANTY</div>
-                        <div className="text-justify leading-snug">{terms.warranty || CONFIG.TEXT.WARRANTY}</div>
+                        <div className="font-bold text-slate-800 uppercase">PRICE</div><div className="whitespace-pre-wrap">{terms.price}</div>
+                        <div className="font-bold text-slate-800 uppercase">PAYMENT</div>
+                        <div className="whitespace-pre-wrap">{(terms.payment || []).map((p, i) => <span key={i}>{p.percent}% {p.name}{i < (terms.payment || []).length - 1 ? ', ' : ''}</span>)}</div>
+                        <div className="font-bold text-slate-800 uppercase">DELIVERY</div><div className="whitespace-pre-wrap">{terms.deliveryWeeks} weeks</div>
+                        <div className="font-bold text-slate-800 uppercase">GST</div>
+                        <div className="whitespace-pre-wrap">Extra as applicable (currently {CONFIG.DEFAULTS.GST_RATE}%)</div>
+                        <div className="font-bold text-slate-800 uppercase tracking-widest">WARRANTY</div>
+                        <div className="text-justify leading-snug whitespace-pre-wrap">{terms.warranty || CONFIG.TEXT.WARRANTY}</div>
                     </div>
                 </div>
 
-                <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mt-4 mb-2 pb-1">Client's Scope</h3>
-                <div className="text-[10px] text-slate-600 grid gap-y-2">
-                    {terms.scope?.structure && <div><span className="font-bold text-slate-800 block">Structure:</span>{terms.scope.structure}</div>}
-                    {terms.scope?.elec && <div><span className="font-bold text-slate-800 block">Electricity:</span>{terms.scope.elec}</div>}
-                    {terms.scope?.net && <div><span className="font-bold text-slate-800 block">Internet:</span>{terms.scope.net}</div>}
-                    {terms.scope?.soft && <div><span className="font-bold text-slate-800 block">Software:</span>{terms.scope.soft}</div>}
-                    {terms.scope?.perm && <div><span className="font-bold text-slate-800 block">Permissions:</span>{terms.scope.perm}</div>}
-                    {terms.scope?.pc && <div><span className="font-bold text-slate-800 block">Computer:</span>{terms.scope.pc}</div>}
-                    <div><span className="font-bold text-slate-800 block">Validity:</span>{terms.validity || CONFIG.TEXT.VALIDITY}</div>
+                <h3 className="font-bold text-slate-700 uppercase border-b border-slate-300 mt-4 mb-2 pb-1 tracking-widest">Client's Scope</h3>
+                <div className="text-[10px] text-slate-600 grid gap-y-3">
+                    {terms.scope?.structure && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Structure:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.structure}</div></div>}
+                    {terms.scope?.elec && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Electricity:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.elec}</div></div>}
+                    {terms.scope?.net && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Internet:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.net}</div></div>}
+                    {terms.scope?.soft && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Software:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.soft}</div></div>}
+                    {terms.scope?.perm && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Permissions:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.perm}</div></div>}
+                    {terms.scope?.pc && <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Computer:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.scope.pc}</div></div>}
+                    <div><span className="font-bold text-slate-800 block uppercase mb-0.5">Validity:</span><div className="whitespace-pre-wrap leading-relaxed">{terms.validity || CONFIG.TEXT.VALIDITY}</div></div>
                 </div>
 
                 <div className="mt-8 pt-8 border-t border-slate-200 flex justify-between items-end">
