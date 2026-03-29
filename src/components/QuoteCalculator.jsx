@@ -20,7 +20,7 @@ const useDebounce = (value, delay) => {
 // --- Helper Components ---
 const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, updateScreenProp, inventory, getStock, overrides, onOverride, editingRow, setEditingRow, onClearOverride, isSupervisor }) => {
     const activeScreen = state.screens[state.activeScreenIndex];
-    const { screenQty, selectedPitch, selectedModuleId, selectedCabinetId, selectedCardId, selectedSMPSId, selectedProcId, extraComponents, extras, commercials } = activeScreen;
+    const { screenQty, selectedPitch, selectedModuleId, selectedCabinetId, selectedCardId, selectedSMPSIds, selectedProcId, extraComponents, extras, commercials } = activeScreen;
     const { assemblyMode, selectedIndoor } = state;
     const safeGenId = () => Math.random().toString(36).substr(2, 9).toUpperCase();
 
@@ -44,7 +44,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
             item.id === 'modules' ? selectedModuleId :
             item.id === 'cabinets' ? selectedCabinetId :
             item.id === 'cards' ? selectedCardId :
-            item.id === 'smps' ? selectedSMPSId :
+            (item.id === 'smps' || item.id?.startsWith('smps_')) ? (selectedSMPSIds?.[0] || '') :
             item.id === 'processor' ? selectedProcId :
             item.id === 'ready' ? activeScreen.readyId :
             (extraComponents ? extraComponents.find(e => e.id === item.id)?.componentId : '')
@@ -79,7 +79,64 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
         }
         if (item.id === 'cabinets') return <div className="flex flex-col gap-1"><select value={selectedCabinetId} onChange={e => updateScreenState('selectedCabinetId', e.target.value)} disabled={!selectedModule} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Cabinet...</option>{cabinets.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({c.width}x{c.height}) - Stock: {getStock(c.id)}</option>)}</select>{specDisplay}</div>;
         if (item.id === 'cards') return <div className="flex flex-col gap-1"><select value={selectedCardId} onChange={e => updateScreenState('selectedCardId', e.target.value)} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"><option value="">Select Card...</option>{inventory.filter(i => i.type === 'card').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
-        if (item.id === 'smps') return <div className="flex flex-col gap-1"><select value={selectedSMPSId} onChange={e => updateScreenState('selectedSMPSId', e.target.value)} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"><option value="">Select SMPS...</option>{inventory.filter(i => i.type === 'smps').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
+        if (item.id === 'smps' || item.id?.startsWith('smps_')) {
+            // Secondary mix rows (smps_1, smps_2...) are read-only spec lines
+            if (item.id !== 'smps') {
+                return (
+                    <span className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/40 rounded text-[9px] font-bold uppercase tracking-wider">Mix</span>
+                        {item.spec}
+                    </span>
+                );
+            }
+
+            const toggleSMPS = (id) => {
+                const current = selectedSMPSIds || [];
+                const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+                updateScreenState('selectedSMPSIds', next);
+            };
+            const smpsInventory = inventory.filter(i => i.type === 'smps');
+
+            // Show the optimised mix inline (taken from calculation)
+            const activeMixItems = calculation?.detailedItems?.filter(di => di.id === 'smps' || di.id?.startsWith('smps_')) || [];
+
+            return (
+                <div className="flex flex-col gap-1.5">
+                    {/* Checklist */}
+                    <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
+                        {smpsInventory.length === 0 && <span className="text-[10px] text-slate-400">No SMPS in inventory</span>}
+                        {smpsInventory.map(s => {
+                            const isChecked = (selectedSMPSIds || []).includes(s.id);
+                            const watts = s.amps && s.voltage ? `${Number(s.amps) * Number(s.voltage)}W` : '';
+                            return (
+                                <label key={s.id} className={`flex items-center gap-2 p-1 rounded cursor-pointer text-[11px] transition-colors ${isChecked ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-600 dark:text-slate-300'}`}>
+                                    <input
+                                        type="checkbox"
+                                        className="accent-teal-600 w-3 h-3 shrink-0"
+                                        checked={isChecked}
+                                        onChange={() => toggleSMPS(s.id)}
+                                    />
+                                    <span>{s.brand} {s.model}</span>
+                                    {watts && <span className="ml-auto text-[10px] font-bold text-slate-400">{watts}</span>}
+                                </label>
+                            );
+                        })}
+                    </div>
+                    {/* Optimised mix badge — shown when >1 type used */}
+                    {activeMixItems.length > 1 && (
+                        <div className="mt-0.5 p-1.5 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-700 rounded flex flex-wrap gap-1 items-center">
+                            <span className="text-[9px] font-bold uppercase text-teal-600 dark:text-teal-400 tracking-wider w-full">Optimised Mix / Cabinet:</span>
+                            {activeMixItems.map((mi, i) => (
+                                <span key={i} className="px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 rounded text-[9px] font-bold">
+                                    {mi.spec}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         if (item.id === 'processor') {
             return (
                 <div className="flex flex-col gap-1">
@@ -593,7 +650,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                         selectedModuleId: '',
                         selectedCabinetId: '',
                         selectedCardId: '',
-                        selectedSMPSId: '',
+                        selectedSMPSIds: [],
                         selectedProcId: '',
                         sizingMode: 'closest',
                         readyId: '',
@@ -611,7 +668,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                 activeScreenIndex: 0,
                 selectedIndoor: 'true', assemblyMode: 'assembled', selectedPitch: '',
                 selectedModuleId: '', selectedCabinetId: '', selectedCardId: '',
-                selectedSMPSId: '', selectedProcId: '', sizingMode: 'closest', readyId: '',
+                selectedSMPSIds: [], selectedProcId: '', sizingMode: 'closest', readyId: '',
                 margin: 0, pricingMode: 'margin', targetSellPrice: 0,
                 extraComponents: [],
                 commercials: {
@@ -643,7 +700,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
             selectedModuleId: '',
             selectedCabinetId: '',
             selectedCardId: '',
-            selectedPSUId: '',
+            selectedSMPSIds: [],
             selectedProcId: '',
             sizingMode: 'closest',
             readyId: '',

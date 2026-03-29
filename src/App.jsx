@@ -55,7 +55,7 @@ const App = () => {
         id: generateId(), screenQty: 0, targetWidth: 0, targetHeight: 0,
         selectedIndoor: 'true', assemblyMode: 'assembled', sizingMode: 'closest',
         selectedPitch: '', selectedModuleId: '', selectedCabinetId: '',
-        selectedCardId: '', selectedSMPSId: '', selectedProcId: '', readyId: '',
+        selectedCardId: '', selectedSMPSIds: [], selectedProcId: '', readyId: '',
         extraComponents: [], overrides: {}, extras: [],
         commercials: {
           processor: { val: 0, unit: 'screen', cost: 0, costType: 'abs' },

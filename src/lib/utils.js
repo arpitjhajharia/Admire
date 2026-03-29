@@ -106,10 +106,18 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
     const {
         screenQty: rawScreenQty, targetWidth, targetHeight, unit,
         assemblyMode, selectedModuleId,
-        selectedCabinetId, selectedCardId, selectedSMPSId, selectedProcId,
+        selectedCabinetId, selectedCardId,
+        selectedSMPSId,   // legacy single-select (kept for backward compat)
+        selectedSMPSIds,  // new multi-select array
+        selectedProcId,
         sizingMode, readyId, margin, extras, overrides, extraComponents,
         pricingMode, targetSellPrice, commercials, terms
     } = state;
+
+    // Normalise: prefer the new array; fall back to legacy single id
+    const activeSMPSIds = Array.isArray(selectedSMPSIds) && selectedSMPSIds.length > 0
+        ? selectedSMPSIds
+        : (selectedSMPSId ? [selectedSMPSId] : []);
 
     // 2. Force convert quantity to Number immediately
     const screenQty = Number(rawScreenQty || 1);
@@ -123,14 +131,13 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         return totalBase;
     };
 
-    let module, cabinet, card, psu, proc;
+    let module, cabinet, card, proc;
     let totalModules = 0;
 
     if (assemblyMode === 'assembled') {
         module = inventory.find(i => i.id === selectedModuleId);
         cabinet = inventory.find(i => i.id === selectedCabinetId);
         card = inventory.find(i => i.id === selectedCardId);
-        psu = inventory.find(i => i.id === selectedSMPSId);
         proc = inventory.find(i => i.id === selectedProcId);
         if (!module || !cabinet) return null;
     } else {
@@ -166,41 +173,134 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         const modsPerCab = (Math.floor(cabinet.width / module.width) * Math.floor(cabinet.height / module.height));
         totalModules = totalCabinetsPerScreen * modsPerCab;
 
-        // Calculate SMPS Quantity based on Power
-        let totalSMPS = totalCabinetsPerScreen; // Default fallback
-        let smpsPerCab = 1;
+        // ── SMPS Optimisation ──────────────────────────────────────────────────
+        // Resolve selected SMPS objects
+        const smpsOptions = activeSMPSIds
+            .map(id => inventory.find(i => i.id === id))
+            .filter(Boolean)
+            .filter(i => Number(i.amps) > 0 && Number(i.voltage) > 0)
+            .map(i => ({
+                id: i.id,
+                brand: i.brand,
+                model: i.model,
+                capacity: Number(i.amps) * Number(i.voltage), // Watts
+                price: getPriceInInr(i)
+            }));
 
-        if (module.maxPower && psu && psu.amps && psu.voltage) {
-            // 1. Calculate Cabinet Area in Sqm
-            const cabAreaSqm = (cabinet.width / 1000) * (cabinet.height / 1000);
+        // Cabinet wattage requirement
+        const cabAreaSqm = (cabinet.width / 1000) * (cabinet.height / 1000);
+        const maxPowerPerCabinet = module.maxPower ? cabAreaSqm * Number(module.maxPower) : 0;
 
-            // 2. Calculate Max Power per Cabinet (Watts)
-            const maxPowerPerCabinet = cabAreaSqm * Number(module.maxPower);
+        /**
+         * optimiseSmps(required, options)
+         *
+         * Dynamic-programming minimum-cost solver (unbounded knapsack / coin-change).
+         *
+         * For every integer wattage level w from 0 to (reqW + maxCapacity) the DP
+         * tracks the cheapest SMPS combination that totals EXACTLY w watts. We then
+         * scan all levels ≥ reqW and pick the one with the lowest total cost.
+         *
+         * This guarantees the globally optimal mix, e.g.:
+         *   700W need  |  200W @ ₹600,  300W @ ₹800
+         *   → 2×200W + 1×300W = 700W  → ₹2000  ✓  (not 2×300W+1×200W = 800W → ₹2200)
+         */
+        const optimiseSmps = (required, options) => {
+            if (!options.length || required <= 0) return [];
 
-            // 3. Calculate SMPS Capacity (Watts)
-            const smpsCapacity = Number(psu.amps) * Number(psu.voltage);
+            // Work with integer watts (round required up so we never under-supply)
+            const reqW = Math.ceil(required);
 
-            // 4. Determine SMPS needed per cabinet (Rounded Up)
-            if (smpsCapacity > 0) {
-                smpsPerCab = Math.ceil(maxPowerPerCabinet / smpsCapacity);
-                totalSMPS = smpsPerCab * totalCabinetsPerScreen;
+            // The worst-case overshoot is by at most one full SMPS unit, so we only
+            // need to search up to reqW + maxCapacity.
+            const maxCap = Math.max(...options.map(o => o.capacity));
+            const maxW = reqW + maxCap;
+
+            const INF = Infinity;
+
+            // dp[w]   = minimum total cost to cover EXACTLY w watts
+            // from[w] = id of the SMPS option last added to reach w
+            const dp   = new Float64Array(maxW + 1).fill(INF);
+            const from = new Array(maxW + 1).fill(null);
+            dp[0] = 0;
+
+            for (let w = 1; w <= maxW; w++) {
+                for (const opt of options) {
+                    const prev = w - opt.capacity;
+                    if (prev >= 0 && dp[prev] !== INF) {
+                        const cost = dp[prev] + opt.price;
+                        if (cost < dp[w]) {
+                            dp[w]   = cost;
+                            from[w] = opt.id;
+                        }
+                    }
+                }
             }
+
+            // Find the cheapest feasible level (covering ≥ reqW watts)
+            let bestW    = -1;
+            let bestCost = INF;
+            for (let w = reqW; w <= maxW; w++) {
+                if (dp[w] < bestCost) {
+                    bestCost = dp[w];
+                    bestW    = w;
+                }
+            }
+
+            if (bestW === -1) return []; // No solution found (shouldn't happen)
+
+            // Backtrack through `from` to count how many of each option were used
+            const counts = {};
+            options.forEach(o => { counts[o.id] = 0; });
+            let w = bestW;
+            while (w > 0 && from[w] !== null) {
+                const optId = from[w];
+                counts[optId]++;
+                const opt = options.find(o => o.id === optId);
+                w -= opt.capacity;
+            }
+
+            return options
+                .map(o => ({ ...o, count: counts[o.id] }))
+                .filter(o => o.count > 0);
+        };
+
+        // Build SMPS rows for the BOM
+        let smpsRows = [];
+        if (smpsOptions.length > 0 && maxPowerPerCabinet > 0) {
+            const mixPerCab = optimiseSmps(maxPowerPerCabinet, smpsOptions);
+            mixPerCab.forEach((s, idx) => {
+                const totalForType = s.count * totalCabinetsPerScreen;
+                smpsRows.push({
+                    id: idx === 0 ? 'smps' : `smps_${idx}`,  // first keeps legacy id
+                    inventoryId: s.id,
+                    name: idx === 0 ? 'SMPS' : 'SMPS (mix)',
+                    spec: `${s.brand} ${s.model} (${s.count}/cab)`,
+                    qty: totalForType,
+                    unit: s.price,
+                    total: totalForType * s.price,
+                    type: 'led'
+                });
+            });
+        } else if (smpsOptions.length === 0) {
+            // No SMPS selected – keep placeholder
+            smpsRows.push({
+                id: 'smps',
+                inventoryId: '',
+                name: 'SMPS',
+                spec: '-',
+                qty: 0,
+                unit: 0,
+                total: 0,
+                type: 'led'
+            });
         }
+        // ── End SMPS Optimisation ──────────────────────────────────────────────
 
         rawItems = [
             { id: 'modules', inventoryId: selectedModuleId, name: 'Modules', spec: `${module.brand} ${module.model}`, qty: totalModules, unit: getPriceInInr(module), total: totalModules * getPriceInInr(module), type: 'led', warranty: module.warrantyPeriod },
             { id: 'cabinets', inventoryId: selectedCabinetId, name: 'Cabinets', spec: `${cabinet.brand} ${cabinet.model}`, qty: totalCabinetsPerScreen, unit: getPriceInInr(cabinet), total: totalCabinetsPerScreen * getPriceInInr(cabinet), type: 'led' },
             { id: 'cards', inventoryId: selectedCardId, name: 'Cards', spec: card ? card.brand : '-', qty: totalCabinetsPerScreen, unit: getPriceInInr(card), total: totalCabinetsPerScreen * getPriceInInr(card), type: 'led' },
-            {
-                id: 'smps',
-                inventoryId: selectedSMPSId,
-                name: 'SMPS',
-                spec: psu ? `${psu.brand} (${smpsPerCab}/cab)` : '-',
-                qty: totalSMPS,
-                unit: getPriceInInr(psu),
-                total: totalSMPS * getPriceInInr(psu),
-                type: 'led'
-            },
+            ...smpsRows,
         ];
     } else {
         rawItems = [
