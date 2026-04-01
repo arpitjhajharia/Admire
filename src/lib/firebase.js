@@ -31,6 +31,10 @@ const secondaryApp = !firebase.apps.find(a => a.name === 'secondary')
 // Exports
 export const auth = app.auth();
 export const db = app.firestore();
+
+// Fix for Firestore 400 errors (Listen/channel) often seen on Safari or behind proxies/ad-blockers
+db.settings({ experimentalForceLongPolling: true });
+
 export { secondaryApp };            // <--- Added this (Fixes the error)
 export const firebaseApp = app;
 export const appId = 'admire-signage-external'; // Preserved your ID
