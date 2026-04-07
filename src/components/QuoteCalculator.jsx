@@ -678,6 +678,9 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                         overrides: {},
                         editingRow: null,
                         extras: [],
+                        pricingMode: 'margin',
+                        margin: 0,
+                        targetSellPrice: 0,
                         commercials: {
                             processor: { val: 0, unit: 'screen', cost: 0, costType: 'abs' },
                             installation: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
@@ -728,6 +731,9 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
             overrides: {},
             editingRow: null,
             extras: [],
+            pricingMode: 'margin',
+            margin: 0,
+            targetSellPrice: 0,
             commercials: {
                 processor: { val: 0, unit: 'screen', cost: 0, costType: 'abs' },
                 installation: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
@@ -849,6 +855,12 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
         setAllScreensTotal(totals);
     }, [debouncedState, inventory, transactions, exchangeRate]);
 
+    // Per-screen margin strategy (falls back to global state for old saved quotes)
+    const activeScreen = state.screens[state.activeScreenIndex];
+    const activePricingMode = activeScreen?.pricingMode ?? state.pricingMode ?? 'margin';
+    const activeMargin = activeScreen?.margin ?? state.margin ?? 0;
+    const activeTargetSellPrice = activeScreen?.targetSellPrice ?? state.targetSellPrice ?? 0;
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative items-start">
 
@@ -910,7 +922,7 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                         </div>
                         <div className="flex-1 overflow-auto p-8 bg-slate-200">
                             <PrintLayout
-                                data={calculation ? { ...calculation, clientName: client, projectName: project, margin } : null}
+                                data={calculation ? { ...calculation, clientName: client, projectName: project, margin: activeMargin } : null}
                                 allScreensData={allScreensTotal ? { ...allScreensTotal, clientName: client, projectName: project } : null}
                                 currency='INR'
                                 exchangeRate={exchangeRate}
@@ -1356,16 +1368,16 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Margin Strategy</label>
                                     <select
-                                        value={state.pricingMode || 'margin'}
+                                        value={activePricingMode}
                                         onChange={e => {
                                             const newMode = e.target.value;
-                                            updateState('pricingMode', newMode);
+                                            updateScreenProp(state.activeScreenIndex, 'pricingMode', newMode);
                                             if (newMode !== 'margin' && calculation) {
                                                 let newTarget = 0;
                                                 if (newMode === 'screen') newTarget = calculation.matrix.sell.unit;
                                                 else if (newMode === 'sqft') newTarget = calculation.matrix.sell.sqft;
                                                 else if (newMode === 'sqm') newTarget = calculation.matrix.sell.sqft * 10.7639;
-                                                updateState('targetSellPrice', Math.round(newTarget));
+                                                updateScreenProp(state.activeScreenIndex, 'targetSellPrice', Math.round(newTarget));
                                             }
                                         }}
                                         className="text-xs border-none bg-transparent font-bold text-teal-600 dark:text-teal-400 focus:ring-0 cursor-pointer outline-none"
@@ -1380,15 +1392,15 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <div className="flex items-center gap-2 mb-4">
                                     <input
                                         type="number"
-                                        value={state.pricingMode === 'margin' ? margin : state.targetSellPrice}
+                                        value={activePricingMode === 'margin' ? activeMargin : activeTargetSellPrice}
                                         onChange={e => {
                                             const val = parseFloat(e.target.value) || 0;
-                                            if (state.pricingMode === 'margin') updateState('margin', val);
-                                            else updateState('targetSellPrice', val);
+                                            if (activePricingMode === 'margin') updateScreenProp(state.activeScreenIndex, 'margin', val);
+                                            else updateScreenProp(state.activeScreenIndex, 'targetSellPrice', val);
                                         }}
                                         className="w-24 text-center text-xl font-bold p-2 border rounded-lg bg-white dark:bg-slate-600 dark:border-slate-500 shadow-sm focus:ring-2 focus:ring-teal-500/50 outline-none dark:text-white"
                                     />
-                                    <span className="text-lg font-bold text-slate-400">{state.pricingMode === 'margin' ? '%' : ''}</span>
+                                    <span className="text-lg font-bold text-slate-400">{activePricingMode === 'margin' ? '%' : ''}</span>
                                     <div className="flex-1 text-right">
                                         <div className="text-[10px] text-slate-400 uppercase font-bold">
                                             {state.screens.length > 1 ? 'Total Profit' : 'Est. Profit'}
@@ -1443,6 +1455,20 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                                             <div className="flex justify-between items-center text-[10px]">
                                                                 <span className="text-slate-400">Rate / Sq.Ft</span>
                                                                 <span className="text-slate-500 font-medium">{formatCurrency(calc.matrix.sell.sqft, 'INR')}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-[10px]">
+                                                                <span className="text-slate-400">Margin Strategy</span>
+                                                                <span className="text-teal-600 dark:text-teal-400 font-semibold">
+                                                                    {(() => {
+                                                                        const s = state.screens[index];
+                                                                        const pm = s?.pricingMode ?? state.pricingMode ?? 'margin';
+                                                                        if (pm === 'margin') return `${s?.margin ?? state.margin ?? 0}%`;
+                                                                        if (pm === 'sqft') return `₹${s?.targetSellPrice ?? state.targetSellPrice ?? 0}/sqft`;
+                                                                        if (pm === 'sqm') return `₹${s?.targetSellPrice ?? state.targetSellPrice ?? 0}/sqm`;
+                                                                        if (pm === 'screen') return `₹${s?.targetSellPrice ?? state.targetSellPrice ?? 0}/screen`;
+                                                                        return '-';
+                                                                    })()}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     ))}

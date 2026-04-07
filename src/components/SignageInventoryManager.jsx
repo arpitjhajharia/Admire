@@ -3,7 +3,7 @@ import { Box, Edit, Plus, Trash2, X, Search, Package } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 import { formatCurrency } from '../lib/utils';
 
-const SignageInventoryManager = ({ user, userRole, readOnly = false }) => {
+const SignageInventoryManager = ({ user, userRole, readOnly = false, transactions = [] }) => {
     const [items, setItems] = useState([]);
     const [editingId, setEditingId] = useState(null);
     const [showForm, setShowForm] = useState(false);
@@ -107,13 +107,32 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false }) => {
 
     const inputCls = "px-2.5 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-300 transition-shadow";
 
-    const formatRowSpecs = (item) => {
-        if (item.type === 'profile') return `${item.profileType} | ${item.weightPerMeter} kg/m | ₹${item.ratePerKg}/kg | ${item.thickness}mm thk`;
-        if (item.type === 'acp') return `${item.acpThickness} | ₹${item.ratePerSqft}/sqft`;
-        if (item.type === 'led') return `${item.ledType} | ${item.wattagePerUnit}W | Density: ${item.densityPerSqft}/sqft | ₹${item.price}`;
-        if (item.type === 'smps') return `${item.capacity}W | ${item.environment} | ₹${item.price}`;
-        if (item.type === 'hardware' || item.type === 'labour') return `${item.uom} | ₹${item.price}`;
-        return `₹${item.price}`;
+    const formatSpecs = (item) => {
+        if (item.type === 'profile') return `${item.profileType} | ${item.weightPerMeter} kg/m | ${item.thickness}mm thk`;
+        if (item.type === 'acp') return `${item.acpThickness}`;
+        if (item.type === 'led') return `${item.ledType} | ${item.wattagePerUnit}W | Density: ${item.densityPerSqft}/sqft`;
+        if (item.type === 'smps') return `${item.capacity}W | ${item.environment}`;
+        if (item.type === 'hardware' || item.type === 'labour') return `${item.uom}`;
+        return `—`;
+    };
+
+    const getItemRateValue = (item) => {
+        if (item.type === 'profile') return item.ratePerKg || 0;
+        if (item.type === 'acp') return item.ratePerSqft || 0;
+        return item.price || 0;
+    };
+
+    const formatRate = (item) => {
+        const val = getItemRateValue(item);
+        if (item.type === 'profile') return `₹${val}/kg`;
+        if (item.type === 'acp') return `₹${val}/sqft`;
+        return `₹${val}`;
+    };
+
+    const getItemBalance = (itemId) => {
+        return transactions
+            .filter(tx => tx.itemId === itemId)
+            .reduce((acc, tx) => acc + (tx.type === 'in' ? Number(tx.qty) : -Number(tx.qty)), 0);
     };
 
     return (
@@ -175,7 +194,7 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false }) => {
                     </div>
 
                     <div className="col-span-2 md:col-span-4 mb-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Category Type</label>
+                        <label className="block text-[13px] font-bold uppercase text-slate-400 mb-1">Category Type</label>
                         <select className={inputCls + " w-full max-w-xs cursor-pointer"} value={newItem.type} onChange={e => setNewItem({ ...newItem, type: e.target.value })}>
                             <option value="profile">Aluminium Profile</option>
                             <option value="acp">ACP Sheet</option>
@@ -263,37 +282,55 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false }) => {
                     <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead className="bg-slate-50 dark:bg-slate-800">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Model</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Specs & Rates</th>
-                                {!readOnly && <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Actions</th>}
+                                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-500 uppercase tracking-wider">Name / Model</th>
+                                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-500 uppercase tracking-wider">Specs</th>
+                                <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider">Rate</th>
+                                <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider">Balance</th>
+                                <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Stock Value</th>
+                                {!readOnly && <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider w-24">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-                            {filteredItems.map(item => (
-                                <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-pink-50 text-pink-600 ring-1 ring-pink-200/60 dark:bg-pink-900/40 dark:text-pink-400 dark:ring-pink-700/50`}>
-                                            {item.type}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{item.brand} {item.model}</div>
-                                        {item.drawingNumber && <div className="text-[10px] text-slate-400">Drwg: {item.drawingNumber}</div>}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                                        {formatRowSpecs(item)}
-                                    </td>
-                                    {!readOnly && (
-                                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => handleEdit(item)} className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={16} /></button>
-                                                <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"><Trash2 size={16} /></button>
-                                            </div>
+                            {filteredItems.map(item => {
+                                const balance = getItemBalance(item.id);
+                                const rate = getItemRateValue(item);
+                                const stockValue = balance * rate;
+
+                                return (
+                                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <span className={`inline-block px-2 py-0.5 rounded text-[13px] font-bold uppercase tracking-widest bg-pink-50 text-pink-600 ring-1 ring-pink-200/60 dark:bg-pink-900/40 dark:text-pink-400 dark:ring-pink-700/50`}>
+                                                {item.type}
+                                            </span>
                                         </td>
-                                    )}
-                                </tr>
-                            ))}
+                                        <td className="px-4 py-3">
+                                            <div className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{item.brand} {item.model}</div>
+                                            {item.drawingNumber && <div className="text-[13px] text-slate-400">Drwg: {item.drawingNumber}</div>}
+                                        </td>
+                                        <td className="px-4 py-3 text-[13px] text-slate-600 dark:text-slate-400 min-w-[200px]">
+                                            {formatSpecs(item)}
+                                        </td>
+                                        <td className="px-4 py-3 text-[13px] font-medium text-slate-600 dark:text-slate-300 text-right whitespace-nowrap">
+                                            {formatRate(item)}
+                                        </td>
+                                        <td className="px-4 py-3 text-[13px] font-bold text-slate-800 dark:text-white text-right whitespace-nowrap">
+                                            <span className={balance < 0 ? 'text-red-500' : ''}>{balance}</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-[13px] font-extrabold text-slate-900 dark:text-white text-right whitespace-nowrap">
+                                            {formatCurrency(stockValue, 'INR')}
+                                        </td>
+                                        {!readOnly && (
+                                            <td className="px-4 py-3 whitespace-nowrap text-right text-[13px] font-medium">
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={() => handleEdit(item)} className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={16} /></button>
+                                                    <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"><Trash2 size={16} /></button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

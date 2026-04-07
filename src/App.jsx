@@ -29,6 +29,7 @@ import QuoteImageManager from './components/QuoteImageManager';
 import SignageCalculator from './components/SignageCalculator';
 import SignageInventoryManager from './components/SignageInventoryManager';
 import SignageQuotesManager from './components/SignageQuotesManager';
+import SignageLedger from './components/SignageLedger';
 
 
 const App = () => {
@@ -45,6 +46,8 @@ const App = () => {
   // Data State
   const [inventory, setInventory] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [signageInventory, setSignageInventory] = useState([]);
+  const [signageTransactions, setSignageTransactions] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(CONFIG.DEFAULTS.EXCHANGE_RATE);
 
@@ -127,7 +130,9 @@ const App = () => {
     if (!user || !db) return;
     const unsubInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory').onSnapshot(snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions').onSnapshot(snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => { unsubInv(); unsubTx(); };
+    const unsubSigInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory').onSnapshot(snap => setSignageInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubSigTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_transactions').onSnapshot(snap => setSignageTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubInv(); unsubTx(); unsubSigInv(); unsubSigTx(); };
   }, [user]);
 
   // 3. Dark Mode
@@ -475,6 +480,7 @@ const App = () => {
                 <button onClick={() => setView('quote')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'quote' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Calculator</button>
               )}
               <button onClick={() => setView('inventory')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'inventory' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Components</button>
+              <button onClick={() => setView('ledger')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'ledger' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Stock</button>
               <button onClick={() => setView('saved')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'saved' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Quotes</button>
             </nav>
           )}
@@ -547,6 +553,9 @@ const App = () => {
                 )}
                 <button onClick={() => { setView('inventory'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'inventory' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                   <Box size={18} /> Components
+                </button>
+                <button onClick={() => { setView('ledger'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'ledger' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <Archive size={18} /> Stock Ledger
                 </button>
                 <button onClick={() => { setView('saved'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'saved' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                   <FileText size={18} /> Quotes
@@ -645,6 +654,14 @@ const App = () => {
                 user={user}
                 userRole={userRole}
                 readOnly={isInventoryReadOnly}
+                transactions={signageTransactions}
+              />
+            )}
+            {view === 'ledger' && (
+              <SignageLedger
+                signageInventory={signageInventory}
+                signageTransactions={signageTransactions}
+                readOnly={isLedgerReadOnly}
               />
             )}
             {view === 'saved' && (
