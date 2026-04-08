@@ -130,7 +130,6 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
                             </div>
                         </div>
                         <div className="flex-1 overflow-auto p-8 bg-slate-100 dark:bg-slate-800 flex justify-center">
-                            {/* Simple A4 Print Container */}
                             <div className="bg-white w-[210mm] min-h-[297mm] shadow-lg p-10 text-slate-800 print:shadow-none print:w-auto print:min-h-0">
                                 <div className="border-b-2 border-slate-800 pb-4 mb-6 flex justify-between items-end">
                                     <div>
@@ -138,67 +137,41 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
                                         <p className="text-sm font-bold text-slate-500 mt-1">Ref: {viewQuote.ref}</p>
                                     </div>
                                     <div className="text-right text-sm">
-                                        <p className="font-bold text-slate-700">Date: {new Date(viewQuote.createdAt?.seconds * 1000).toLocaleDateString('en-IN')}</p>
+                                        <p className="font-bold text-slate-700">Date: {viewQuote.createdAt ? formatDate(viewQuote.createdAt) : '—'}</p>
                                     </div>
                                 </div>
-
                                 <div className="flex justify-between mb-8 text-sm">
                                     <div className="w-1/2">
                                         <p className="font-bold text-slate-500 uppercase text-[10px] mb-1">To</p>
                                         <p className="font-bold text-lg">{viewQuote.client}</p>
                                         <p className="text-slate-600">Project: {viewQuote.project}</p>
                                     </div>
-                                    <div className="w-1/3 p-3 bg-slate-50 rounded border border-slate-100">
-                                        <p className="text-xs font-bold text-slate-500 mb-1">Specifications</p>
-                                        <p>Dims: <b>{viewQuote.state.width} x {viewQuote.state.height} {viewQuote.state.unit}</b></p>
-                                        <p>Area: <b>{viewQuote.calculation.visualAreaSqFt.toFixed(2)} Sq.Ft</b></p>
-                                        <p>Environment: <b>{viewQuote.state.environment}</b></p>
-                                    </div>
                                 </div>
-
                                 <table className="w-full text-sm mb-6 pb-6 border-b-2 border-slate-200">
                                     <thead>
                                         <tr className="bg-slate-100 text-left font-bold text-slate-700">
-                                            <th className="p-2 border border-slate-200">Description</th>
-                                            <th className="p-2 border border-slate-200 text-center">Qty / UOM</th>
-                                            <th className="p-2 border border-slate-200 text-right">Ext. Total</th>
+                                            <th className="p-2 border border-slate-200">Item</th>
+                                            <th className="p-2 border border-slate-200 text-center">Dimensions</th>
+                                            <th className="p-2 border border-slate-200 text-center">Qty</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr>
-                                            <td className="p-2 border border-slate-200">
-                                                <b>Complete Manufactured Signage Solution</b><br/>
-                                                <span className="text-[11px] text-slate-500">
-                                                    - Structural Frame: {viewQuote.state.frameStyle}<br/>
-                                                    - Profile Edge: {viewQuote.state.profiles.baseId ? 'Aluminium Extrusion Base' : 'Custom Base'}
-                                                </span>
-                                            </td>
-                                            <td className="p-2 border border-slate-200 text-center">
-                                                1 Set
-                                            </td>
-                                            <td className="p-2 border border-slate-200 text-right">
-                                                {formatCurrency(viewQuote.calculation.totalCostEstimate, 'INR')} (Base)
-                                            </td>
-                                        </tr>
+                                        {getScreens(viewQuote).map((s, i) => (
+                                            <tr key={i}>
+                                                <td className="p-2 border border-slate-200">{s.name}</td>
+                                                <td className="p-2 border border-slate-200 text-center">{s.width} x {s.height} {viewQuote.state?.unit || 'ft'}</td>
+                                                <td className="p-2 border border-slate-200 text-center">{s.screenQty}</td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
-
-                                {/* Net Total */}
                                 <div className="flex justify-end mt-4">
                                     <div className="w-64 text-right">
-                                        <div className="flex justify-between py-2 text-sm">
-                                            <span>Subtotal</span>
-                                            <span className="font-bold">{formatCurrency(viewQuote.calculation.totalCostEstimate, 'INR')}</span>
-                                        </div>
                                         <div className="flex justify-between py-2 text-xl font-black text-slate-900 border-t-2 border-slate-800">
-                                            <span>Net Total</span>
-                                            <span>{formatCurrency(viewQuote.calculation.finalSellPrice, 'INR')}</span>
+                                            <span>Total</span>
+                                            <span>{formatCurrency(viewQuote.totalAmount, 'INR')}</span>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div className="mt-16 pt-4 border-t border-slate-200 text-xs text-slate-500 text-center">
-                                    <p>This is a system generated estimate for reference purposes. Final invoice may vary based on exact manufacturing requirements.</p>
                                 </div>
                             </div>
                         </div>

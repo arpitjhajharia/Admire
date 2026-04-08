@@ -324,10 +324,21 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
         screens: [createDefaultScreen()],
         activeScreenIndex: 0,
         terms: {
-            validity: '15 Days',
-            delivery: '2-3 Weeks',
-            warranty: '2 Years',
-            payment: '50% Advance, 50% Before Dispatch'
+            price: 'Ex-works, Mumbai. GST extra as applicable.',
+            deliveryWeeks: '2-3 Weeks',
+            payment: [
+                { name: 'Advance', percent: 50 },
+                { name: 'Before Dispatch', percent: 50 }
+            ],
+            validity: 'This quote is valid for 15 days from the date of issue.',
+            warranty: '1 Year against manufacturing defects.',
+            scope: {
+                structure: '',
+                elec: '',
+                net: '',
+                soft: '',
+                perm: ''
+            }
         }
     };
 
@@ -404,7 +415,13 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                     logistics: loadedState.logistics || { transMethod: 'Per Board', transRate: 0, installMethod: 'Per Board', installRate: 0 },
                     pricing: loadedState.pricing || { mode: 'Margin', value: 10 }
                 }],
-                activeScreenIndex: 0
+                activeScreenIndex: 0,
+                terms: {
+                    ...(loadedState.terms || {}),
+                    payment: Array.isArray(loadedState.terms?.payment)
+                        ? loadedState.terms.payment
+                        : [{ name: 'Advance', percent: 50 }, { name: 'Before Dispatch', percent: 50 }]
+                }
             });
         } else {
             // Migrate any screens that still have old-format profiles/smps; extract unit to top level
@@ -417,7 +434,13 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                     smpsIds: Array.isArray(s.smpsIds) ? s.smpsIds : (s.smpsId ? [s.smpsId] : []),
                     otherCosts: Array.isArray(s.otherCosts) ? s.otherCosts : [],
                     overrides: s.overrides || {}
-                }))
+                })),
+                terms: {
+                    ...(loadedState.terms || {}),
+                    payment: Array.isArray(loadedState.terms?.payment)
+                        ? loadedState.terms.payment
+                        : [{ name: 'Advance', percent: 50 }, { name: 'Before Dispatch', percent: 50 }]
+                }
             });
         }
     }, [loadedState]);
@@ -1176,62 +1199,152 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                     <span>Total Cost{sq > 1 ? ` ×${sq}` : ''}</span>
                                     <span>{calculation ? formatCurrency(sq > 1 ? calculation.totalCostWithQty : calculation.totalCostEstimate, 'INR', false, true) : '—'}</span>
                                 </div>
-
-                                {/* Terms & Conditions UI */}
-                                <div className="mt-8 pt-6 border-t dark:border-slate-700">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 rounded bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
-                                            <FileText size={14} className="text-pink-600" />
-                                        </div>
-                                        <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wider">Terms & Conditions</h4>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block pl-1">Price Validity</label>
-                                            <input
-                                                type="text"
-                                                value={state.terms?.validity || ''}
-                                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, validity: e.target.value } }))}
-                                                className="w-full p-2 text-xs border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-1 focus:ring-pink-500 outline-none transition-all"
-                                                placeholder="e.g. 15 Days"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block pl-1">Delivery</label>
-                                            <input
-                                                type="text"
-                                                value={state.terms?.delivery || ''}
-                                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, delivery: e.target.value } }))}
-                                                className="w-full p-2 text-xs border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-1 focus:ring-pink-500 outline-none transition-all"
-                                                placeholder="e.g. 2-3 Weeks"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block pl-1">Warranty</label>
-                                            <input
-                                                type="text"
-                                                value={state.terms?.warranty || ''}
-                                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, warranty: e.target.value } }))}
-                                                className="w-full p-2 text-xs border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-1 focus:ring-pink-500 outline-none transition-all"
-                                                placeholder="e.g. 2 Years"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block pl-1">Payment</label>
-                                            <input
-                                                type="text"
-                                                value={state.terms?.payment || ''}
-                                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, payment: e.target.value } }))}
-                                                className="w-full p-2 text-xs border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-1 focus:ring-pink-500 outline-none transition-all"
-                                                placeholder="e.g. 50% Advance"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     );
                 })()}
+
+                {/* ── Terms & Conditions Card ── */}
+                <div className={sectionCls}>
+                <details className="group" open>
+                    <summary className="flex justify-between items-center cursor-pointer list-none select-none">
+                        <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-pink-600 to-rose-500 flex items-center justify-center">
+                                <FileText size={13} className="text-white" />
+                            </div>
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-white">Terms &amp; Conditions</h3>
+                        </div>
+                        <span className="text-[10px] text-pink-500 font-bold group-open:hidden">Show</span>
+                        <span className="text-[10px] text-slate-400 font-bold hidden group-open:block">Hide</span>
+                    </summary>
+
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                        {/* Price Basis */}
+                        <div className="space-y-1">
+                            <label className={labelCls}>Price Basis</label>
+                            <textarea
+                                rows={2}
+                                value={state.terms?.price || ''}
+                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, price: e.target.value } }))}
+                                className={inputCls + ' resize-none'}
+                                placeholder="e.g. Ex-works, Mumbai. GST extra."
+                            />
+                        </div>
+
+                        {/* Delivery */}
+                        <div className="space-y-1">
+                            <label className={labelCls}>Delivery Timeline</label>
+                            <input
+                                type="text"
+                                value={state.terms?.deliveryWeeks || ''}
+                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, deliveryWeeks: e.target.value } }))}
+                                className={inputCls}
+                                placeholder="e.g. 2-3 Weeks"
+                            />
+                        </div>
+
+                        {/* Payment Milestones — full width */}
+                        <div className="md:col-span-2 space-y-1">
+                            <label className={labelCls}>Payment Milestones</label>
+                            {(state.terms?.payment || []).map((ms, idx) => (
+                                <div key={idx} className="flex gap-2 mb-1.5 items-center">
+                                    <input
+                                        value={ms.name}
+                                        onChange={e => {
+                                            const n = [...state.terms.payment];
+                                            n[idx] = { ...n[idx], name: e.target.value };
+                                            setState(s => ({ ...s, terms: { ...s.terms, payment: n } }));
+                                        }}
+                                        className={inputCls + ' flex-1'}
+                                        placeholder="Milestone (e.g. Advance)"
+                                    />
+                                    <input
+                                        type="number"
+                                        value={ms.percent}
+                                        onChange={e => {
+                                            const n = [...state.terms.payment];
+                                            n[idx] = { ...n[idx], percent: Number(e.target.value) };
+                                            setState(s => ({ ...s, terms: { ...s.terms, payment: n } }));
+                                        }}
+                                        className={inputCls + ' w-16 text-center'}
+                                        placeholder="%"
+                                    />
+                                    <span className="text-sm text-slate-400">%</span>
+                                    <button
+                                        onClick={() => {
+                                            const n = state.terms.payment.filter((_, i) => i !== idx);
+                                            setState(s => ({ ...s, terms: { ...s.terms, payment: n } }));
+                                        }}
+                                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                onClick={() => setState(s => ({ ...s, terms: { ...s.terms, payment: [...(s.terms.payment || []), { name: '', percent: 0 }] } }))}
+                                className="text-[10px] font-bold text-pink-600 dark:text-pink-400 flex items-center gap-1 hover:text-pink-700 transition-colors"
+                            >
+                                <Plus size={10} /> Add Milestone
+                            </button>
+                        </div>
+
+                        {/* Validity */}
+                        <div className="space-y-1">
+                            <label className={labelCls}>Quote Validity</label>
+                            <textarea
+                                rows={2}
+                                value={state.terms?.validity || ''}
+                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, validity: e.target.value } }))}
+                                className={inputCls + ' resize-none'}
+                                placeholder="e.g. Valid for 15 days"
+                            />
+                        </div>
+
+                        {/* Warranty */}
+                        <div className="space-y-1">
+                            <label className={labelCls}>Warranty Terms</label>
+                            <textarea
+                                rows={2}
+                                value={state.terms?.warranty || ''}
+                                onChange={e => setState(s => ({ ...s, terms: { ...s.terms, warranty: e.target.value } }))}
+                                className={inputCls + ' resize-none'}
+                                placeholder="e.g. 1 Year against manufacturing defects"
+                            />
+                        </div>
+
+                        {/* Client Scope — full width */}
+                        <div className="md:col-span-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+                            <label className={labelCls + ' !text-pink-600 dark:!text-pink-400 mb-2 block'}>Client's Scope of Work</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {[
+                                    { key: 'structure', label: 'Structure' },
+                                    { key: 'elec',      label: 'Electricity' },
+                                    { key: 'net',       label: 'Internet / Data' },
+                                    { key: 'soft',      label: 'Software' },
+                                    { key: 'perm',      label: 'Permissions' }
+                                ].map(({ key, label }) => (
+                                    <div key={key} className="space-y-1">
+                                        <label className={labelCls}>{label}</label>
+                                        <textarea
+                                            rows={2}
+                                            value={state.terms?.scope?.[key] || ''}
+                                            onChange={e => setState(s => ({
+                                                ...s,
+                                                terms: { ...s.terms, scope: { ...(s.terms?.scope || {}), [key]: e.target.value } }
+                                            }))}
+                                            className={inputCls + ' resize-none'}
+                                            placeholder={`Client's ${label} scope...`}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                    </div>
+                </details>
+                </div>
             </div>
 
             {/* ── RIGHT COL ── */}
@@ -1271,11 +1384,11 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                 />
                             </div>
 
-                            {/* All-boards summary table */}
-                            {isMultiScreen && allScreensTotal && (
+                            {/* All-boards summary table (now used for single board too) */}
+                            {allScreensTotal && (
                                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
                                     <div className="px-3 py-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700">
-                                        All Boards — {allScreensTotal.totalScreenQty} pcs
+                                        Project Summary — {allScreensTotal.totalScreenQty} {allScreensTotal.totalScreenQty === 1 ? 'Board' : 'Boards'}
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-[10px]">
@@ -1304,12 +1417,12 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                             <td className="px-2 py-2 font-bold text-slate-800 dark:text-slate-100 leading-tight">
                                                                 {scr?.name || `B${idx + 1}`}
                                                             </td>
-                                                            <td className="px-2 py-2 text-center text-slate-500 dark:text-slate-400">{scr?.width}×{scr?.height}</td>
-                                                            <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-200 font-semibold">{scr?.screenQty}</td>
+                                                            <td className="px-2 py-2 text-center text-slate-500 dark:text-slate-400">{scr?.width || 0}×{scr?.height || 0}</td>
+                                                            <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-200 font-semibold">{scr?.screenQty || 0}</td>
                                                             <td className="px-2 py-2 text-right text-slate-600 dark:text-slate-300">{formatCurrency(calc.totalCostEstimate, 'INR')}</td>
                                                             <td className="px-2 py-2 text-right font-semibold text-pink-600 dark:text-pink-400">{formatCurrency(calc.finalSellPricePerScreen, 'INR')}</td>
-                                                            <td className="px-2 py-2 text-right font-semibold text-green-600 dark:text-green-400">
-                                                                {formatCurrency(marginPerBoard, 'INR')}{' '}
+                                                            <td className="px-2 py-2 text-right font-semibold text-green-600 dark:text-green-400 leading-tight">
+                                                                {formatCurrency(marginPerBoard, 'INR')}<br/>
                                                                 <span className="text-[9px] font-bold">({Math.round(calc.marginPct)}%)</span>
                                                             </td>
                                                         </tr>
@@ -1332,22 +1445,6 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                             <span className="font-black text-slate-800 dark:text-white text-sm">Grand Total</span>
                                             <span className="font-black text-pink-600 dark:text-pink-400 text-sm">{formatCurrency(allScreensTotal.totalProjectSell, 'INR')}</span>
                                         </div>
-                                    </div>
-                                </div>
-                            )}
-
-
-                            {/* Single-board total */}
-                            {!isMultiScreen && calculation && (
-                                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-center border border-slate-200 dark:border-slate-700">
-                                    <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">
-                                        {activeScreen.name} Total Quote{activeScreen.screenQty > 1 ? ` ×${activeScreen.screenQty} boards` : ''}
-                                    </div>
-                                    <div className="text-3xl font-black text-pink-600 dark:text-pink-400">
-                                        {formatCurrency(calculation.finalSellPrice || 0, 'INR')}
-                                    </div>
-                                    <div className="text-xs text-slate-400 mt-1">
-                                        Cost: {formatCurrency(calculation.totalCostEstimate, 'INR')} · <span className="text-green-600 dark:text-green-400 font-semibold">Margin: {Math.round(calculation.marginPct)}%</span>
                                     </div>
                                 </div>
                             )}
