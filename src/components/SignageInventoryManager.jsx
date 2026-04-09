@@ -143,34 +143,83 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
         return `₹${val}`;
     };
 
-    // For non-profiles: returns { pcs, totalLengthM: null, totalCost }
-    // For profiles: returns { pcs, totalLengthM, totalCost } using actual purchase rates
+    // Returns { pcs, totalLengthM, totalSqft, totalCost }
     const getItemBalance = (item) => {
         const txs = transactions.filter(tx => tx.itemId === item.id);
         const pcs = txs.reduce((acc, tx) => acc + (tx.type === 'in' ? Number(tx.qty) : -Number(tx.qty)), 0);
 
-        if (item.type !== 'profile') {
-            return { pcs, totalLengthM: null, totalCost: pcs * getItemRateValue(item) };
+        if (item.type === 'profile') {
+            let totalLengthM = 0, totalCost = 0;
+            txs.forEach(tx => {
+                const sign = tx.type === 'in' ? 1 : -1;
+                const q = Number(tx.qty);
+                const lpp = Number(tx.lengthPerPiece || 0);
+                const unit = tx.lengthUnit || 'ft';
+                if (lpp) {
+                    const lm = q * toMeters(lpp, unit);
+                    totalLengthM += sign * lm;
+                    const rate = Number(tx.purchaseRatePerKg || 0);
+                    const wpm = Number(item.weightPerMeter || 0);
+                    if (rate && wpm) totalCost += sign * lm * wpm * rate;
+                }
+            });
+            return { pcs, totalLengthM, totalSqft: null, totalCost };
         }
 
-        let totalLengthM = 0, totalCost = 0;
-        txs.forEach(tx => {
-            const sign = tx.type === 'in' ? 1 : -1;
-            const q = Number(tx.qty);
-            const lpp = Number(tx.lengthPerPiece || 0);
-            const unit = tx.lengthUnit || 'ft';
-            if (lpp) {
-                const lm = q * toMeters(lpp, unit);
-                totalLengthM += sign * lm;
-                const rate = Number(tx.purchaseRatePerKg || 0);
-                const wpm = Number(item.weightPerMeter || 0);
-                if (rate && wpm) totalCost += sign * lm * wpm * rate;
-            }
-        });
-        return { pcs, totalLengthM, totalCost };
+        if (item.type === 'acp') {
+            let totalSqft = 0, totalCost = 0;
+            txs.forEach(tx => {
+                const sign = tx.type === 'in' ? 1 : -1;
+                const q = Number(tx.qty);
+                const w = Number(tx.widthFt || 0);
+                const h = Number(tx.heightFt || 0);
+                if (w && h) {
+                    const sqft = q * w * h;
+                    totalSqft += sign * sqft;
+                    const rate = Number(tx.purchaseRatePerSqft || 0);
+                    if (rate) totalCost += sign * sqft * rate;
+                }
+            });
+            return { pcs, totalLengthM: null, totalSqft, totalCost };
+        }
+
+        return { pcs, totalLengthM: null, totalSqft: null, totalCost: pcs * getItemRateValue(item) };
     };
 
-    // Per-length stock summary for the expanded profile breakup
+    // Per-size stock summary for the expanded ACP breakup
+    const getAcpStockBreakdown = (item) => {
+        const txs = transactions.filter(tx => tx.itemId === item.id);
+        const map = {};
+        txs.forEach(tx => {
+            const w = Number(tx.widthFt || 0);
+            const h = Number(tx.heightFt || 0);
+            if (!w || !h) return;
+            const key = `${w}_${h}`;
+            if (!map[key]) map[key] = { w, h, pcs: 0, totalInSqft: 0, totalInCost: 0 };
+            const sign = tx.type === 'in' ? 1 : -1;
+            map[key].pcs += sign * Number(tx.qty);
+            if (tx.type === 'in') {
+                const sqft = Number(tx.qty) * w * h;
+                const rate = Number(tx.purchaseRatePerSqft || 0);
+                map[key].totalInSqft += sqft;
+                map[key].totalInCost += sqft * rate;
+            }
+        });
+        return Object.values(map)
+            .filter(l => l.pcs > 0)
+            .map(l => {
+                const sqftEach = l.w * l.h;
+                const totalSqft = l.pcs * sqftEach;
+                const wAvgRate = l.totalInSqft > 0 ? l.totalInCost / l.totalInSqft : 0;
+                const value = totalSqft * wAvgRate;
+                return { w: l.w, h: l.h, pcs: l.pcs, sqftEach, totalSqft, wAvgRate, value };
+            })
+            .sort((a, b) => b.sqftEach - a.sqftEach);
+    };
+
+    const finishLabel = (f) => ({ raw: 'Raw', powder_coated: 'Powder Coated', anodised: 'Anodised' }[f] || f || '');
+
+    // Per-length+finish stock summary for the expanded profile breakup
     const getProfileStockBreakdown = (item) => {
         const txs = transactions.filter(tx => tx.itemId === item.id);
         const map = {};
@@ -178,8 +227,9 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
             const lpp = Number(tx.lengthPerPiece || 0);
             if (!lpp) return;
             const unit = tx.lengthUnit || 'ft';
-            const key = `${lpp}_${unit}`;
-            if (!map[key]) map[key] = { lpp, unit, pcs: 0, totalInKg: 0, totalInCost: 0 };
+            const finish = tx.finish || 'raw';
+            const key = `${lpp}_${unit}_${finish}`;
+            if (!map[key]) map[key] = { lpp, unit, finish, pcs: 0, totalInKg: 0, totalInCost: 0 };
             const sign = tx.type === 'in' ? 1 : -1;
             map[key].pcs += sign * Number(tx.qty);
             if (tx.type === 'in') {
@@ -198,9 +248,9 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                 const totalKg = l.pcs * toMeters(l.lpp, l.unit) * wpm;
                 const wAvgRate = l.totalInKg > 0 ? l.totalInCost / l.totalInKg : 0;
                 const value = totalKg * wAvgRate;
-                return { lpp: l.lpp, unit: l.unit, pcs: l.pcs, wtPerPc, totalLengthNative, totalKg, wAvgRate, value };
+                return { lpp: l.lpp, unit: l.unit, finish: l.finish, pcs: l.pcs, wtPerPc, totalLengthNative, totalKg, wAvgRate, value };
             })
-            .sort((a, b) => a.lpp - b.lpp);
+            .sort((a, b) => a.lpp - b.lpp || a.finish.localeCompare(b.finish));
     };
 
     return (
@@ -363,19 +413,22 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                             {filteredItems.map(item => {
                                 const bal = getItemBalance(item);
                                 const isProfile = item.type === 'profile';
+                                const isAcp = item.type === 'acp';
+                                const isExpandable = isProfile || isAcp;
                                 const isExpanded = expandedItems.has(item.id);
                                 const profileBreakdown = isProfile && isExpanded ? getProfileStockBreakdown(item) : null;
+                                const acpBreakdown = isAcp && isExpanded ? getAcpStockBreakdown(item) : null;
                                 const colCount = readOnly ? 6 : 7;
 
                                 return (
                                     <React.Fragment key={item.id}>
                                         <tr
-                                            className={`transition-colors ${isProfile ? 'cursor-pointer' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isExpanded ? 'bg-indigo-50/40 dark:bg-indigo-900/10' : ''}`}
-                                            onClick={isProfile ? () => toggleExpand(item.id) : undefined}
+                                            className={`transition-colors ${isExpandable ? 'cursor-pointer' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isExpanded ? 'bg-indigo-50/40 dark:bg-indigo-900/10' : ''}`}
+                                            onClick={isExpandable ? () => toggleExpand(item.id) : undefined}
                                         >
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <div className="flex items-center gap-1.5">
-                                                    {isProfile && (
+                                                    {isExpandable && (
                                                         <span className="text-slate-400 dark:text-slate-500">
                                                             {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                                         </span>
@@ -407,9 +460,14 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                                         )}
                                                     </div>
                                                 )}
+                                                {isAcp && bal.totalSqft > 0 && (
+                                                    <div className="text-[11px] text-emerald-500 dark:text-emerald-400 font-medium leading-tight mt-0.5">
+                                                        {bal.totalSqft.toFixed(1)} sqft
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-[13px] font-extrabold text-slate-900 dark:text-white text-right whitespace-nowrap">
-                                                {isProfile
+                                                {(isProfile || isAcp)
                                                     ? (bal.totalCost > 0 ? formatCurrency(bal.totalCost, 'INR') : <span className="text-slate-400 font-normal text-[12px]">No rate data</span>)
                                                     : formatCurrency(bal.totalCost, 'INR')
                                                 }
@@ -424,6 +482,49 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                             )}
                                         </tr>
 
+                                        {/* Collapsible stock breakup for ACP */}
+                                        {isAcp && isExpanded && (
+                                            <tr>
+                                                <td colSpan={colCount} className="p-0 bg-emerald-50/60 dark:bg-emerald-900/10 border-b border-emerald-100 dark:border-emerald-800/40">
+                                                    <div className="px-6 py-3">
+                                                        {!acpBreakdown || acpBreakdown.length === 0 ? (
+                                                            <p className="text-[12px] text-slate-400 italic">No size-tracked stock available.</p>
+                                                        ) : (
+                                                            <table className="w-full border-collapse text-[12px]">
+                                                                <thead>
+                                                                    <tr className="border-b border-emerald-200/60 dark:border-emerald-700/40">
+                                                                        <th className="pb-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-emerald-500">Sheet Size (sqft each)</th>
+                                                                        <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-emerald-500">Pcs</th>
+                                                                        <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-emerald-500">Total Sqft</th>
+                                                                        <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-emerald-500">Wtd Avg Rate</th>
+                                                                        <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-emerald-500">Value</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {acpBreakdown.map(row => (
+                                                                        <tr key={`${row.w}_${row.h}`} className="border-b border-emerald-100/40 dark:border-emerald-800/20 last:border-0">
+                                                                            <td className="py-1.5 text-slate-700 dark:text-slate-300 font-medium tabular-nums">
+                                                                                {row.w}×{row.h} ft
+                                                                                <span className="ml-1.5 text-[10px] text-slate-400">({row.sqftEach.toFixed(0)} sqft/pc)</span>
+                                                                            </td>
+                                                                            <td className="py-1.5 text-right font-bold tabular-nums text-slate-800 dark:text-white">{row.pcs}</td>
+                                                                            <td className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{row.totalSqft.toFixed(1)} sqft</td>
+                                                                            <td className="py-1.5 text-right text-emerald-600 dark:text-emerald-400 tabular-nums font-medium">
+                                                                                {row.wAvgRate > 0 ? `₹${row.wAvgRate.toLocaleString('en-IN', { maximumFractionDigits: 0 })}/sqft` : '—'}
+                                                                            </td>
+                                                                            <td className="py-1.5 text-right font-extrabold tabular-nums text-slate-900 dark:text-white">
+                                                                                {row.value > 0 ? formatCurrency(row.value, 'INR') : '—'}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+
                                         {/* Collapsible stock breakup for profiles */}
                                         {isProfile && isExpanded && (
                                             <tr>
@@ -436,6 +537,7 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                                                 <thead>
                                                                     <tr className="border-b border-indigo-200/60 dark:border-indigo-700/40">
                                                                         <th className="pb-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-indigo-400">Length each (Wt)</th>
+                                                                        <th className="pb-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-indigo-400">Finish</th>
                                                                         <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-indigo-400">Pcs</th>
                                                                         <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-indigo-400">Total Length (Total Wt)</th>
                                                                         <th className="pb-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-indigo-400">Wtd Avg Rate</th>
@@ -444,12 +546,15 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                                                 </thead>
                                                                 <tbody>
                                                                     {profileBreakdown.map(row => (
-                                                                        <tr key={`${row.lpp}_${row.unit}`} className="border-b border-indigo-100/40 dark:border-indigo-800/20 last:border-0">
+                                                                        <tr key={`${row.lpp}_${row.unit}_${row.finish}`} className="border-b border-indigo-100/40 dark:border-indigo-800/20 last:border-0">
                                                                             <td className="py-1.5 text-slate-700 dark:text-slate-300 font-medium tabular-nums">
                                                                                 {row.lpp} {row.unit}
                                                                                 {row.wtPerPc > 0 && (
                                                                                     <span className="ml-1.5 text-[10px] text-slate-400">({row.wtPerPc.toFixed(3)} kg/pc)</span>
                                                                                 )}
+                                                                            </td>
+                                                                            <td className="py-1.5 text-slate-600 dark:text-slate-300 text-[11px]">
+                                                                                {finishLabel(row.finish)}
                                                                             </td>
                                                                             <td className="py-1.5 text-right font-bold tabular-nums text-slate-800 dark:text-white">
                                                                                 {row.pcs}

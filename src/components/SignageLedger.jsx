@@ -3,6 +3,8 @@ import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-re
 import { db, appId } from '../lib/firebase';
 import { formatCurrency } from '../lib/utils';
 
+const finishLabel = (f) => ({ raw: 'Raw', powder_coated: 'Powder Coated', anodised: 'Anodised' }[f] || f || '');
+
 const toMeters = (length, unit) => {
     if (unit === 'm') return length;
     if (unit === 'ft') return length * 0.3048;
@@ -13,7 +15,8 @@ const toMeters = (length, unit) => {
 const emptyTx = () => ({
     date: new Date().toISOString().split('T')[0],
     type: 'in', itemId: '', qty: '', remarks: '',
-    lengthPerPiece: '', lengthUnit: 'ft', purchaseRatePerKg: ''
+    lengthPerPiece: '', lengthUnit: 'ft', finish: '', purchaseRatePerKg: '',
+    widthFt: '', heightFt: '', purchaseRatePerSqft: ''
 });
 
 const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOnly = false }) => {
@@ -27,19 +30,25 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
 
     const selectedItem = signageInventory.find(i => i.id === newTx.itemId);
     const isProfileSelected = selectedItem?.type === 'profile';
+    const isAcpSelected = selectedItem?.type === 'acp';
 
     const buildTxData = (tx) => {
         const item = signageInventory.find(i => i.id === tx.itemId);
         const isProfile = item?.type === 'profile';
+        const isAcp = item?.type === 'acp';
         const data = { ...tx, qty: Number(tx.qty) };
+        // Clean all dimension fields first
+        delete data.lengthPerPiece; delete data.lengthUnit; delete data.purchaseRatePerKg;
+        delete data.widthFt; delete data.heightFt; delete data.purchaseRatePerSqft;
         if (isProfile && Number(tx.lengthPerPiece) > 0) {
             data.lengthPerPiece = Number(tx.lengthPerPiece);
             data.lengthUnit = tx.lengthUnit || 'ft';
+            data.finish = tx.finish || 'raw';
             data.purchaseRatePerKg = tx.type === 'in' ? Number(tx.purchaseRatePerKg || 0) : 0;
-        } else {
-            delete data.lengthPerPiece;
-            delete data.lengthUnit;
-            delete data.purchaseRatePerKg;
+        } else if (isAcp && Number(tx.widthFt) > 0 && Number(tx.heightFt) > 0) {
+            data.widthFt = Number(tx.widthFt);
+            data.heightFt = Number(tx.heightFt);
+            data.purchaseRatePerSqft = tx.type === 'in' ? Number(tx.purchaseRatePerSqft || 0) : 0;
         }
         return data;
     };
@@ -47,6 +56,8 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
     const handleAddTx = async () => {
         if (!newTx.itemId || !newTx.qty) return alert('Select Item and Qty');
         if (isProfileSelected && !newTx.lengthPerPiece) return alert('Length per piece is required for profiles');
+        if (isProfileSelected && !newTx.finish) return alert('Finish is required for profiles');
+        if (isAcpSelected && (!newTx.widthFt || !newTx.heightFt)) return alert('Width and Height are required for ACP sheets');
         try {
             const txData = buildTxData(newTx);
             if (editingId) {
@@ -67,7 +78,11 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
             qty: tx.qty,
             lengthPerPiece: tx.lengthPerPiece ?? '',
             lengthUnit: tx.lengthUnit ?? 'ft',
+            finish: tx.finish ?? '',
             purchaseRatePerKg: tx.purchaseRatePerKg ?? '',
+            widthFt: tx.widthFt ?? '',
+            heightFt: tx.heightFt ?? '',
+            purchaseRatePerSqft: tx.purchaseRatePerSqft ?? '',
         });
         setEditingId(tx.id);
         setShowForm(true);
@@ -106,7 +121,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
             .filter(tx => tx.itemId === itemId && tx.id !== editingId)
             .reduce((acc, tx) => acc + (tx.type === 'in' ? Number(tx.qty) : -Number(tx.qty)), 0);
 
-    // For profiles: distinct lengths still in stock, excluding the tx being edited
+    // For profiles: distinct length+finish combos still in stock, excluding the tx being edited
     const getProfileAvailableLengths = (itemId) => {
         const txs = signageTransactions.filter(tx => tx.itemId === itemId && tx.id !== editingId);
         const map = {};
@@ -114,11 +129,29 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
             const lpp = Number(tx.lengthPerPiece || 0);
             if (!lpp) return;
             const unit = tx.lengthUnit || 'ft';
-            const key = `${lpp}_${unit}`;
-            if (!map[key]) map[key] = { lpp, unit, qty: 0 };
+            const finish = tx.finish || 'raw';
+            const key = `${lpp}_${unit}_${finish}`;
+            if (!map[key]) map[key] = { lpp, unit, finish, qty: 0 };
             map[key].qty += tx.type === 'in' ? Number(tx.qty) : -Number(tx.qty);
         });
-        return Object.values(map).filter(l => l.qty > 0).sort((a, b) => a.lpp - b.lpp);
+        return Object.values(map)
+            .filter(l => l.qty > 0)
+            .sort((a, b) => a.lpp - b.lpp || a.finish.localeCompare(b.finish));
+    };
+
+    // For ACP: distinct W×H sizes still in stock, excluding the tx being edited
+    const getAcpAvailableSizes = (itemId) => {
+        const txs = signageTransactions.filter(tx => tx.itemId === itemId && tx.id !== editingId);
+        const map = {};
+        txs.forEach(tx => {
+            const w = Number(tx.widthFt || 0);
+            const h = Number(tx.heightFt || 0);
+            if (!w || !h) return;
+            const key = `${w}_${h}`;
+            if (!map[key]) map[key] = { w, h, qty: 0 };
+            map[key].qty += tx.type === 'in' ? Number(tx.qty) : -Number(tx.qty);
+        });
+        return Object.values(map).filter(s => s.qty > 0).sort((a, b) => (b.w * b.h) - (a.w * a.h));
     };
 
     // Returns enriched profile data if the tx has length info, otherwise null
@@ -133,6 +166,17 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
         const rate = Number(tx.purchaseRatePerKg || 0);
         const value = kg * rate;
         return { lpp, unit, totalLength, totalLengthM, kg, value };
+    };
+
+    const enrichAcpTx = (tx, item) => {
+        const w = Number(tx.widthFt || 0);
+        const h = Number(tx.heightFt || 0);
+        if (!w || !h || item?.type !== 'acp') return null;
+        const sqftEach = w * h;
+        const totalSqft = Number(tx.qty) * sqftEach;
+        const rate = Number(tx.purchaseRatePerSqft || 0);
+        const value = totalSqft * rate;
+        return { w, h, sqftEach, totalSqft, rate, value };
     };
 
     const sortedTx = [...signageTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -169,14 +213,20 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
     // Stock-cap helpers (only relevant when form is open)
     const currentStock = newTx.itemId ? getStockBalance(newTx.itemId) : null;
     const availableLengths = (isProfileSelected && newTx.type === 'out' && newTx.itemId)
-        ? getProfileAvailableLengths(newTx.itemId)
-        : [];
+        ? getProfileAvailableLengths(newTx.itemId) : [];
     const selectedLengthStock = availableLengths.find(
-        l => l.lpp === Number(newTx.lengthPerPiece) && l.unit === newTx.lengthUnit
+        l => l.lpp === Number(newTx.lengthPerPiece) && l.unit === newTx.lengthUnit && l.finish === newTx.finish
+    );
+    const acpAvailableSizes = (isAcpSelected && newTx.type === 'out' && newTx.itemId)
+        ? getAcpAvailableSizes(newTx.itemId) : [];
+    const selectedSizeStock = acpAvailableSizes.find(
+        s => s.w === Number(newTx.widthFt) && s.h === Number(newTx.heightFt)
     );
     const maxQty = newTx.type === 'out'
         ? (isProfileSelected && newTx.lengthPerPiece
             ? (selectedLengthStock?.qty ?? 0)
+            : isAcpSelected && newTx.widthFt && newTx.heightFt
+            ? (selectedSizeStock?.qty ?? 0)
             : (currentStock ?? 0))
         : null;
 
@@ -268,8 +318,13 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                             const updates = { type: 'out' };
                                             if (isProfileSelected && newTx.lengthPerPiece) {
                                                 const avail = getProfileAvailableLengths(newTx.itemId);
-                                                const found = avail.find(l => l.lpp === Number(newTx.lengthPerPiece) && l.unit === newTx.lengthUnit);
-                                                if (!found) { updates.lengthPerPiece = ''; updates.qty = ''; }
+                                                const found = avail.find(l => l.lpp === Number(newTx.lengthPerPiece) && l.unit === newTx.lengthUnit && l.finish === newTx.finish);
+                                                if (!found) { updates.lengthPerPiece = ''; updates.finish = ''; updates.qty = ''; }
+                                                else if (newTx.qty && Number(newTx.qty) > found.qty) updates.qty = String(found.qty);
+                                            } else if (isAcpSelected && newTx.widthFt && newTx.heightFt) {
+                                                const avail = getAcpAvailableSizes(newTx.itemId);
+                                                const found = avail.find(s => s.w === Number(newTx.widthFt) && s.h === Number(newTx.heightFt));
+                                                if (!found) { updates.widthFt = ''; updates.heightFt = ''; updates.qty = ''; }
                                                 else if (newTx.qty && Number(newTx.qty) > found.qty) updates.qty = String(found.qty);
                                             } else if (newTx.qty && Number(newTx.qty) > balance) {
                                                 updates.qty = String(balance);
@@ -285,7 +340,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                             <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Component</label>
                             <select value={newTx.itemId} onChange={e => {
                                 const newId = e.target.value;
-                                const updates = { itemId: newId, lengthPerPiece: '', lengthUnit: 'ft' };
+                                const updates = { itemId: newId, lengthPerPiece: '', lengthUnit: 'ft', finish: '', widthFt: '', heightFt: '' };
                                 if (newTx.type === 'out' && newId && newTx.qty) {
                                     const bal = getStockBalance(newId);
                                     if (Number(newTx.qty) > bal) updates.qty = String(bal);
@@ -343,26 +398,26 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                             <p className="text-[11px] text-red-400 italic py-1.5">No length data in stock</p>
                                         ) : (
                                             <select
-                                                value={newTx.lengthPerPiece !== '' ? `${newTx.lengthPerPiece}_${newTx.lengthUnit}` : ''}
+                                                value={newTx.lengthPerPiece !== '' ? `${newTx.lengthPerPiece}_${newTx.lengthUnit}_${newTx.finish}` : ''}
                                                 onChange={e => {
                                                     if (!e.target.value) {
-                                                        setNewTx({ ...newTx, lengthPerPiece: '', lengthUnit: 'ft' });
+                                                        setNewTx({ ...newTx, lengthPerPiece: '', lengthUnit: 'ft', finish: '' });
                                                         return;
                                                     }
-                                                    const found = availableLengths.find(l => `${l.lpp}_${l.unit}` === e.target.value);
+                                                    const found = availableLengths.find(l => `${l.lpp}_${l.unit}_${l.finish}` === e.target.value);
                                                     if (found) {
                                                         const clampedQty = newTx.qty
                                                             ? String(Math.min(Number(newTx.qty), found.qty))
                                                             : '';
-                                                        setNewTx({ ...newTx, lengthPerPiece: found.lpp, lengthUnit: found.unit, qty: clampedQty });
+                                                        setNewTx({ ...newTx, lengthPerPiece: found.lpp, lengthUnit: found.unit, finish: found.finish, qty: clampedQty });
                                                     }
                                                 }}
                                                 className={inputCls + " w-full"}
                                             >
                                                 <option value="">Select length…</option>
                                                 {availableLengths.map(l => (
-                                                    <option key={`${l.lpp}_${l.unit}`} value={`${l.lpp}_${l.unit}`}>
-                                                        {l.lpp} {l.unit} — {l.qty} pcs available
+                                                    <option key={`${l.lpp}_${l.unit}_${l.finish}`} value={`${l.lpp}_${l.unit}_${l.finish}`}>
+                                                        {l.lpp} {l.unit} · {finishLabel(l.finish)} — {l.qty} pcs available
                                                     </option>
                                                 ))}
                                             </select>
@@ -409,6 +464,25 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                     </>
                                 )}
                             </div>
+                            {/* Finish — only for IN (OUT gets finish from the length+finish dropdown) */}
+                            {newTx.type === 'in' && (
+                                <div className="mt-2">
+                                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                        Finish <span className="text-red-400">*</span>
+                                    </label>
+                                    <select
+                                        value={newTx.finish}
+                                        onChange={e => setNewTx({ ...newTx, finish: e.target.value })}
+                                        className={inputCls + " w-full" + (!newTx.finish ? " border-red-300 dark:border-red-600" : "")}
+                                    >
+                                        <option value="">Select finish…</option>
+                                        <option value="raw">Raw</option>
+                                        <option value="powder_coated">Powder Coated</option>
+                                        <option value="anodised">Anodised</option>
+                                    </select>
+                                </div>
+                            )}
+
                             {/* Live preview */}
                             {newTx.qty && newTx.lengthPerPiece && (
                                 <div className="mt-2 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
@@ -434,6 +508,94 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                         </div>
                     )}
 
+                    {/* ACP-specific fields */}
+                    {isAcpSelected && (
+                        <div className="mt-1 mb-3 p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700">
+                            <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-2 tracking-wider">ACP Sheet Size</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                {newTx.type === 'out' ? (
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Sheet Size in Stock</label>
+                                        {acpAvailableSizes.length === 0 ? (
+                                            <p className="text-[11px] text-red-400 italic py-1.5">No size data in stock</p>
+                                        ) : (
+                                            <select
+                                                value={newTx.widthFt && newTx.heightFt ? `${newTx.widthFt}_${newTx.heightFt}` : ''}
+                                                onChange={e => {
+                                                    if (!e.target.value) { setNewTx({ ...newTx, widthFt: '', heightFt: '' }); return; }
+                                                    const found = acpAvailableSizes.find(s => `${s.w}_${s.h}` === e.target.value);
+                                                    if (found) {
+                                                        const clampedQty = newTx.qty ? String(Math.min(Number(newTx.qty), found.qty)) : '';
+                                                        setNewTx({ ...newTx, widthFt: found.w, heightFt: found.h, qty: clampedQty });
+                                                    }
+                                                }}
+                                                className={inputCls + " w-full"}
+                                            >
+                                                <option value="">Select size…</option>
+                                                {acpAvailableSizes.map(s => (
+                                                    <option key={`${s.w}_${s.h}`} value={`${s.w}_${s.h}`}>
+                                                        {s.w}×{s.h} ft ({(s.w * s.h).toFixed(0)} sqft) — {s.qty} pcs
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                                Width (ft) <span className="text-red-400">*</span>
+                                            </label>
+                                            <input
+                                                type="number" placeholder="e.g. 10"
+                                                value={newTx.widthFt}
+                                                onChange={e => setNewTx({ ...newTx, widthFt: e.target.value })}
+                                                className={inputCls + " w-full" + (!newTx.widthFt ? " border-red-300 dark:border-red-600" : "")}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                                Height (ft) <span className="text-red-400">*</span>
+                                            </label>
+                                            <input
+                                                type="number" placeholder="e.g. 5"
+                                                value={newTx.heightFt}
+                                                onChange={e => setNewTx({ ...newTx, heightFt: e.target.value })}
+                                                className={inputCls + " w-full" + (!newTx.heightFt ? " border-red-300 dark:border-red-600" : "")}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Purchase Rate (₹/sqft)</label>
+                                            <input
+                                                type="number" placeholder="₹ per sqft"
+                                                value={newTx.purchaseRatePerSqft}
+                                                onChange={e => setNewTx({ ...newTx, purchaseRatePerSqft: e.target.value })}
+                                                className={inputCls + " w-full"}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            {newTx.qty && newTx.widthFt && newTx.heightFt && (
+                                <div className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                    {(() => {
+                                        const q = Number(newTx.qty);
+                                        const sqftEach = Number(newTx.widthFt) * Number(newTx.heightFt);
+                                        const totalSqft = q * sqftEach;
+                                        const rate = Number(newTx.purchaseRatePerSqft || 0);
+                                        const val = totalSqft * rate;
+                                        return (
+                                            <span>
+                                                {q} pcs × {newTx.widthFt}×{newTx.heightFt}ft = <strong>{totalSqft.toFixed(1)} sqft</strong>
+                                                {val > 0 && <> → <strong>{formatCurrency(val, 'INR')}</strong></>}
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <button onClick={handleAddTx} className={`w-full md:w-auto text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm ${editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-800 dark:bg-slate-600 hover:bg-slate-900 dark:hover:bg-slate-500'}`}>
                         {editingId ? 'Update Transaction' : 'Add Transaction'}
                     </button>
@@ -447,6 +609,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                     {filteredTx.map(tx => {
                         const item = signageInventory.find(i => i.id === tx.itemId) || {};
                         const enriched = enrichProfileTx(tx, item);
+                        const enrichedAcp = enrichAcpTx(tx, item);
                         return (
                             <div key={tx.id} className={`bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between ${editingId === tx.id ? 'ring-2 ring-amber-300' : ''}`}>
                                 <div className="flex-1 min-w-0">
@@ -462,7 +625,14 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                     {enriched && (
                                         <div className="text-[10px] text-indigo-500 dark:text-indigo-400 font-medium mt-0.5">
                                             {tx.qty}×{enriched.lpp}{enriched.unit} = {enriched.totalLength.toFixed(1)}{enriched.unit} · {enriched.kg.toFixed(2)}kg
+                                            {tx.finish && ` · ${finishLabel(tx.finish)}`}
                                             {enriched.value > 0 && ` · ₹${Number(tx.purchaseRatePerKg).toLocaleString('en-IN')}/kg`}
+                                        </div>
+                                    )}
+                                    {enrichedAcp && (
+                                        <div className="text-[10px] text-emerald-500 dark:text-emerald-400 font-medium mt-0.5">
+                                            {tx.qty}×{enrichedAcp.w}×{enrichedAcp.h}ft = {enrichedAcp.totalSqft.toFixed(1)} sqft
+                                            {enrichedAcp.value > 0 && ` · ₹${Number(tx.purchaseRatePerSqft).toLocaleString('en-IN')}/sqft`}
                                         </div>
                                     )}
                                     {tx.remarks && <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{tx.remarks}</div>}
@@ -509,6 +679,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                     const item = signageInventory.find(i => i.id === tx.itemId) || {};
                                     const subSpec = getItemSubSpec(item);
                                     const enriched = enrichProfileTx(tx, item);
+                                    const enrichedAcp = enrichAcpTx(tx, item);
                                     return (
                                         <tr key={tx.id} className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60 ${editingId === tx.id ? 'bg-amber-50/60 dark:bg-amber-900/20' : ''}`}>
                                             {/* Date */}
@@ -553,12 +724,20 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                                 </span>
                                                 {enriched && (
                                                     <div className="text-[10px] text-indigo-500 dark:text-indigo-400 font-medium leading-tight mt-0.5">
-                                                        <span>{tx.qty}×{enriched.lpp}{enriched.unit} = {enriched.totalLength.toFixed(1)}{enriched.unit}</span>
+                                                        <span>{tx.qty}×{enriched.lpp}{enriched.unit} = {enriched.totalLength.toFixed(1)}{enriched.unit}{tx.finish && ` · ${finishLabel(tx.finish)}`}</span>
                                                         {enriched.kg > 0 && (
                                                             <span className="block">
                                                                 {enriched.kg.toFixed(2)} kg
                                                                 {enriched.value > 0 && ` · ₹${Number(tx.purchaseRatePerKg).toLocaleString('en-IN')}/kg`}
                                                             </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {enrichedAcp && (
+                                                    <div className="text-[10px] text-emerald-500 dark:text-emerald-400 font-medium leading-tight mt-0.5">
+                                                        <span>{tx.qty}×{enrichedAcp.w}×{enrichedAcp.h}ft = {enrichedAcp.totalSqft.toFixed(1)} sqft</span>
+                                                        {enrichedAcp.value > 0 && (
+                                                            <span className="block">₹{Number(tx.purchaseRatePerSqft).toLocaleString('en-IN')}/sqft</span>
                                                         )}
                                                     </div>
                                                 )}
