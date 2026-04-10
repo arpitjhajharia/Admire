@@ -24,34 +24,88 @@ const calculateSignageBOM = (screen, inventory) => {
         if (overrides[id]?.qty !== undefined && overrides[id]?.qty !== '') return Number(overrides[id]?.qty);
         return calculatedQty;
     };
+    const getRate = (id, calculatedRate) => {
+        if (overrides[id]?.rate !== undefined && overrides[id]?.rate !== '') return Number(overrides[id]?.rate);
+        return calculatedRate;
+    };
 
     // A. Profiles
+    const fmtDim = (mm) => {
+        if (screen.unit === 'ft') return `${(mm / 304.8).toFixed(1)}'`;
+        if (screen.unit === 'm') return `${(mm / 1000).toFixed(2)} m`;
+        return `${Math.round(mm)} mm`;
+    };
     (Array.isArray(screen.profiles) ? screen.profiles : []).forEach(p => {
         const profItem = inventory.find(i => i.id === p.profileId);
         if (!profItem) return;
-        const calcLengthM = (Number(p.wMult) * visualWidthMm + Number(p.hMult) * visualHeightMm) / 1000;
-        const lengthM = getQty(`profile-${p.id}`, calcLengthM);
-        if (lengthM <= 0) return;
-        const rate = Number(profItem.weightPerMeter) * Number(profItem.ratePerKg);
-        const cost = lengthM * rate;
-        totalMaterialCost += cost;
-        bom.push({
-            id: `profile-${p.id}`,
-            category: 'Profile',
-            name: `${profItem.brand} ${profItem.model}`,
-            specs: `W×${p.wMult} + H×${p.hMult}`,
-            qty: lengthM,
-            uom: 'm',
-            rate,
-            cost,
-            isOverridden: overrides[`profile-${p.id}`]?.qty !== undefined
-        });
+        const ratePerKg = getRate(`profile-${p.id}`, Number(profItem.ratePerKg));
+        const wt = Number(profItem.weightPerMeter);
+
+        const dimSame = visualWidthMm > 0 && visualHeightMm > 0 && visualWidthMm === visualHeightMm;
+
+        if (dimSame && (Number(p.wMult) > 0 || Number(p.hMult) > 0)) {
+            const totalMult = Number(p.wMult) + Number(p.hMult);
+            const pcs = getQty(`profile-${p.id}-wh`, totalMult);
+            const lengthM = pcs * visualWidthMm / 1000;
+            const cost = lengthM * wt * ratePerKg;
+            totalMaterialCost += cost;
+            bom.push({
+                id: `profile-${p.id}-wh`, rateId: `profile-${p.id}`,
+                category: 'Profile',
+                name: `${profItem.brand} ${profItem.model}`,
+                specs: fmtDim(visualWidthMm),
+                qty: pcs, uom: 'nos',
+                lengthEachMm: visualWidthMm,
+                rate: ratePerKg, rateUom: 'kg',
+                cost,
+                isOverridden: overrides[`profile-${p.id}-wh`]?.qty !== undefined,
+                isRateOverridden: overrides[`profile-${p.id}`]?.rate !== undefined
+            });
+        } else {
+            if (Number(p.wMult) > 0 && visualWidthMm > 0) {
+                const pcs = getQty(`profile-${p.id}-w`, Number(p.wMult));
+                const lengthM = pcs * visualWidthMm / 1000;
+                const cost = lengthM * wt * ratePerKg;
+                totalMaterialCost += cost;
+                bom.push({
+                    id: `profile-${p.id}-w`, rateId: `profile-${p.id}`,
+                    category: 'Profile',
+                    name: `${profItem.brand} ${profItem.model}`,
+                    specs: fmtDim(visualWidthMm),
+                    qty: pcs, uom: 'nos',
+                    lengthEachMm: visualWidthMm,
+                    rate: ratePerKg, rateUom: 'kg',
+                    cost,
+                    isOverridden: overrides[`profile-${p.id}-w`]?.qty !== undefined,
+                    isRateOverridden: overrides[`profile-${p.id}`]?.rate !== undefined
+                });
+            }
+
+            if (Number(p.hMult) > 0 && visualHeightMm > 0) {
+                const pcs = getQty(`profile-${p.id}-h`, Number(p.hMult));
+                const lengthM = pcs * visualHeightMm / 1000;
+                const cost = lengthM * wt * ratePerKg;
+                totalMaterialCost += cost;
+                bom.push({
+                    id: `profile-${p.id}-h`, rateId: `profile-${p.id}`,
+                    category: 'Profile',
+                    name: `${profItem.brand} ${profItem.model}`,
+                    specs: fmtDim(visualHeightMm),
+                    qty: pcs, uom: 'nos',
+                    lengthEachMm: visualHeightMm,
+                    rate: ratePerKg, rateUom: 'kg',
+                    cost,
+                    isOverridden: overrides[`profile-${p.id}-h`]?.qty !== undefined,
+                    isRateOverridden: overrides[`profile-${p.id}`]?.rate !== undefined
+                });
+            }
+        }
     });
 
     // B. ACP Backing
     const acpSheet = inventory.find(i => i.id === screen.acpId);
     if (acpSheet) {
-        const rate = Number(acpSheet.ratePerSqft);
+        const rate = getRate('backing', Number(acpSheet.ratePerSqft));
         const qty = getQty('backing', visualAreaSqFt);
         const cost = qty * rate;
         totalMaterialCost += cost;
@@ -64,7 +118,8 @@ const calculateSignageBOM = (screen, inventory) => {
             uom: 'Sq.Ft',
             rate,
             cost,
-            isOverridden: overrides['backing']?.qty !== undefined
+            isOverridden: overrides['backing']?.qty !== undefined,
+            isRateOverridden: overrides['backing']?.rate !== undefined
         });
     }
 
@@ -82,7 +137,7 @@ const calculateSignageBOM = (screen, inventory) => {
         }
         const qty = getQty('led', calcQty);
         ledWattage = qty * ledItem.wattagePerUnit;
-        const rate = Number(ledItem.price);
+        const rate = getRate('led', Number(ledItem.price));
         const cost = qty * rate;
         totalMaterialCost += cost;
         bom.push({
@@ -94,7 +149,8 @@ const calculateSignageBOM = (screen, inventory) => {
             uom: screen.led.type === 'Module' ? 'Pcs' : 'Lines',
             rate,
             cost,
-            isOverridden: overrides['led']?.qty !== undefined
+            isOverridden: overrides['led']?.qty !== undefined,
+            isRateOverridden: overrides['led']?.rate !== undefined
         });
     }
 
@@ -146,7 +202,8 @@ const calculateSignageBOM = (screen, inventory) => {
         smpsMix.forEach((s, idx) => {
             const comboId = `smps-${s.id}`;
             const qty = getQty(comboId, s.count);
-            const cost = qty * s.price;
+            const smpsRate = getRate(comboId, s.price);
+            const cost = qty * smpsRate;
             totalMaterialCost += cost;
             bom.push({
                 id: comboId,
@@ -155,9 +212,10 @@ const calculateSignageBOM = (screen, inventory) => {
                 specs: `${s.brand} ${s.capacity}W ${s.environment}`,
                 qty,
                 uom: 'Pcs',
-                rate: s.price,
+                rate: smpsRate,
                 cost,
-                isOverridden: overrides[comboId]?.qty !== undefined
+                isOverridden: overrides[comboId]?.qty !== undefined,
+                isRateOverridden: overrides[comboId]?.rate !== undefined
             });
         });
     }
@@ -166,7 +224,7 @@ const calculateSignageBOM = (screen, inventory) => {
     (screen.hardware || []).forEach(hw => {
         const item = inventory.find(i => i.id === hw.hardwareId);
         if (item) {
-            const rate = Number(item.price);
+            const rate = getRate(`hw-${hw.id}`, Number(item.price));
             const qty = getQty(`hw-${hw.id}`, Number(hw.qty));
             const cost = qty * rate;
             totalMaterialCost += cost;
@@ -179,7 +237,8 @@ const calculateSignageBOM = (screen, inventory) => {
                 uom: item.uom,
                 rate,
                 cost,
-                isOverridden: overrides[`hw-${hw.id}`]?.qty !== undefined
+                isOverridden: overrides[`hw-${hw.id}`]?.qty !== undefined,
+                isRateOverridden: overrides[`hw-${hw.id}`]?.rate !== undefined
             });
         }
     });
@@ -496,8 +555,30 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
     const updateOverride = (id, val) => {
         const scr = state.screens[state.activeScreenIndex];
         const newOverrides = { ...(scr.overrides || {}) };
-        if (val === '' || val === null) delete newOverrides[id];
-        else newOverrides[id] = { qty: val };
+        if (val === '' || val === null) {
+            if (newOverrides[id]) {
+                const { qty: _q, ...rest } = newOverrides[id];
+                if (Object.keys(rest).length === 0) delete newOverrides[id];
+                else newOverrides[id] = rest;
+            }
+        } else {
+            newOverrides[id] = { ...(newOverrides[id] || {}), qty: val };
+        }
+        updateScreenProp(state.activeScreenIndex, 'overrides', newOverrides);
+    };
+
+    const updateRateOverride = (id, val) => {
+        const scr = state.screens[state.activeScreenIndex];
+        const newOverrides = { ...(scr.overrides || {}) };
+        if (val === '' || val === null) {
+            if (newOverrides[id]) {
+                const { rate: _r, ...rest } = newOverrides[id];
+                if (Object.keys(rest).length === 0) delete newOverrides[id];
+                else newOverrides[id] = rest;
+            }
+        } else {
+            newOverrides[id] = { ...(newOverrides[id] || {}), rate: val };
+        }
         updateScreenProp(state.activeScreenIndex, 'overrides', newOverrides);
     };
 
@@ -721,9 +802,15 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                         );
                         updateScreenProp(state.activeScreenIndex, 'otherCosts', updated);
                     };
+                    const updateOtherCostFields = (ocIdx, updates) => {
+                        const updated = (activeScreen.otherCosts || []).map((oc, i) =>
+                            i === ocIdx ? { ...oc, ...updates } : oc
+                        );
+                        updateScreenProp(state.activeScreenIndex, 'otherCosts', updated);
+                    };
                     const addOtherCost = () => updateScreenProp(
                         state.activeScreenIndex, 'otherCosts',
-                        [...(activeScreen.otherCosts || []), { id: generateId(), name: '', rate: 0, qtyType: 'Per Board', qty: 1 }]
+                        [...(activeScreen.otherCosts || []), { id: generateId(), hardwareId: '', name: '', rate: 0, qtyType: 'Per Board', qty: 1 }]
                     );
                     const removeOtherCost = (ocIdx) => updateScreenProp(
                         state.activeScreenIndex, 'otherCosts',
@@ -742,28 +829,62 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                         : dash;
                     const fmtQ = (v, uom) => v != null ? `${typeof v === 'number' ? v.toFixed(2) : v} ${uom}` : dash;
                     const fmtA = v => v != null ? formatCurrency(v, 'INR', false, true) : dash;
+                    const fmtLen = (mm) => {
+                        if (state.unit === 'ft') return `${(mm / 304.8).toFixed(1)}'`;
+                        if (state.unit === 'm')  return `${(mm / 1000).toFixed(2)} m`;
+                        return `${Math.round(mm)} mm`;
+                    };
 
-                    const renderDataRow = (id, componentCell, bomRow, overrideAmt, allowOverride = true) => {
-                        const rate = bomRow?.rate;
-                        const qty  = bomRow?.qty;
-                        const uom  = bomRow?.uom ?? '';
-                        const amt  = overrideAmt ?? bomRow?.cost;
-                        const isOv = bomRow?.isOverridden;
+                    const renderDataRow = (id, componentCell, bomRow, overrideAmt, allowOverride = true, allowRateOverride = true) => {
+                        const rate          = bomRow?.rate;
+                        const qty           = bomRow?.qty;
+                        const uom           = bomRow?.uom ?? '';
+                        const rateUom       = bomRow?.rateUom ?? uom;
+                        const amt           = overrideAmt ?? bomRow?.cost;
+                        const isOv          = bomRow?.isOverridden;
+                        const isROv         = bomRow?.isRateOverridden;
+                        const rateOverrideId = bomRow?.rateId ?? id;
+                        const lenMm         = bomRow?.lengthEachMm;
+
+                        const qtyLabel = (n) => lenMm != null
+                            ? `${n} nos (${fmtLen(n * lenMm)})`
+                            : `${typeof n === 'number' ? n.toFixed(2) : n} ${uom}`;
 
                         return (
-                            <tr key={id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/20 border-t border-slate-100 dark:border-slate-700/50 ${isOv ? 'bg-amber-50/30' : ''}`}>
+                            <tr key={id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/20 border-t border-slate-100 dark:border-slate-700/50 ${(isOv || isROv) ? 'bg-amber-50/30 dark:bg-amber-900/10' : ''}`}>
                                 <td className={cellCls + " w-1/2"}>{componentCell}</td>
-                                <td className={numCls}>{fmtR(rate, uom)}</td>
+                                <td className={numCls}>
+                                    {allowRateOverride ? (
+                                        <div className="flex items-center justify-end gap-1">
+                                            <input
+                                                type="number"
+                                                className={`w-20 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors ${isROv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
+                                                value={rate ?? ''}
+                                                onChange={e => updateRateOverride(rateOverrideId, e.target.value)}
+                                            />
+                                            <span className="text-[9px] text-slate-400">/{rateUom}</span>
+                                            {isROv && (
+                                                <button onClick={() => updateRateOverride(rateOverrideId, '')} className="text-amber-500 hover:text-amber-700" title="Reset rate to auto">
+                                                    <X size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        fmtR(rate, rateUom)
+                                    )}
+                                </td>
                                 <td className={numCls}>
                                     {allowOverride ? (
                                         <div className="flex items-center justify-end gap-1">
                                             <input
                                                 type="number"
-                                                className={`w-16 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors ${isOv ? 'border-amber-400 text-amber-700 font-bold' : 'border-slate-200 text-slate-500'}`}
+                                                className={`w-16 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors ${isOv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
                                                 value={qty ?? ''}
                                                 onChange={e => updateOverride(id, e.target.value)}
                                             />
-                                            <span className="text-[9px] text-slate-400 w-4">{uom}</span>
+                                            <span className="text-[9px] text-slate-400 whitespace-nowrap">
+                                                {lenMm != null && qty != null ? ` nos (${fmtLen(qty * lenMm)})` : ` ${uom}`}
+                                            </span>
                                             {isOv && (
                                                 <button onClick={() => updateOverride(id, '')} className="text-amber-500 hover:text-amber-700" title="Reset to auto">
                                                     <X size={10} />
@@ -775,7 +896,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                     )}
                                 </td>
                                 <td className={amtCls}>{fmtA(amt)}</td>
-                                {sq > 1 && <td className={numCls + " border-l border-slate-100 dark:border-slate-700"}>{qty != null ? `${(qty * sq).toFixed(2)} ${uom}` : dash}</td>}
+                                {sq > 1 && <td className={numCls + " border-l border-slate-100 dark:border-slate-700"}>{qty != null ? qtyLabel(qty * sq) : dash}</td>}
                                 {sq > 1 && <td className={amtCls}>{amt != null ? fmtA(amt * sq) : dash}</td>}
                             </tr>
                         );
@@ -828,44 +949,73 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                             </button>
                                         ))}
                                         {activeScreen.profiles.map((p, pIdx) => {
-                                            const conv = state.unit === 'ft' ? 304.8 : state.unit === 'm' ? 1000 : 1;
-                                            const W = Number(activeScreen.width) * conv;
-                                            const H = Number(activeScreen.height) * conv;
                                             const updateP = (field, val) => updateScreenProp(
                                                 state.activeScreenIndex, 'profiles',
                                                 activeScreen.profiles.map((pr, i) => i === pIdx ? { ...pr, [field]: val } : pr)
                                             );
-                                            return renderDataRow(`profile-${p.id}`, (
-                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                    <select
-                                                        className="flex-1 min-w-32 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                                        value={p.profileId}
-                                                        onChange={e => updateP('profileId', e.target.value)}
-                                                    >
-                                                        <option value="">Select profile...</option>
-                                                        {['Base', 'Flip', 'Hinged', 'Shutter'].map(type => {
-                                                            const items = inventory.filter(i => i.type === 'profile' && i.profileType === type);
-                                                            return items.length ? (
-                                                                <optgroup key={type} label={type}>
-                                                                    {items.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}{i.thickness ? ` (${i.thickness}mm)` : ''}</option>)}
-                                                                </optgroup>
-                                                            ) : null;
-                                                        })}
-                                                    </select>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[10px] text-slate-400">W×</span>
-                                                        <input type="number" min="0" step="0.5" className="w-12 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={p.wMult} onChange={e => updateP('wMult', e.target.value)} />
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[10px] text-slate-400">H×</span>
-                                                        <input type="number" min="0" step="0.5" className="w-12 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={p.hMult} onChange={e => updateP('hMult', e.target.value)} />
-                                                    </div>
-                                                    {W > 0 && H > 0 && (
-                                                        <span className="text-[10px] text-slate-400">= {((Number(p.wMult)*W + Number(p.hMult)*H)/1000).toFixed(2)}m</span>
-                                                    )}
-                                                    <button onClick={() => updateScreenProp(state.activeScreenIndex, 'profiles', activeScreen.profiles.filter((_, i) => i !== pIdx))} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
-                                                </div>
-                                            ), profileBomRows[pIdx]);
+                                            const wBom  = calculation?.bom?.find(b => b.id === `profile-${p.id}-w`);
+                                            const hBom  = calculation?.bom?.find(b => b.id === `profile-${p.id}-h`);
+                                            const whBom = calculation?.bom?.find(b => b.id === `profile-${p.id}-wh`);
+                                            return (
+                                                <React.Fragment key={p.id}>
+                                                    {/* Config row — Component column only */}
+                                                    <tr className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/20">
+                                                        <td className={cellCls}>
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                <select
+                                                                    className="flex-1 min-w-32 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                                    value={p.profileId}
+                                                                    onChange={e => updateP('profileId', e.target.value)}
+                                                                >
+                                                                    <option value="">Select profile...</option>
+                                                                    {['Base', 'Flip', 'Hinged', 'Shutter'].map(type => {
+                                                                        const items = inventory.filter(i => i.type === 'profile' && i.profileType === type);
+                                                                        return items.length ? (
+                                                                            <optgroup key={type} label={type}>
+                                                                                {items.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}{i.thickness ? ` (${i.thickness}mm)` : ''}</option>)}
+                                                                            </optgroup>
+                                                                        ) : null;
+                                                                    })}
+                                                                </select>
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[10px] text-slate-400">W×</span>
+                                                                    <input type="number" min="0" step="0.5" className="w-12 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={p.wMult} onChange={e => updateP('wMult', e.target.value)} />
+                                                                </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[10px] text-slate-400">H×</span>
+                                                                    <input type="number" min="0" step="0.5" className="w-12 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={p.hMult} onChange={e => updateP('hMult', e.target.value)} />
+                                                                </div>
+                                                                <button onClick={() => updateScreenProp(state.activeScreenIndex, 'profiles', activeScreen.profiles.filter((_, i) => i !== pIdx))} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
+                                                            </div>
+                                                        </td>
+                                                        <td colSpan={totalCols - 1}></td>
+                                                    </tr>
+                                                    {/* Combined row (square board) */}
+                                                    {whBom && renderDataRow(`profile-${p.id}-wh`, (
+                                                        <div className="pl-4 flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                                                            <span className="text-[9px] uppercase tracking-wider">↳</span>
+                                                            <span className="font-semibold text-slate-700 dark:text-slate-200">{whBom.name}</span>
+                                                            <span className="text-[10px]">— {whBom.specs}</span>
+                                                        </div>
+                                                    ), whBom)}
+                                                    {/* W sub-row */}
+                                                    {wBom && renderDataRow(`profile-${p.id}-w`, (
+                                                        <div className="pl-4 flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                                                            <span className="text-[9px] uppercase tracking-wider">↳ Width</span>
+                                                            <span className="font-semibold text-slate-700 dark:text-slate-200">{wBom.name}</span>
+                                                            <span className="text-[10px]">— {wBom.specs}</span>
+                                                        </div>
+                                                    ), wBom)}
+                                                    {/* H sub-row */}
+                                                    {hBom && renderDataRow(`profile-${p.id}-h`, (
+                                                        <div className="pl-4 flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                                                            <span className="text-[9px] uppercase tracking-wider">↳ Height</span>
+                                                            <span className="font-semibold text-slate-700 dark:text-slate-200">{hBom.name}</span>
+                                                            <span className="text-[10px]">— {hBom.specs}</span>
+                                                        </div>
+                                                    ), hBom)}
+                                                </React.Fragment>
+                                            );
                                         })}
                                         {activeScreen.profiles.length === 0 && (
                                             <tr><td colSpan={totalCols} className="px-3 py-2 text-[10px] text-slate-400 italic">No profiles — click Add to include one.</td></tr>
@@ -922,51 +1072,42 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                             </div>
                                         ), ledBom)}
 
-                                        {/* SMPS — Selector config row (full-width, no amounts) */}
-                                        <tr key="smps-selector" className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/20">
-                                            <td className={cellCls + " w-1/2"} colSpan={totalCols}>
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="text-[9px] text-slate-400 mb-0.5">
-                                                        SMPS — Required: <b className="text-slate-600 dark:text-slate-300">{calculation?.bufferedWattage ? calculation.bufferedWattage.toFixed(0) : 0}W</b> (15% buffer) — tick to include in optimiser
-                                                    </div>
-                                                    <div className="flex flex-col gap-0.5 max-h-28 overflow-y-auto pr-1">
-                                                        {inventory.filter(i => i.type === 'smps' && (activeScreen.environment === 'Indoor' || i.environment !== 'Indoor')).map(s => {
-                                                            const isChecked = (activeScreen.smpsIds || []).includes(s.id);
-                                                            const toggle = () => {
-                                                                const cur = activeScreen.smpsIds || [];
-                                                                updateScreenProp(state.activeScreenIndex, 'smpsIds',
-                                                                    cur.includes(s.id) ? cur.filter(x => x !== s.id) : [...cur, s.id]);
-                                                            };
-                                                            return (
-                                                                <label key={s.id} className={`flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer text-[11px] transition-colors ${isChecked ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-600 dark:text-slate-300'}`}>
-                                                                    <input type="checkbox" className="accent-pink-600 w-3 h-3 shrink-0" checked={isChecked} onChange={toggle} />
-                                                                    <span>{s.brand} {s.model}</span>
-                                                                    <span className="ml-auto font-bold text-slate-400">{s.capacity}W · ₹{s.price}</span>
-                                                                </label>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
+                                        {/* SMPS — wattage info row */}
+                                        <tr key="smps-info" className="border-t border-slate-100 dark:border-slate-700/50">
+                                            <td colSpan={totalCols} className="px-3 py-1 text-[9px] text-slate-400">
+                                                Power Supply — Required: <b className="text-slate-600 dark:text-slate-300">{calculation?.bufferedWattage ? calculation.bufferedWattage.toFixed(0) : 0}W</b> (15% buffer). Tick to include in mix optimiser.
                                             </td>
                                         </tr>
-
-                                        {/* SMPS — Individual mix rows with per-unit Rate / Qty / Amt */}
-                                        {smpsBomRows.length > 0
-                                            ? smpsBomRows.map((bomRow, idx) =>
-                                                renderDataRow(bomRow.id, (
-                                                    <div className="pl-3 flex items-center gap-2">
-                                                        <Zap size={11} className="text-pink-400 shrink-0" />
-                                                        <span className="font-medium text-slate-700 dark:text-slate-200">{bomRow.specs}</span>
-                                                        {idx === 0 && <span className="ml-auto text-[9px] font-bold uppercase tracking-wider text-pink-500">Mix</span>}
-                                                    </div>
-                                                ), bomRow)
-                                            )
-                                            : (
-                                                <tr key="smps-empty">
-                                                    <td colSpan={totalCols} className="px-3 py-1 text-[10px] text-slate-400 italic">No SMPS selected — tick options above to include.</td>
-                                                </tr>
-                                            )
-                                        }
+                                        {/* SMPS — one row per inventory option */}
+                                        {inventory.filter(i => i.type === 'smps' && (activeScreen.environment === 'Indoor' || i.environment !== 'Indoor')).map(s => {
+                                            const isChecked = (activeScreen.smpsIds || []).includes(s.id);
+                                            const toggle = () => {
+                                                const cur = activeScreen.smpsIds || [];
+                                                updateScreenProp(state.activeScreenIndex, 'smpsIds',
+                                                    cur.includes(s.id) ? cur.filter(x => x !== s.id) : [...cur, s.id]);
+                                            };
+                                            const mixRow = smpsBomRows.find(b => b.id === `smps-${s.id}`);
+                                            const ovQty  = activeScreen.overrides?.[`smps-${s.id}`]?.qty;
+                                            const ovRate = activeScreen.overrides?.[`smps-${s.id}`]?.rate;
+                                            const effRate = ovRate !== undefined && ovRate !== '' ? Number(ovRate) : Number(s.price);
+                                            const effQty  = ovQty  !== undefined && ovQty  !== '' ? Number(ovQty)  : (mixRow?.qty ?? 0);
+                                            const pseudoBom = isChecked ? {
+                                                id: `smps-${s.id}`,
+                                                qty: effQty, uom: 'Pcs',
+                                                rate: effRate,
+                                                cost: effQty * effRate,
+                                                isOverridden: ovQty !== undefined && ovQty !== '',
+                                                isRateOverridden: ovRate !== undefined && ovRate !== ''
+                                            } : { id: `smps-${s.id}`, qty: null, uom: 'Pcs', rate: Number(s.price), cost: null };
+                                            return renderDataRow(`smps-${s.id}`, (
+                                                <label className={`flex items-center gap-1.5 cursor-pointer w-full ${isChecked ? 'text-pink-700 dark:text-pink-300 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                    <input type="checkbox" className="accent-pink-600 w-3 h-3 shrink-0" checked={isChecked} onChange={toggle} />
+                                                    <span>{s.brand} {s.model} — {s.capacity}W</span>
+                                                    {s.environment && s.environment !== 'Indoor' && <span className="text-[9px] text-slate-400 ml-1">{s.environment}</span>}
+                                                    {smpsBomRows.length > 1 && mixRow && <span className="ml-auto text-[9px] font-bold uppercase tracking-wider text-pink-500">Mix</span>}
+                                                </label>
+                                            ), pseudoBom, null, isChecked, isChecked);
+                                        })}
 
                                         {/* ── OTHER COSTS ── */}
                                         {catRow('Other Costs', (
@@ -980,46 +1121,86 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         {(activeScreen.otherCosts || []).length === 0 && (
                                             <tr><td colSpan={totalCols} className="px-3 py-2 text-[10px] text-slate-400 italic">No other costs — click Add to include one.</td></tr>
                                         )}
-                                        {(activeScreen.otherCosts || []).map((oc, ocIdx) => (
-                                            renderDataRow(`oc-${oc.id}`, (
-                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Cost name..."
-                                                        value={oc.name}
-                                                        onChange={e => updateOtherCostField(ocIdx, 'name', e.target.value)}
-                                                        className="flex-1 min-w-28 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                                    />
-                                                    <select
-                                                        value={oc.qtyType}
-                                                        onChange={e => updateOtherCostField(ocIdx, 'qtyType', e.target.value)}
-                                                        className="w-28 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                                    >
-                                                        <option value="Per Board">Qty / Board</option>
-                                                        <option value="Per Sq.Ft">Qty / Sq.Ft</option>
-                                                    </select>
-                                                    {oc.qtyType === 'Per Board' && (
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            placeholder="Qty"
-                                                            value={oc.qty}
-                                                            onChange={e => updateOtherCostField(ocIdx, 'qty', e.target.value)}
-                                                            className="w-14 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center"
-                                                        />
-                                                    )}
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        placeholder="Rate ₹"
-                                                        value={oc.rate}
-                                                        onChange={e => updateOtherCostField(ocIdx, 'rate', e.target.value)}
-                                                        className="w-24 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-right"
-                                                    />
-                                                    <button onClick={() => removeOtherCost(ocIdx)} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
-                                                </div>
-                                            ), otherBomRows[ocIdx], null, false)
-                                        ))}
+                                        {(activeScreen.otherCosts || []).map((oc, ocIdx) => {
+                                            const ocBom = otherBomRows[ocIdx];
+                                            return (
+                                                <tr key={oc.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 border-t border-slate-100 dark:border-slate-700/50">
+                                                    {/* Component: hardware select or custom name + qty type + trash */}
+                                                    <td className={cellCls}>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <select
+                                                                value={oc.hardwareId || ''}
+                                                                onChange={e => {
+                                                                    const hw = inventory.find(i => i.id === e.target.value);
+                                                                    if (hw) updateOtherCostFields(ocIdx, { hardwareId: hw.id, name: `${hw.brand} ${hw.model}`, rate: Number(hw.price) });
+                                                                    else updateOtherCostFields(ocIdx, { hardwareId: '', name: '' });
+                                                                }}
+                                                                className="w-36 shrink-0 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                            >
+                                                                <option value="">— Custom —</option>
+                                                                {inventory.filter(i => i.type === 'hardware').map(i => (
+                                                                    <option key={i.id} value={i.id}>{i.brand} {i.model} ({i.uom})</option>
+                                                                ))}
+                                                            </select>
+                                                            {!oc.hardwareId && (
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Name..."
+                                                                    value={oc.name}
+                                                                    onChange={e => updateOtherCostField(ocIdx, 'name', e.target.value)}
+                                                                    className="flex-1 min-w-0 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                                />
+                                                            )}
+                                                            <select
+                                                                value={oc.qtyType}
+                                                                onChange={e => updateOtherCostField(ocIdx, 'qtyType', e.target.value)}
+                                                                className="w-20 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white shrink-0"
+                                                            >
+                                                                <option value="Per Board">/ Board</option>
+                                                                <option value="Per Sq.Ft">/ Sq.Ft</option>
+                                                            </select>
+                                                            <button onClick={() => removeOtherCost(ocIdx)} className="p-0.5 text-slate-300 hover:text-red-500 transition-colors shrink-0"><Trash2 size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    {/* Rate */}
+                                                    <td className={numCls}>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                placeholder="0"
+                                                                value={oc.rate}
+                                                                onChange={e => updateOtherCostField(ocIdx, 'rate', e.target.value)}
+                                                                className="w-20 p-0.5 text-right bg-transparent border-b border-dashed border-slate-200 dark:border-slate-600 focus:outline-none text-slate-500 dark:text-slate-400"
+                                                            />
+                                                            <span className="text-[9px] text-slate-400">/{oc.qtyType === 'Per Sq.Ft' ? 'sqft' : 'Board'}</span>
+                                                        </div>
+                                                    </td>
+                                                    {/* Qty/Board */}
+                                                    <td className={numCls}>
+                                                        {oc.qtyType === 'Per Board' ? (
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    placeholder="1"
+                                                                    value={oc.qty}
+                                                                    onChange={e => updateOtherCostField(ocIdx, 'qty', e.target.value)}
+                                                                    className="w-16 p-0.5 text-right bg-transparent border-b border-dashed border-slate-200 dark:border-slate-600 focus:outline-none text-slate-500 dark:text-slate-400"
+                                                                />
+                                                                <span className="text-[9px] text-slate-400 w-4">nos</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-400">{ocBom?.qty != null ? `${ocBom.qty.toFixed(2)} sqft` : dash}</span>
+                                                        )}
+                                                    </td>
+                                                    {/* Amt/Board */}
+                                                    <td className={amtCls}>{fmtA(ocBom?.cost)}</td>
+                                                    {sq > 1 && <td className={numCls + " border-l border-slate-100 dark:border-slate-700"}>{ocBom?.qty != null ? `${(ocBom.qty * sq).toFixed(2)} ${oc.qtyType === 'Per Sq.Ft' ? 'sqft' : 'nos'}` : dash}</td>}
+                                                    {sq > 1 && <td className={amtCls}>{ocBom?.cost != null ? fmtA(ocBom.cost * sq) : dash}</td>}
+                                                </tr>
+                                            );
+                                        })}
 
                                         {/* ── LABOUR ── */}
                                         {catRow('Labour & Logistics')}
@@ -1032,7 +1213,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                 </select>
                                                 <input type="number" className="w-24 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-right" value={activeScreen.labour.rate} onChange={e => updateScreenNested(state.activeScreenIndex, 'labour', 'rate', e.target.value)} placeholder="0" />
                                             </div>
-                                        ), labourBom, null, false)}
+                                        ), labourBom, null, false, false)}
 
                                         {renderDataRow('trans', (
                                             <div className="flex items-center gap-1.5">
@@ -1043,7 +1224,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                 </select>
                                                 <input type="number" className="w-24 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-right" value={activeScreen.logistics.transRate} onChange={e => updateScreenNested(state.activeScreenIndex, 'logistics', 'transRate', e.target.value)} placeholder="0" />
                                             </div>
-                                        ), transBom, null, false)}
+                                        ), transBom, null, false, false)}
 
                                         {renderDataRow('install', (
                                             <div className="flex items-center gap-1.5">
@@ -1054,7 +1235,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                 </select>
                                                 <input type="number" className="w-24 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-right" value={activeScreen.logistics.installRate} onChange={e => updateScreenNested(state.activeScreenIndex, 'logistics', 'installRate', e.target.value)} placeholder="0" />
                                             </div>
-                                        ), installBom, null, false)}
+                                        ), installBom, null, false, false)}
 
                                         {/* ── TOTAL ── */}
                                         <tr className="bg-slate-800 dark:bg-slate-900 text-white font-bold text-xs">
@@ -1080,6 +1261,9 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                     </div>
                                     {activeScreen.profiles.map((p, pIdx) => {
                                         const updateP = (field, val) => updateScreenProp(state.activeScreenIndex, 'profiles', activeScreen.profiles.map((pr, i) => i === pIdx ? { ...pr, [field]: val } : pr));
+                                        const wBom  = calculation?.bom?.find(b => b.id === `profile-${p.id}-w`);
+                                        const hBom  = calculation?.bom?.find(b => b.id === `profile-${p.id}-h`);
+                                        const whBom = calculation?.bom?.find(b => b.id === `profile-${p.id}-wh`);
                                         return (
                                             <div key={p.id} className="bg-slate-50 dark:bg-slate-700/30 rounded p-2 mb-1 space-y-1">
                                                 <div className="flex gap-1">
@@ -1092,8 +1276,14 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                 <div className="flex gap-2 text-xs">
                                                     <div className="flex items-center gap-1"><span className="text-slate-400">W×</span><input type="number" className="w-12 p-1 border rounded text-center bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={p.wMult} onChange={e => updateP('wMult', e.target.value)} /></div>
                                                     <div className="flex items-center gap-1"><span className="text-slate-400">H×</span><input type="number" className="w-12 p-1 border rounded text-center bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={p.hMult} onChange={e => updateP('hMult', e.target.value)} /></div>
-                                                    {profileBomRows[pIdx] && <span className="ml-auto font-bold text-slate-600 dark:text-slate-300">{formatCurrency(profileBomRows[pIdx].cost, 'INR', false, true)}</span>}
                                                 </div>
+                                                {(wBom || hBom || whBom) && (
+                                                    <div className="text-[10px] space-y-0.5 pt-0.5 border-t border-slate-200 dark:border-slate-600">
+                                                        {whBom && <div className="flex justify-between"><span className="text-slate-400">↳ {whBom.specs}: {whBom.qty} nos ({fmtLen(whBom.qty * whBom.lengthEachMm)})</span><span className="font-bold text-slate-600 dark:text-slate-300">{formatCurrency(whBom.cost, 'INR', false, true)}</span></div>}
+                                                        {wBom && <div className="flex justify-between"><span className="text-slate-400">↳ W — {wBom.specs}: {wBom.qty} nos ({fmtLen(wBom.qty * wBom.lengthEachMm)})</span><span className="font-bold text-slate-600 dark:text-slate-300">{formatCurrency(wBom.cost, 'INR', false, true)}</span></div>}
+                                                        {hBom && <div className="flex justify-between"><span className="text-slate-400">↳ H — {hBom.specs}: {hBom.qty} nos ({fmtLen(hBom.qty * hBom.lengthEachMm)})</span><span className="font-bold text-slate-600 dark:text-slate-300">{formatCurrency(hBom.cost, 'INR', false, true)}</span></div>}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1147,15 +1337,31 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         {(activeScreen.otherCosts || []).map((oc, ocIdx) => (
                                             <div key={oc.id} className="bg-slate-50 dark:bg-slate-700/30 rounded p-2 space-y-1">
                                                 <div className="flex gap-1 items-center">
+                                                    <select
+                                                        value={oc.hardwareId || ''}
+                                                        onChange={e => {
+                                                            const hw = inventory.find(i => i.id === e.target.value);
+                                                            if (hw) updateOtherCostFields(ocIdx, { hardwareId: hw.id, name: `${hw.brand} ${hw.model}`, rate: Number(hw.price) });
+                                                            else updateOtherCostFields(ocIdx, { hardwareId: '', name: '' });
+                                                        }}
+                                                        className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                    >
+                                                        <option value="">— Custom —</option>
+                                                        {inventory.filter(i => i.type === 'hardware').map(i => (
+                                                            <option key={i.id} value={i.id}>{i.brand} {i.model} ({i.uom})</option>
+                                                        ))}
+                                                    </select>
+                                                    <button onClick={() => removeOtherCost(ocIdx)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                                                </div>
+                                                {!oc.hardwareId && (
                                                     <input
                                                         type="text"
                                                         placeholder="Cost name..."
                                                         value={oc.name}
                                                         onChange={e => updateOtherCostField(ocIdx, 'name', e.target.value)}
-                                                        className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                        className="w-full p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                                                     />
-                                                    <button onClick={() => removeOtherCost(ocIdx)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
-                                                </div>
+                                                )}
                                                 <div className="flex gap-1">
                                                     <select
                                                         value={oc.qtyType}
