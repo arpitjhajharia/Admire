@@ -1,0 +1,30 @@
+# Dependencies & Build (Huge token wasters)
+node_modules/
+dist/
+package-lock.json
+
+# Media & Assets (Claude can't read the code of images)
+public/*.png
+public/*.svg
+public/*.ico
+public/*.jpg
+src/assets/*.svg
+src/assets/*.png
+src/assets/*.jpg
+
+# Environment & Logs
+.env
+.env.*
+*.log
+lint_output.txt
+
+# Editor / System
+.vscode/
+.DS_Store
+.git/
+.idea/
+
+# Other
+dist-ssr/
+yarn.lock
+pnpm-lock.yaml
