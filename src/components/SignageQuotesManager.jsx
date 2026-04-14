@@ -3,6 +3,7 @@ import { Eye, Printer, Trash2, FileText, Download, Copy, Edit, Box, Monitor, Sun
 import { db, appId } from '../lib/firebase';
 import { formatCurrency } from '../lib/utils';
 import SignageQuoteLayout from './SignageQuoteLayout';
+import SignageBOMLayout from './SignageBOMLayout';
 
 const formatDate = (ts) => {
     if (!ts) return '—';
@@ -14,9 +15,10 @@ const formatDate = (ts) => {
     return `${day} ${month} ${year}, ${time}`;
 };
 
-const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
+const SignageQuotesManager = ({ user, onLoadQuote, perms = {} }) => {
     const [quotes, setQuotes] = React.useState([]);
     const [viewQuote, setViewQuote] = React.useState(null);
+    const [bomViewQuote, setBomViewQuote] = React.useState(null);
     const [expandedRefs, setExpandedRefs] = React.useState({});
     const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -88,6 +90,59 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
         }];
     };
 
+    const handleDownloadBOM = (quote) => {
+        if (!perms['signageQuotes.downloadBOM']) return;
+
+        const calcs = quote.allScreensTotal?.calculations ?? (quote.calculation ? [quote.calculation] : []);
+        const screens = quote.allScreensTotal?.screenConfigs ?? quote.state?.screens ?? [];
+
+        const validCalcs = calcs.filter(Boolean);
+        if (validCalcs.length === 0) return alert("No BOM data available for this quote.");
+
+        const safeProject = (quote.project || '').replace(/,/g, ' ');
+        const safeClient = (quote.client || '').replace(/,/g, ' ');
+
+        let csv = `Project,${safeProject}\nClient,${safeClient}\nRef,${quote.ref || ''}\nDate,${new Date().toLocaleDateString()}\n\n`;
+
+        calcs.forEach((calc, idx) => {
+            if (!calc) return;
+            const scr = screens[idx] || {};
+            csv += `BOARD #${idx + 1}${scr.name ? ` — ${scr.name}` : ''}\n`;
+            csv += `Dimensions,${scr.width || ''} × ${scr.height || ''} ${quote.state?.unit || 'ft'}\n`;
+            csv += `Qty,${calc.screenQty || 1}\n`;
+            csv += `\nBill of Materials\nCategory,Component,Specification,Qty/Board,Total Qty,UOM,Rate,Total Cost\n`;
+
+            (calc.bom || []).forEach(item => {
+                const totalQty = (item.qty || 0) * (calc.screenQty || 1);
+                const totalCost = (item.cost || 0) * (calc.screenQty || 1);
+                const name = (item.name || '').replace(/"/g, '""');
+                const specs = (item.specs || '').replace(/"/g, '""');
+                csv += `"${item.category || ''}","${name}","${specs}",${(item.qty || 0).toFixed(2)},${totalQty.toFixed(2)},${item.uom || ''},${(item.rate || 0).toFixed(2)},${totalCost.toFixed(2)}\n`;
+            });
+
+            csv += `\nCost per Board,${calc.totalCostEstimate?.toFixed(2) || 0}\n`;
+            csv += `Total Cost (×${calc.screenQty || 1}),${calc.totalCostWithQty?.toFixed(2) || 0}\n`;
+            csv += `Sell Price,${calc.finalSellPrice?.toFixed(2) || 0}\n`;
+            csv += `\n--------------------------------\n\n`;
+        });
+
+        if (validCalcs.length > 1 && quote.allScreensTotal) {
+            const t = quote.allScreensTotal;
+            csv += `PROJECT SUMMARY\n`;
+            csv += `Grand Total Cost,${t.totalProjectCost?.toFixed(2) || 0}\n`;
+            csv += `Grand Total Sell,${t.totalProjectSell?.toFixed(2) || 0}\n`;
+            csv += `Net Margin,${t.totalMargin?.toFixed(2) || 0}\n`;
+        }
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeClient.replace(/[^a-z0-9]/gi, '_')}_${safeProject.replace(/[^a-z0-9]/gi, '_')}_BOM.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    };
+
     const handleDelete = async (id) => {
         if (confirm("Are you sure you want to delete this signage quote?")) {
             const qToDel = quotes.find(q => q.id === id);
@@ -110,6 +165,7 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
     return (
         <div className="p-3 md:p-4 animate-in fade-in duration-300">
             {/* ── View/Print Modal ── */}
+            {/* ── View Quote Modal ── */}
             {viewQuote && (
                 <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
                     <div className="bg-white dark:bg-slate-900 max-w-4xl w-full h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
@@ -137,6 +193,37 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
                                     calculation={viewQuote.calculation}
                                 />
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── View BOM Modal ── */}
+            {bomViewQuote && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
+                    <div className="bg-white dark:bg-slate-900 max-w-4xl w-full h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                        <div className="p-4 border-b dark:border-slate-800 flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-t-2xl">
+                            <h2 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                                <Box size={20} className="text-teal-600" /> Bill of Materials (BOM): {bomViewQuote.ref}
+                            </h2>
+                            <div className="flex gap-2">
+                                <button onClick={() => setBomViewQuote(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">Close</button>
+                                <button onClick={() => {
+                                    const originalTitle = document.title;
+                                    document.title = `${bomViewQuote.client}_${bomViewQuote.project}_BOM`.replace(/[^a-zA-Z0-9_]/g, '_');
+                                    window.print();
+                                    document.title = originalTitle;
+                                }} className="px-4 py-2 bg-teal-600 text-white hover:bg-teal-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
+                                    <Printer size={16} /> Print / PDF
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-auto p-8 bg-slate-100 dark:bg-slate-800 flex justify-center">
+                            <SignageBOMLayout
+                                state={bomViewQuote.state}
+                                allScreensTotal={bomViewQuote.allScreensTotal}
+                                calculation={bomViewQuote.calculation}
+                            />
                         </div>
                     </div>
                 </div>
@@ -268,16 +355,22 @@ const SignageQuotesManager = ({ user, onLoadQuote, readOnly = false }) => {
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => setViewQuote(quote)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="View"><Eye size={14} /></button>
-                                                    {!readOnly && (
+                                                    {!perms['signageQuotes.hideAmounts'] && (
+                                                        <button onClick={() => setViewQuote(quote)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="View Quote"><Eye size={14} /></button>
+                                                    )}
+                                                    <button onClick={() => setBomViewQuote(quote)} className="p-1.5 text-teal-500 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg" title="View BOM"><Box size={14} /></button>
+                                                    {perms['signageQuotes.downloadBOM'] && (
+                                                        <button onClick={() => handleDownloadBOM(quote)} className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg" title="Download BOM"><Download size={14} /></button>
+                                                    )}
+                                                    {(perms['signageQuotes.load'] || perms['signageQuotes.clone'] || perms['signageQuotes.delete']) && (
                                                         <>
                                                             {onLoadQuote && (
                                                                 <>
-                                                                    <button onClick={() => onLoadQuote(quote, false)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Edit"><Edit size={14} /></button>
-                                                                    <button onClick={() => onLoadQuote(quote, true)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:bg-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Clone"><Copy size={14} /></button>
+                                                                    {perms['signageQuotes.load'] && <button onClick={() => onLoadQuote(quote, false)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Edit"><Edit size={14} /></button>}
+                                                                    {perms['signageQuotes.clone'] && <button onClick={() => onLoadQuote(quote, true)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:bg-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Clone"><Copy size={14} /></button>}
                                                                 </>
                                                             )}
-                                                            <button onClick={() => handleDelete(quote.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete"><Trash2 size={14} /></button>
+                                                            {perms['signageQuotes.delete'] && <button onClick={() => handleDelete(quote.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete"><Trash2 size={14} /></button>}
                                                         </>
                                                     )}
                                                 </div>

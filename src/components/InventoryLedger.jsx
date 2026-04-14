@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 
-const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }) => {
+const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
     // 1. Updated State to include 'batch'
     const [newTx, setNewTx] = useState({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '', batch: '' });
     const [editingId, setEditingId] = useState(null);
@@ -141,7 +141,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }
                     </div>
 
                     {/* Add button */}
-                    {!showForm && !readOnly && (
+                    {!showForm && perms['inventoryLedger.add'] && (
                         <button
                             onClick={() => setShowForm(true)}
                             className="flex-shrink-0 bg-slate-800 dark:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-slate-900 dark:hover:bg-slate-500 transition-colors shadow-sm"
@@ -153,7 +153,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }
             </div>
 
             {/* ── Add/Edit Transaction Form ── */}
-            {showForm && !readOnly && (
+            {showForm && perms['inventoryLedger.add'] && (
                 <div className={`p-3 rounded-xl border mb-4 transition-colors ${editingId ? 'bg-amber-50/80 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700' : 'bg-slate-50 dark:bg-slate-700/30 border-slate-200 dark:border-slate-700'}`}>
                     <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-600">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{editingId ? '✏️ Edit Transaction' : '➕ New Transaction'}</h3>
@@ -246,10 +246,10 @@ const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }
                                     <span className={`block text-base font-extrabold tabular-nums ${tx.type === 'in' ? 'text-green-600' : 'text-red-500'}`}>
                                         {tx.type === 'in' ? '+' : '-'}{tx.qty}
                                     </span>
-                                    {!readOnly && (
+                                    {(perms['inventoryLedger.edit'] || perms['inventoryLedger.delete']) && (
                                         <div className="flex gap-2 justify-end mt-0.5">
-                                            <button onClick={() => handleEdit(tx)} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">Edit</button>
-                                            <button onClick={() => handleDelete(tx.id)} className="text-[10px] text-red-400 hover:text-red-600 font-medium">Del</button>
+                                            {perms['inventoryLedger.edit'] && <button onClick={() => handleEdit(tx)} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">Edit</button>}
+                                            {perms['inventoryLedger.delete'] && <button onClick={() => handleDelete(tx.id)} className="text-[10px] text-red-400 hover:text-red-600 font-medium">Del</button>}
                                         </div>
                                     )}
                                 </div>
@@ -276,7 +276,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }
                                     <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Specs</th>
                                     <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
                                     <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Loc/Source</th>
-                                    {!readOnly && <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
+                                    {(perms['inventoryLedger.edit'] || perms['inventoryLedger.delete']) && <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -334,15 +334,15 @@ const InventoryLedger = ({ inventory = [], transactions = [], readOnly = false }
                                             </td>
 
                                             {/* Actions */}
-                                            {!readOnly && (
+                                            {(perms['inventoryLedger.edit'] || perms['inventoryLedger.delete']) && (
                                                 <td className="px-2 py-1 whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-0">
-                                                        <button onClick={() => handleEdit(tx)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
+                                                        {perms['inventoryLedger.edit'] && <button onClick={() => handleEdit(tx)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
                                                             <Edit size={12} />
-                                                        </button>
-                                                        <button onClick={() => handleDelete(tx.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                                        </button>}
+                                                        {perms['inventoryLedger.delete'] && <button onClick={() => handleDelete(tx.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
                                                             <Trash2 size={12} />
-                                                        </button>
+                                                        </button>}
                                                     </div>
                                                 </td>
                                             )}

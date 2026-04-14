@@ -5,6 +5,7 @@ import { calculateBOM, generateId } from './lib/utils';
 import { getNextQuoteRef } from './lib/quotes';
 
 import { CONFIG } from './lib/config';
+import { getPermissions, ROLES } from './lib/permissions';
 
 
 // Components
@@ -35,9 +36,28 @@ import SignageLedger from './components/SignageLedger';
 import AttendancePayroll from './components/AttendancePayroll';
 
 
+// Maps legacy and new role strings to canonical ROLES values.
+// Old Firestore docs may still carry 'labour' or 'supervisor'.
+const normalizeRole = (role) => {
+  const map = {
+    super_admin:   ROLES.SUPER_ADMIN,
+    owner:         ROLES.OWNER,
+    accountant:    ROLES.ACCOUNTANT,
+    admin_staff:   ROLES.ADMIN_STAFF,
+    factory_lead:  ROLES.FACTORY_LEAD,
+    stock_manager: ROLES.STOCK_MANAGER,
+    site_team:     ROLES.SITE_TEAM,
+    // Legacy names
+    supervisor:    ROLES.FACTORY_LEAD,
+    labour:        ROLES.SITE_TEAM,
+  };
+  return map[role] ?? ROLES.SITE_TEAM;
+};
+
 const App = () => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [userOverrides, setUserOverrides] = useState({});
   const [activeModule, setActiveModule] = useState('home');
 
     // Signage Application Load State
@@ -110,6 +130,7 @@ const App = () => {
           const roleDoc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(u.uid).get();
           if (roleDoc.exists) {
             role = roleDoc.data().role;
+            setUserOverrides(roleDoc.data().overrides || {});
           } else if (username === 'admin') {
             role = 'super_admin';
           }
@@ -153,10 +174,10 @@ const App = () => {
     return () => unsub();
   }, [user]);
 
-  // 5. LABOUR REDIRECT: If Labour tries to view Calculator, push them to Saved Quotes
+  // 5. REDIRECT: If site_team/labour tries to view Calculator, push them to Saved Quotes
   useEffect(() => {
-    if (userRole === 'labour' && view === 'quote') {
-      // Defer to next tick to avoid synchronous setState warning
+    const role = normalizeRole(userRole);
+    if (!getPermissions(role)['led.view'] && view === 'quote') {
       Promise.resolve().then(() => setView('saved'));
     }
   }, [userRole, view]);
@@ -401,14 +422,8 @@ const App = () => {
   if (!user) return <Login />;
 
   // --- PERMISSION LOGIC ---
-  const safeRole = userRole || 'labour';
-  const showUsersTab = safeRole === 'super_admin';
-  const isInventoryReadOnly = ['labour', 'supervisor'].includes(safeRole);
-  const isLedgerReadOnly = ['labour'].includes(safeRole);
-  const isBOMReadOnly = ['labour', 'supervisor'].includes(safeRole);
-
-  // Flag to hide Calculator Tab
-  const isLabour = safeRole === 'labour';
+  const safeRole = normalizeRole(userRole);
+  const perms = { ...getPermissions(safeRole), ...userOverrides };
 
   return (
     <div className={`min-h-screen transition-colors duration-200 ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -468,15 +483,14 @@ const App = () => {
           {/* Desktop Navigation */}
           {activeModule === 'led' && (
             <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 p-1 rounded-lg">
-              {/* HIDE CALCULATOR FOR LABOUR */}
-              {!isLabour && (
+              {perms['led.view'] && (
                 <button onClick={() => setView('quote')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'quote' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Calculator</button>
               )}
 
               <button onClick={() => setView('inventory')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'inventory' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Components</button>
               <button onClick={() => setView('ledger')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'ledger' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Stock</button>
               <button onClick={() => setView('saved')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'saved' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Quotes</button>
-              {!isLabour && (
+              {perms['quoteImages.view'] && (
                 <button onClick={() => setView('images')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'images' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Images</button>
               )}
             </nav>
@@ -484,7 +498,7 @@ const App = () => {
 
           {activeModule === 'signage' && (
             <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 p-1 rounded-lg">
-              {!isLabour && (
+              {perms['signage.view'] && (
                 <button onClick={() => setView('quote')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'quote' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Calculator</button>
               )}
               <button onClick={() => setView('inventory')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${view === 'inventory' ? 'bg-white dark:bg-slate-600 shadow-sm text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>Components</button>
@@ -529,8 +543,7 @@ const App = () => {
 
             {activeModule === 'led' && (
               <>
-                {/* HIDE CALCULATOR FOR LABOUR IN MOBILE MENU */}
-                {!isLabour && (
+                {perms['led.view'] && (
                   <button onClick={() => { setView('quote'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'quote' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                     <Calculator size={18} /> Calculator
                   </button>
@@ -544,7 +557,7 @@ const App = () => {
                 <button onClick={() => { setView('saved'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'saved' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                   <FileText size={18} /> Quotes
                 </button>
-                {!isLabour && (
+                {perms['quoteImages.view'] && (
                   <button onClick={() => { setView('images'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'images' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                     <ImageIcon size={18} /> Images
                   </button>
@@ -554,7 +567,7 @@ const App = () => {
 
             {activeModule === 'signage' && (
               <>
-                {!isLabour && (
+                {perms['signage.view'] && (
                   <button onClick={() => { setView('quote'); setIsMenuOpen(false); }} className={`p-3 rounded-lg text-sm font-bold text-left flex items-center gap-3 ${view === 'quote' ? 'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>
                     <LayoutDashboard size={18} /> Calculator
                   </button>
@@ -590,7 +603,7 @@ const App = () => {
               if (mod === 'led' || mod === 'signage') setView('quote');
             }}
             darkMode={darkMode}
-            showAdmin={showUsersTab}
+            perms={perms}
           />
         )}
 
@@ -599,39 +612,35 @@ const App = () => {
             {view === 'inventory' && (
               <InventoryManager
                 user={user}
-                userRole={userRole}
                 transactions={transactions}
-                readOnly={isInventoryReadOnly}
                 exchangeRate={exchangeRate}
+                perms={perms}
               />
             )}
 
             {view === 'ledger' && (
               <InventoryLedger
                 user={user}
-                userRole={userRole}
                 inventory={inventory}
                 transactions={transactions}
-                readOnly={isLedgerReadOnly}
+                perms={perms}
               />
             )}
 
             {view === 'saved' && (
               <SavedQuotesManager
                 user={user}
-                userRole={userRole}
                 inventory={inventory}
                 transactions={transactions}
                 exchangeRate={exchangeRate}
                 onLoadQuote={handleLoadQuote}
-                readOnly={isBOMReadOnly}
+                perms={perms}
               />
             )}
 
             {view === 'quote' && (
               <QuoteCalculator
                 user={user}
-                userRole={userRole}
                 inventory={inventory}
                 transactions={transactions}
                 state={calcState}
@@ -639,16 +648,16 @@ const App = () => {
                 exchangeRate={exchangeRate}
                 setExchangeRate={setExchangeRate}
                 onSaveQuote={handleSaveQuote}
-                readOnly={isBOMReadOnly}
+                perms={perms}
               />
             )}
 
-            {view === 'images' && !isLabour && (
+            {view === 'images' && perms['quoteImages.view'] && (
               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 min-h-[60vh]">
                 <QuoteImageManager
                   user={user}
-                  userRole={userRole}
                   mode="library"
+                  perms={perms}
                 />
               </div>
             )}
@@ -660,23 +669,21 @@ const App = () => {
             {view === 'inventory' && (
               <SignageInventoryManager
                 user={user}
-                userRole={userRole}
-                readOnly={isInventoryReadOnly}
                 transactions={signageTransactions}
+                perms={perms}
               />
             )}
             {view === 'ledger' && (
               <SignageLedger
                 signageInventory={signageInventory}
                 signageTransactions={signageTransactions}
-                readOnly={isLedgerReadOnly}
+                perms={perms}
               />
             )}
             {view === 'saved' && (
               <SignageQuotesManager
                 user={user}
-                userRole={userRole}
-                readOnly={isBOMReadOnly}
+                perms={perms}
                 onLoadQuote={(quote, isClone) => {
                     setSignageLoadedState(isClone ? { ...quote.state, ref: '' } : quote.state);
                     setView('quote');
@@ -686,49 +693,48 @@ const App = () => {
             {view === 'quote' && (
               <SignageCalculator
                 user={user}
-                userRole={userRole}
-                readOnly={isBOMReadOnly}
                 loadedState={signageLoadedState}
+                perms={perms}
               />
             )}
           </>
         )}
 
         {activeModule === 'tasks' && (
-          <TaskManager user={user} userRole={userRole} />
+          <TaskManager user={user} perms={perms} />
         )}
 
         {activeModule === 'reports' && (
-          <ReportingTracker user={user} userRole={userRole} />
+          <ReportingTracker user={user} perms={perms} />
         )}
 
         {activeModule === 'crm' && (
-          <CRMManager user={user} userRole={userRole} onOpenLEDCalculator={handleOpenLEDCalculatorFromCRM} />
+          <CRMManager user={user} perms={perms} onOpenLEDCalculator={handleOpenLEDCalculatorFromCRM} />
         )}
 
         {activeModule === 'misc_stock' && (
-          <MiscStockTracker user={user} userRole={userRole} />
+          <MiscStockTracker user={user} perms={perms} />
         )}
 
         {activeModule === 'cut_list' && (
-          <CutListCalculator />
+          <CutListCalculator perms={perms} />
         )}
 
         {activeModule === 'payroll' && (
-          <AttendancePayroll user={user} userRole={userRole} />
+          <AttendancePayroll user={user} perms={perms} />
         )}
 
-        {activeModule === 'admin' && showUsersTab && (
+        {activeModule === 'admin' && perms['module.admin'] && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 animate-in fade-in duration-300">
             <div className="flex flex-col gap-4">
-              <GlobalSettings />
-              <BackupManager />
+              <GlobalSettings perms={perms} />
+              <BackupManager perms={perms} />
             </div>
             <div className="flex flex-col gap-4">
-              <ProjectManager user={user} />
+              <ProjectManager user={user} perms={perms} />
             </div>
             <div className="flex flex-col gap-4">
-              <UserManager user={user} />
+              <UserManager user={user} perms={perms} />
             </div>
           </div>
         )}

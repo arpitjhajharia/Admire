@@ -10,7 +10,7 @@ const toMeters = (length, unit) => {
     return length;
 };
 
-const SignageInventoryManager = ({ user, userRole, readOnly = false, transactions = [] }) => {
+const SignageInventoryManager = ({ user, transactions = [], perms = {} }) => {
     const [items, setItems] = useState([]);
     const [editingId, setEditingId] = useState(null);
     const [showForm, setShowForm] = useState(false);
@@ -292,7 +292,7 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                             <option key={t} value={t}>{t.toUpperCase()}</option>
                         ))}
                     </select>
-                    {!showForm && !readOnly && (
+                    {!showForm && perms['signageInventory.add'] && (
                         <button
                             onClick={() => setShowForm(true)}
                             className="flex-shrink-0 bg-pink-600 dark:bg-pink-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-pink-700 transition-colors shadow-sm"
@@ -406,7 +406,7 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                 <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider">Rate</th>
                                 <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider">Balance</th>
                                 <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Stock Value</th>
-                                {!readOnly && <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider w-24">Actions</th>}
+                                {(perms['signageInventory.editSpecs'] || perms['signageInventory.delete']) && <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-500 uppercase tracking-wider w-24">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
@@ -418,7 +418,7 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                 const isExpanded = expandedItems.has(item.id);
                                 const profileBreakdown = isProfile && isExpanded ? getProfileStockBreakdown(item) : null;
                                 const acpBreakdown = isAcp && isExpanded ? getAcpStockBreakdown(item) : null;
-                                const colCount = readOnly ? 6 : 7;
+                                const colCount = (perms['signageInventory.editSpecs'] || perms['signageInventory.delete']) ? 7 : 6;
 
                                 return (
                                     <React.Fragment key={item.id}>
@@ -472,11 +472,11 @@ const SignageInventoryManager = ({ user, userRole, readOnly = false, transaction
                                                     : formatCurrency(bal.totalCost, 'INR')
                                                 }
                                             </td>
-                                            {!readOnly && (
+                                            {(perms['signageInventory.editSpecs'] || perms['signageInventory.delete']) && (
                                                 <td className="px-4 py-3 whitespace-nowrap text-right text-[13px] font-medium" onClick={e => e.stopPropagation()}>
                                                     <div className="flex justify-end gap-2">
-                                                        <button onClick={() => handleEdit(item)} className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={16} /></button>
-                                                        <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"><Trash2 size={16} /></button>
+                                                        {perms['signageInventory.editSpecs'] && <button onClick={() => handleEdit(item)} className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={16} /></button>}
+                                                        {perms['signageInventory.delete'] && <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"><Trash2 size={16} /></button>}
                                                     </div>
                                                 </td>
                                             )}

@@ -2415,17 +2415,18 @@ const UserManagement = ({ onClose }) => {
 // --- Main App Component ---
 
 
-const ReportingTracker = ({ user: globalUser, userRole }) => {
+const ReportingTracker = ({ user: globalUser, perms = {} }) => {
     const loading = false;
     const [activeBOQ, setActiveBOQ] = useState(null);
     const [showUserMan, setShowUserMan] = useState(false);
 
-    // Map global user to tracker role
+    // Map perms to the tracker's internal role model
     const getTrackerRole = () => {
-        if (userRole === 'super_admin' || userRole === 'admin') return ROLES.ADMIN;
-        if (userRole === 'supervisor' || userRole === 'dual') return ROLES.DUAL;
-        if (userRole === 'labour') return ROLES.FACTORY; // Defaulting labour to FACTORY for now
-        return ROLES.FACTORY;
+        if (perms['boq.create']) return ROLES.ADMIN;
+        if (perms['boq.updateFactoryStatus'] && perms['boq.updateSiteStatus']) return ROLES.DUAL;
+        if (perms['boq.updateFactoryStatus']) return ROLES.FACTORY;
+        if (perms['boq.updateSiteStatus']) return ROLES.SITE;
+        return ROLES.SITE; // view-only: most restricted worker
     };
 
     const user = {

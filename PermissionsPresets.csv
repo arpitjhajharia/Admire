@@ -1,0 +1,100 @@
+﻿Operation,Super_Admin,Owner,Accountant,Admin Staff,Factory Lead,Stock Manager,Site Team
+Global Settings — View,Y,Y,No,No,No,No,No
+Global Settings — Edit USD exchange rate,Y,Y,No,No,No,No,No
+User Manager — View users list,Y,Y,No,No,No,No,No
+User Manager — Create user,Y,Y,No,No,No,No,No
+User Manager — Edit user / reassign role,Y,Y,No,No,No,No,No
+User Manager — Delete user,Y,Y,No,No,No,No,No
+Backup Manager — View snapshots,Y,Y,No,No,No,No,No
+Backup Manager — Create backup,Y,Y,No,No,No,No,No
+Backup Manager — Restore backup,Y,Y,No,No,No,No,No
+Project Manager — View,Y,Y,No,No,No,No,No
+Project Manager — Create / Edit,Y,Y,No,No,No,No,No
+Project Manager — Delete,Y,Y,No,No,No,No,No
+LED Calculator — View / Open,Y,Y,No,No,No,No,No
+LED Calculator — Create new quote,Y,Y,No,No,No,No,No
+"LED Calculator — Edit specs (screens, pitch, cabinet)",Y,Y,No,No,No,No,No
+LED Calculator — Edit pricing / margins,Y,Y,No,No,No,No,No
+LED Calculator — Edit commercial terms / T&C,Y,Y,No,No,No,No,No
+LED Calculator — Clone quote,Y,Y,No,No,No,No,No
+LED Calculator — Save quote,Y,Y,No,No,No,No,No
+LED Calculator — Export PDF / Excel,Y,Y,No,No,No,No,No
+Saved Quotes — View list & details,Y,Y,Y,Not amounts,Not amounts,No,No
+Saved Quotes — Load into calculator,Y,Y,No,No,No,No,No
+Saved Quotes — Clone quote,Y,Y,No,No,No,No,No
+Saved Quotes — Download BOM,Y,Y,Y,Y,Y,Y,No
+Saved Quotes — Delete quote,Y,Y,No,No,No,No,No
+Quote Image Library — View / Select for print,Y,Y,No,No,No,No,No
+Quote Image Library — Upload image,Y,Y,No,No,No,No,No
+Quote Image Library — Delete image,Y,Y,No,No,No,No,No
+Signage Calculator — View / Open,Y,Y,No,No,No,No,No
+Signage Calculator — Create new quote,Y,Y,No,No,No,No,No
+"Signage Calculator — Edit specs (boards, profiles, ACP)",Y,Y,No,No,No,No,No
+Signage Calculator — Edit pricing / margins,Y,Y,No,No,No,No,No
+Signage Calculator — Edit commercial terms / T&C,Y,Y,No,No,No,No,No
+Signage Calculator — Clone Quote,Y,Y,No,No,No,No,No
+Signage Calculator — Save Quote,Y,Y,No,No,No,No,No
+Signage Calculator — Export PDF,Y,Y,No,No,No,No,No
+Signage Quotes Manager — View list,Y,Y,Y,Not amounts,Not amounts,No,No
+Signage Quotes Manager — Load into calculator,Y,Y,No,No,No,No,No
+Signage Quotes Manager — Clone quote,Y,Y,No,No,No,No,No
+Signage Quotes Manager — Download Excel,Y,Y,Y,Y,Y,Y,No
+Signage Quotes Manager — Delete quote,Y,Y,No,No,No,No,No
+Inventory Manager — View / Search,Y,Y,Y,Y,Y,Y,No
+Inventory Manager — Add new item,Y,Y,No,No,No,No,No
+Inventory Manager — Edit item specs,Y,Y,No,No,No,No,No
+Inventory Manager — Edit pricing,Y,Y,No,No,No,No,No
+Inventory Manager — Delete item,Y,Y,No,No,No,No,No
+Inventory Manager — Batch operations,Y,Y,No,No,No,No,No
+Inventory Ledger — View transactions,Y,Y,Y,Y,Y,Y,No
+Inventory Ledger — Add transaction (in / out),Y,Y,Y,Y,Y,Y,No
+Inventory Ledger — Edit transaction,Y,Y,Y,Y,Y,Y,No
+Inventory Ledger — Delete transaction,Y,Y,Y,Y,Y,Y,No
+Signage Inventory — View / Search,Y,Y,Y,Y,Y,Y,No
+Signage Inventory — Add new item,Y,Y,No,No,No,No,No
+Signage Inventory — Edit item specs,Y,Y,No,No,No,No,No
+Signage Inventory — Edit pricing,Y,Y,No,No,No,No,No
+Signage Inventory — Delete item,Y,Y,No,No,No,No,No
+Signage Ledger — View transactions,Y,Y,Y,Y,Y,Y,No
+Signage Ledger — Add transaction (in / out),Y,Y,Y,Y,Y,Y,No
+Signage Ledger — Edit transaction,Y,Y,Y,Y,Y,Y,No
+Signage Ledger — Delete transaction,Y,Y,Y,Y,Y,Y,No
+Misc Stock — View inventory,Y,Y,Y,Y,Y,Y,No
+Misc Stock — Add / Edit item,Y,Y,No,No,No,No,No
+Misc Stock — Duplicate item,Y,Y,No,No,No,No,No
+Misc Stock — Delete item,Y,Y,No,No,No,No,No
+Misc Stock — Add stock transaction,Y,Y,Y,Y,Y,Y,No
+Misc Stock — Edit / Delete transaction,Y,Y,Y,Y,Y,Y,No
+BOQ Tracker — View BOQ list,Y,Y,Y,Y,Y,Y,Y
+BOQ Tracker — Create BOQ,Y,Y,No,No,No,No,No
+BOQ Tracker — Edit BOQ name / pipeline stages,Y,Y,No,No,No,No,No
+BOQ Tracker — Update item status (factory stages),Y,Y,No,Y,Y,No,No
+BOQ Tracker — Update item status (site stages),Y,Y,No,Y,Y,No,Y
+BOQ Tracker — Upload images (artwork / factory),Y,Y,No,Y,Y,No,No
+BOQ Tracker — Upload images (site / handover),Y,Y,No,Y,Y,No,Y
+BOQ Tracker — Batch status update,Y,Y,No,Y,Y,No,Y
+BOQ Tracker — Batch delete items,Y,Y,No,No,No,No,No
+BOQ Tracker — Delete BOQ,Y,Y,No,No,No,No,No
+Cut List Calculator — Full use,Y,Y,No,Y,Y,Y,Y
+CRM — View leads (all),Y,Y,Y,No,No,No,No
+CRM — Create lead,Y,Y,No,No,No,No,No
+CRM — Edit lead / move stage,Y,Y,No,No,No,No,No
+CRM — Assign agent,Y,Y,No,No,No,No,No
+CRM — Delete lead,Y,Y,No,No,No,No,No
+Task Manager — View all tasks,Y,Y,No,No,No,No,No
+Task Manager — View own tasks only,Y,Y,No,Y,Y,Y,Y
+Task Manager — Create task,Y,Y,own,own,own,own,own
+Task Manager — Assign task to another user,Y,Y,No,No,No,No,No
+Task Manager — Edit task,Y,Y,own,own,own,own,own
+Task Manager — Mark complete,Y,Y,own,own,own,own,own
+Task Manager — Delete task,Y,Y,No,No,No,No,No
+Attendance — View calendar (all employees),Y,Y,Y,Y,No,No,No
+Attendance — Mark / edit attendance,Y,Y,Y,Y,No,No,No
+Attendance — Bulk fill days,Y,Y,Y,Y,No,No,No
+Employee — View employee list,Y,Y,Y,No,No,No,No
+Employee — Add / Edit employee record,Y,Y,Y,No,No,No,No
+Employee — Delete employee,Y,Y,No,No,No,No,No
+Employee — Salary increments,Y,Y,Y,No,No,No,No
+Employee — Advances / deductions,Y,Y,Y,No,No,No,No
+Payroll — View salary sheet,Y,Y,Y,No,No,No,No
+Payroll — Export payroll,Y,Y,Y,No,No,No,No

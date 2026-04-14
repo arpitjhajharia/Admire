@@ -224,7 +224,7 @@ const KanbanView = ({ leads, onEdit, onStageChange }) => {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-const CRMManager = ({ user, userRole, onOpenLEDCalculator }) => {
+const CRMManager = ({ user, onOpenLEDCalculator, perms = {} }) => {
     const [leads, setLeads] = useState([]);
     const [usersList, setUsersList] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -239,7 +239,9 @@ const CRMManager = ({ user, userRole, onOpenLEDCalculator }) => {
     const [showForm, setShowForm] = useState(false);
     const [showDashboard, setShowDashboard] = useState(false);
 
-    const isAdmin = ['super_admin', 'admin'].includes(userRole);
+    const canEdit = perms['crm.editMove'];
+    const canCreate = perms['crm.create'];
+    const canDelete = perms['crm.delete'];
     const baseRef = () => db.collection('artifacts').doc(appId).collection('public').doc('data');
 
     useEffect(() => {
@@ -379,7 +381,6 @@ const CRMManager = ({ user, userRole, onOpenLEDCalculator }) => {
                 <ClientDashboard
                     lead={editingLead}
                     user={user}
-                    userRole={userRole}
                     onBack={() => setShowDashboard(false)}
                     onOpenLEDCalculator={onOpenLEDCalculator}
                 />
@@ -537,7 +538,7 @@ const CRMManager = ({ user, userRole, onOpenLEDCalculator }) => {
                                                     </td>
                                                     <td className="px-3 py-1 sm:py-2 sm:table-cell w-full sm:w-auto mt-1 sm:mt-0 pb-3 sm:pb-2">
                                                         <div className="flex items-center justify-end sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {(isAdmin || lead.assignedTo === user.username || lead.createdBy === user.username) && (
+                                                            {(canDelete || lead.assignedTo === user.username || lead.createdBy === user.username) && (
                                                                 <button
                                                                     onClick={e => { e.stopPropagation(); handleDeleteLead(lead.id); }}
                                                                     className="flex items-center justify-center gap-1.5 px-3 py-1.5 sm:p-2 rounded-lg text-red-500 sm:text-slate-300 hover:text-red-500 border border-red-100 sm:border-transparent hover:bg-red-50 dark:hover:bg-red-900/40 transition-all font-bold text-[10px] uppercase sm:normal-case"

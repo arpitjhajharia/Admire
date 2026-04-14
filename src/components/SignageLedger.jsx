@@ -19,7 +19,7 @@ const emptyTx = () => ({
     widthFt: '', heightFt: '', purchaseRatePerSqft: ''
 });
 
-const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOnly = false }) => {
+const SignageLedger = ({ signageInventory = [], signageTransactions = [], perms = {} }) => {
     const [newTx, setNewTx] = useState(emptyTx());
     const [editingId, setEditingId] = useState(null);
     const [showForm, setShowForm] = useState(false);
@@ -280,7 +280,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                     </div>
 
                     {/* Add button */}
-                    {!showForm && !readOnly && (
+                    {!showForm && perms['signageLedger.add'] && (
                         <button
                             onClick={() => setShowForm(true)}
                             className="flex-shrink-0 bg-slate-800 dark:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-slate-900 dark:hover:bg-slate-500 transition-colors shadow-sm"
@@ -292,7 +292,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
             </div>
 
             {/* ── Add/Edit Form ── */}
-            {showForm && !readOnly && (
+            {showForm && perms['signageLedger.add'] && (
                 <div className={`p-3 rounded-xl border mb-4 transition-colors ${editingId ? 'bg-amber-50/80 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700' : 'bg-slate-50 dark:bg-slate-700/30 border-slate-200 dark:border-slate-700'}`}>
                     <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-600">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{editingId ? '✏️ Edit Transaction' : '➕ New Transaction'}</h3>
@@ -641,10 +641,10 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                     <span className={`block text-base font-extrabold tabular-nums ${tx.type === 'in' ? 'text-green-600' : 'text-red-500'}`}>
                                         {tx.type === 'in' ? '+' : '-'}{tx.qty}
                                     </span>
-                                    {!readOnly && (
+                                    {(perms['signageLedger.edit'] || perms['signageLedger.delete']) && (
                                         <div className="flex gap-2 justify-end mt-0.5">
-                                            <button onClick={() => handleEdit(tx)} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">Edit</button>
-                                            <button onClick={() => handleDelete(tx.id)} className="text-[10px] text-red-400 hover:text-red-600 font-medium">Del</button>
+                                            {perms['signageLedger.edit'] && <button onClick={() => handleEdit(tx)} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">Edit</button>}
+                                            {perms['signageLedger.delete'] && <button onClick={() => handleDelete(tx.id)} className="text-[10px] text-red-400 hover:text-red-600 font-medium">Del</button>}
                                         </div>
                                     )}
                                 </div>
@@ -671,7 +671,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                     <th className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Category</th>
                                     <th className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty / Length</th>
                                     <th className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Loc/Source</th>
-                                    {!readOnly && <th className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
+                                    {(perms['signageLedger.edit'] || perms['signageLedger.delete']) && <th className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -751,15 +751,15 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], readOn
                                             </td>
 
                                             {/* Actions */}
-                                            {!readOnly && (
+                                            {(perms['signageLedger.edit'] || perms['signageLedger.delete']) && (
                                                 <td className="px-2 py-1 whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-0">
-                                                        <button onClick={() => handleEdit(tx)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
+                                                        {perms['signageLedger.edit'] && <button onClick={() => handleEdit(tx)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
                                                             <Edit size={12} />
-                                                        </button>
-                                                        <button onClick={() => handleDelete(tx.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                                        </button>}
+                                                        {perms['signageLedger.delete'] && <button onClick={() => handleDelete(tx.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
                                                             <Trash2 size={12} />
-                                                        </button>
+                                                        </button>}
                                                     </div>
                                                 </td>
                                             )}

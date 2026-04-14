@@ -358,7 +358,7 @@ const calculateSignageBOM = (screen, inventory) => {
 };
 
 // --- Component ---
-const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
+const SignageCalculator = ({ user, loadedState, perms = {} }) => {
 
     const createDefaultScreen = (name = 'Board 1') => ({
         id: generateId(),
@@ -400,6 +400,13 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
             }
         }
     };
+
+    // Permission flags
+    const canCreateQuote = !!perms['signage.createQuote'];
+    const canEditSpecs   = !!perms['signage.editSpecs'];
+    const canEditPricing = !!perms['signage.editPricing'];
+    const canEditTerms   = !!perms['signage.editTerms'];
+    const canExportPdf   = !!perms['signage.exportPdf'];
 
     const [state, setState] = useState(initialState);
     const [calculation, setCalculation] = useState(null);
@@ -694,9 +701,11 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                 <div className={sectionCls}>
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="text-md font-bold text-slate-800 dark:text-white">Board Configurations</h3>
-                        <button onClick={addScreen} className="text-[10px] font-bold text-pink-600 dark:text-pink-400 hover:text-pink-700 flex items-center gap-1 bg-pink-50 dark:bg-pink-900/30 px-2 py-1 rounded border border-pink-100 dark:border-pink-800 transition-colors">
-                            <Plus size={12} /> Add Board
-                        </button>
+                        {canEditSpecs && (
+                            <button onClick={addScreen} className="text-[10px] font-bold text-pink-600 dark:text-pink-400 hover:text-pink-700 flex items-center gap-1 bg-pink-50 dark:bg-pink-900/30 px-2 py-1 rounded border border-pink-100 dark:border-pink-800 transition-colors">
+                                <Plus size={12} /> Add Board
+                            </button>
+                        )}
                     </div>
 
                     {/* Column headers */}
@@ -726,7 +735,8 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         value={screen.name}
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => { e.stopPropagation(); updateScreenProp(idx, 'name', e.target.value); }}
-                                        className="w-full text-xs font-semibold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white"
+                                        disabled={!canEditSpecs}
+                                        className="w-full text-xs font-semibold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white disabled:opacity-60"
                                     />
                                 </div>
                                 <div className="col-span-1 md:col-span-2">
@@ -735,7 +745,8 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         value={screen.width}
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => { e.stopPropagation(); updateScreenProp(idx, 'width', e.target.value); }}
-                                        className="w-full text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white"
+                                        disabled={!canEditSpecs}
+                                        className="w-full text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white disabled:opacity-60"
                                         placeholder="W"
                                     />
                                 </div>
@@ -745,7 +756,8 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         value={screen.height}
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => { e.stopPropagation(); updateScreenProp(idx, 'height', e.target.value); }}
-                                        className="w-full text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white"
+                                        disabled={!canEditSpecs}
+                                        className="w-full text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white disabled:opacity-60"
                                         placeholder="H"
                                     />
                                 </div>
@@ -753,7 +765,8 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                     <select
                                         value={screen.environment}
                                         onChange={e => { e.stopPropagation(); updateScreenProp(idx, 'environment', e.target.value); }}
-                                        className="w-full text-xs bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white py-0.5"
+                                        disabled={!canEditSpecs}
+                                        className="w-full text-xs bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white py-0.5 disabled:opacity-60"
                                     >
                                         <option value="Indoor">Indoor</option>
                                         <option value="Outdoor">Outdoor</option>
@@ -766,16 +779,21 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         min="1"
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => { e.stopPropagation(); updateScreenProp(idx, 'screenQty', e.target.value); }}
-                                        className="w-12 text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white"
+                                        disabled={!canEditSpecs}
+                                        className="w-12 text-xs text-center bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-pink-400 dark:text-white disabled:opacity-60"
                                     />
                                 </div>
                                 <div className="col-span-1 md:col-span-2 flex justify-end gap-1" onClick={e => e.stopPropagation()}>
-                                    <button onClick={() => duplicateScreen(idx)} className="p-1 text-slate-400 hover:text-pink-500 transition-colors" title="Duplicate">
-                                        <Copy size={13} />
-                                    </button>
-                                    <button onClick={() => removeScreen(idx)} className="p-1 text-slate-400 hover:text-red-500 transition-colors" title="Remove">
-                                        <Trash2 size={13} />
-                                    </button>
+                                    {canEditSpecs && (
+                                        <button onClick={() => duplicateScreen(idx)} className="p-1 text-slate-400 hover:text-pink-500 transition-colors" title="Duplicate">
+                                            <Copy size={13} />
+                                        </button>
+                                    )}
+                                    {canEditSpecs && (
+                                        <button onClick={() => removeScreen(idx)} className="p-1 text-slate-400 hover:text-red-500 transition-colors" title="Remove">
+                                            <Trash2 size={13} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -858,12 +876,13 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         <div className="flex items-center justify-end gap-1">
                                             <input
                                                 type="number"
-                                                className={`w-20 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors ${isROv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
+                                                className={`w-20 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors disabled:opacity-50 ${isROv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
                                                 value={rate ?? ''}
                                                 onChange={e => updateRateOverride(rateOverrideId, e.target.value)}
+                                                disabled={!canEditSpecs}
                                             />
                                             <span className="text-[9px] text-slate-400">/{rateUom}</span>
-                                            {isROv && (
+                                            {isROv && canEditSpecs && (
                                                 <button onClick={() => updateRateOverride(rateOverrideId, '')} className="text-amber-500 hover:text-amber-700" title="Reset rate to auto">
                                                     <X size={10} />
                                                 </button>
@@ -878,14 +897,15 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         <div className="flex items-center justify-end gap-1">
                                             <input
                                                 type="number"
-                                                className={`w-16 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors ${isOv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
+                                                className={`w-16 p-0.5 text-right bg-transparent border-b border-dashed focus:outline-none transition-colors disabled:opacity-50 ${isOv ? 'border-amber-400 text-amber-700 dark:text-amber-400 font-bold' : 'border-slate-200 dark:border-slate-600 text-slate-500'}`}
                                                 value={qty ?? ''}
                                                 onChange={e => updateOverride(id, e.target.value)}
+                                                disabled={!canEditSpecs}
                                             />
                                             <span className="text-[9px] text-slate-400 whitespace-nowrap">
                                                 {lenMm != null && qty != null ? ` nos (${fmtLen(qty * lenMm)})` : ` ${uom}`}
                                             </span>
-                                            {isOv && (
+                                            {isOv && canEditSpecs && (
                                                 <button onClick={() => updateOverride(id, '')} className="text-amber-500 hover:text-amber-700" title="Reset to auto">
                                                     <X size={10} />
                                                 </button>
@@ -1411,7 +1431,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                 })()}
 
                 {/* ── Terms & Conditions Card ── */}
-                <div className={sectionCls}>
+                {canEditTerms && <div className={sectionCls}>
                 <details className="group" open>
                     <summary className="flex justify-between items-center cursor-pointer list-none select-none">
                         <div className="flex items-center gap-2">
@@ -1550,7 +1570,7 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
 
                     </div>
                 </details>
-                </div>
+                </div>}
             </div>
 
             {/* ── RIGHT COL ── */}
@@ -1575,20 +1595,22 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">
                                 Commercial Strategy{isMultiScreen ? ` — ${activeScreen.name}` : ''} (per board)
                             </label>
-                            <div className="flex gap-2 mb-4">
-                                <select className={inputCls + " w-1/2"} value={activeScreen.pricing.mode} onChange={e => updateScreenNested(state.activeScreenIndex, 'pricing', 'mode', e.target.value)}>
-                                    <option value="Margin">Cost Plus Margin %</option>
-                                    <option value="Price/SqFt">Target Price/SqFt</option>
-                                    <option value="Flat Rate">Target Flat Amount</option>
-                                </select>
-                                <input
-                                    type="number"
-                                    className={inputCls + " w-1/2 !bg-pink-50 dark:!bg-pink-900/20 !border-pink-200 font-bold"}
-                                    value={activeScreen.pricing.value}
-                                    onChange={e => updateScreenNested(state.activeScreenIndex, 'pricing', 'value', e.target.value)}
-                                    placeholder="0.00"
-                                />
-                            </div>
+                            {canEditPricing && (
+                                <div className="flex gap-2 mb-4">
+                                    <select className={inputCls + " w-1/2"} value={activeScreen.pricing.mode} onChange={e => updateScreenNested(state.activeScreenIndex, 'pricing', 'mode', e.target.value)}>
+                                        <option value="Margin">Cost Plus Margin %</option>
+                                        <option value="Price/SqFt">Target Price/SqFt</option>
+                                        <option value="Flat Rate">Target Flat Amount</option>
+                                    </select>
+                                    <input
+                                        type="number"
+                                        className={inputCls + " w-1/2 !bg-pink-50 dark:!bg-pink-900/20 !border-pink-200 font-bold"}
+                                        value={activeScreen.pricing.value}
+                                        onChange={e => updateScreenNested(state.activeScreenIndex, 'pricing', 'value', e.target.value)}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            )}
 
                             {/* All-boards summary table (now used for single board too) */}
                             {allScreensTotal && (
@@ -1603,9 +1625,9 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                     <th className="px-2 py-1.5 text-left">Board</th>
                                                     <th className="px-2 py-1.5 text-center">Dims</th>
                                                     <th className="px-2 py-1.5 text-center">Qty</th>
-                                                    <th className="px-2 py-1.5 text-right">Cost/Brd</th>
+                                                    {canEditPricing && <th className="px-2 py-1.5 text-right">Cost/Brd</th>}
                                                     <th className="px-2 py-1.5 text-right">Quote/Brd</th>
-                                                    <th className="px-2 py-1.5 text-right">Margin/Brd</th>
+                                                    {canEditPricing && <th className="px-2 py-1.5 text-right">Margin/Brd</th>}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -1625,12 +1647,14 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                                             </td>
                                                             <td className="px-2 py-2 text-center text-slate-500 dark:text-slate-400">{scr?.width || 0}×{scr?.height || 0}</td>
                                                             <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-200 font-semibold">{scr?.screenQty || 0}</td>
-                                                            <td className="px-2 py-2 text-right text-slate-600 dark:text-slate-300">{formatCurrency(calc.totalCostEstimate, 'INR')}</td>
+                                                            {canEditPricing && <td className="px-2 py-2 text-right text-slate-600 dark:text-slate-300">{formatCurrency(calc.totalCostEstimate, 'INR')}</td>}
                                                             <td className="px-2 py-2 text-right font-semibold text-pink-600 dark:text-pink-400">{formatCurrency(calc.finalSellPricePerScreen, 'INR')}</td>
-                                                            <td className="px-2 py-2 text-right font-semibold text-green-600 dark:text-green-400 leading-tight">
-                                                                {formatCurrency(marginPerBoard, 'INR')}<br/>
-                                                                <span className="text-[9px] font-bold">({Math.round(calc.marginPct)}%)</span>
-                                                            </td>
+                                                            {canEditPricing && (
+                                                                <td className="px-2 py-2 text-right font-semibold text-green-600 dark:text-green-400 leading-tight">
+                                                                    {formatCurrency(marginPerBoard, 'INR')}<br/>
+                                                                    <span className="text-[9px] font-bold">({Math.round(calc.marginPct)}%)</span>
+                                                                </td>
+                                                            )}
                                                         </tr>
                                                     );
                                                 })}
@@ -1639,14 +1663,18 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                     </div>
                                     {/* Totals footer */}
                                     <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-3 py-2.5 space-y-1">
-                                        <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
-                                            <span>Total Cost</span>
-                                            <span className="font-bold text-slate-700 dark:text-slate-200">{formatCurrency(allScreensTotal.totalProjectCost, 'INR')}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
-                                            <span>Total Margin</span>
-                                            <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(allScreensTotal.totalMargin, 'INR')} ({Math.round(allScreensTotal.totalMarginPct)}%)</span>
-                                        </div>
+                                        {canEditPricing && (
+                                            <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                                                <span>Total Cost</span>
+                                                <span className="font-bold text-slate-700 dark:text-slate-200">{formatCurrency(allScreensTotal.totalProjectCost, 'INR')}</span>
+                                            </div>
+                                        )}
+                                        {canEditPricing && (
+                                            <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                                                <span>Total Margin</span>
+                                                <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(allScreensTotal.totalMargin, 'INR')} ({Math.round(allScreensTotal.totalMarginPct)}%)</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
                                             <span className="font-black text-slate-800 dark:text-white text-sm">Grand Total</span>
                                             <span className="font-black text-pink-600 dark:text-pink-400 text-sm">{formatCurrency(allScreensTotal.totalProjectSell, 'INR')}</span>
@@ -1665,17 +1693,19 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                         <FileText size={16} /> BOM
                                     </button>
 
-                                    <button
-                                        onClick={() => {
-                                            setShowQuote(true);
-                                            setAutoPrint(true);
-                                        }}
-                                        className="flex-1 bg-indigo-600 dark:bg-indigo-700 text-white font-bold py-2.5 rounded-xl flex justify-center items-center gap-2 hover:bg-indigo-500 dark:hover:bg-indigo-600 transition shadow-sm text-xs"
-                                    >
-                                        <Printer size={16} /> Print
-                                    </button>
+                                    {canExportPdf && (
+                                        <button
+                                            onClick={() => {
+                                                setShowQuote(true);
+                                                setAutoPrint(true);
+                                            }}
+                                            className="flex-1 bg-indigo-600 dark:bg-indigo-700 text-white font-bold py-2.5 rounded-xl flex justify-center items-center gap-2 hover:bg-indigo-500 dark:hover:bg-indigo-600 transition shadow-sm text-xs"
+                                        >
+                                            <Printer size={16} /> Print
+                                        </button>
+                                    )}
 
-                                    {!readOnly && (
+                                    {perms['signage.save'] && (
                                         <button
                                             onClick={handleSaveQuote}
                                             disabled={!calculation}
@@ -1704,17 +1734,19 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                 Signage BOM{state.project ? ` — ${state.project}` : ''}
                             </h2>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                        const originalTitle = document.title;
-                                        document.title = `${state.client || 'Signage'}_${state.project || 'BOM'}_BOM`.replace(/[^a-zA-Z0-9_]/g, '_');
-                                        window.print();
-                                        document.title = originalTitle;
-                                    }}
-                                    className="px-4 py-2 bg-pink-600 text-white hover:bg-pink-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm font-semibold"
-                                >
-                                    <Printer size={16} /> Print / PDF
-                                </button>
+                                {canExportPdf && (
+                                    <button
+                                        onClick={() => {
+                                            const originalTitle = document.title;
+                                            document.title = `${state.client || 'Signage'}_${state.project || 'BOM'}_BOM`.replace(/[^a-zA-Z0-9_]/g, '_');
+                                            window.print();
+                                            document.title = originalTitle;
+                                        }}
+                                        className="px-4 py-2 bg-pink-600 text-white hover:bg-pink-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm font-semibold"
+                                    >
+                                        <Printer size={16} /> Print / PDF
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setShowBOM(false)}
                                     className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
@@ -1745,17 +1777,19 @@ const SignageCalculator = ({ user, userRole, readOnly, loadedState }) => {
                                 Quote Preview
                             </h2>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                        const originalTitle = document.title;
-                                        document.title = `${state.client || 'Signage'}_${state.project || 'Project'}_Quote`.replace(/[^a-zA-Z0-9_]/g, '_');
-                                        window.print();
-                                        document.title = originalTitle;
-                                    }}
-                                    className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm font-semibold"
-                                >
-                                    <Printer size={16} /> Print / PDF
-                                </button>
+                                {canExportPdf && (
+                                    <button
+                                        onClick={() => {
+                                            const originalTitle = document.title;
+                                            document.title = `${state.client || 'Signage'}_${state.project || 'Project'}_Quote`.replace(/[^a-zA-Z0-9_]/g, '_');
+                                            window.print();
+                                            document.title = originalTitle;
+                                        }}
+                                        className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm font-semibold"
+                                    >
+                                        <Printer size={16} /> Print / PDF
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setShowQuote(false)}
                                     className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"

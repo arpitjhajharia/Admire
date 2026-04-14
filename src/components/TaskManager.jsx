@@ -38,7 +38,7 @@ const SortableHeader = ({ label, columnKey, sortConfig, onSort, className = "" }
     );
 };
 
-const TaskManager = ({ user, userRole }) => {
+const TaskManager = ({ user, perms = {} }) => {
     const [tasks, setTasks] = useState([]);
     const [usersList, setUsersList] = useState([]);
     const [projectsList, setProjectsList] = useState([]);
@@ -147,6 +147,10 @@ const TaskManager = ({ user, userRole }) => {
 
     const startEdit = (task = null) => {
         if (task) {
+            const isOwn = task.assignedTo?.toLowerCase() === user?.username?.toLowerCase() ||
+                          task.createdBy === user?.email;
+            if (!perms['tasks.edit']) return;
+            if (!isOwn && !perms['tasks.editOthers']) return;
             setEditingTask(task);
             setTitle(task.title || '');
             setProject(task.project || '');
@@ -281,6 +285,16 @@ const TaskManager = ({ user, userRole }) => {
             });
         }
 
+        // viewAll: see every user's tasks. Without it, only see own (assigned to or created by)
+        if (!perms['tasks.viewAll']) {
+            const myEmail = user?.email;
+            const myUsername = user?.username?.toLowerCase();
+            sortedTasks = sortedTasks.filter(t =>
+                t.assignedTo?.toLowerCase() === myUsername ||
+                t.createdBy === myEmail
+            );
+        }
+
         const myTasksList = [];
         const otherTasksList = [];
         const completedTasksList = [];
@@ -298,7 +312,7 @@ const TaskManager = ({ user, userRole }) => {
             }
         });
         return { myTasks: myTasksList, otherTasks: otherTasksList, completedTasks: completedTasksList };
-    }, [tasks, user, hideCompleted, sortConfig]);
+    }, [tasks, user, hideCompleted, sortConfig, perms]);
 
     if (loading) {
         return (
@@ -408,7 +422,7 @@ const TaskManager = ({ user, userRole }) => {
                         className="w-full bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded px-1 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-900 dark:text-white"
                     >
                         <option value="">User</option>
-                        {usersList.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
+                        {(perms['tasks.assignOther'] ? usersList : usersList.filter(u => u.username === user?.username)).map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
                     </select>
                 </td>
                 <td className="px-1.5 py-1 w-16 align-top">
@@ -534,12 +548,14 @@ const TaskManager = ({ user, userRole }) => {
                 </td>
                 <td className="px-1.5 py-1 whitespace-nowrap w-12 text-right align-top">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
-                            className="w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                        >
-                            <Trash2 size={11} />
-                        </button>
+                        {perms['tasks.delete'] && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                                className="w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                            >
+                                <Trash2 size={11} />
+                            </button>
+                        )}
                     </div>
                 </td>
             </tr>
@@ -675,7 +691,7 @@ const TaskManager = ({ user, userRole }) => {
                     </div>
 
                     {/* Delete button (edit only) */}
-                    {editingTask.id !== 'new' && (
+                    {editingTask.id !== 'new' && perms['tasks.delete'] && (
                         <button
                             onClick={() => { handleDeleteTask(editingTask.id); cancelEdit(); }}
                             className="w-full flex items-center justify-center gap-1.5 py-2.5 text-red-600 border border-red-200 rounded-lg text-sm font-semibold hover:bg-red-50 transition-colors"
@@ -788,14 +804,16 @@ const TaskManager = ({ user, userRole }) => {
                         <span className="hidden sm:inline">{hideCompleted ? 'Show All' : 'Hide Completed'}</span>
                         <span className="sm:hidden">{hideCompleted ? 'All' : 'Hide ✓'}</span>
                     </button>
-                    <button
-                        onClick={() => startEdit()}
-                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs sm:text-sm font-bold transition-colors shadow-sm"
-                    >
-                        <Plus size={13} />
-                        <span className="hidden sm:inline">New Task</span>
-                        <span className="sm:hidden">New</span>
-                    </button>
+                    {perms['tasks.create'] && (
+                        <button
+                            onClick={() => startEdit()}
+                            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs sm:text-sm font-bold transition-colors shadow-sm"
+                        >
+                            <Plus size={13} />
+                            <span className="hidden sm:inline">New Task</span>
+                            <span className="sm:hidden">New</span>
+                        </button>
+                    )}
                 </div>
             </div>
 

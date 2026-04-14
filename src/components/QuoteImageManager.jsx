@@ -21,6 +21,7 @@ import { ImagePlus, Trash2, X, CheckCircle2, Circle, Upload, Image as ImageIcon 
 const QuoteImageManager = ({
     user,
     userRole,
+    perms = {},
     mode = 'library',
     selectedIds = [],
     onSelectionChange,
@@ -32,7 +33,8 @@ const QuoteImageManager = ({
     const [dragOver, setDragOver] = React.useState(false);
     const fileInputRef = React.useRef(null);
 
-    const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+    const canUpload = perms['quoteImages.upload'];
+    const canDelete = perms['quoteImages.delete'];
     const isLibrary = mode === 'library';
     const isPicker  = mode === 'picker';
 
@@ -77,7 +79,7 @@ const QuoteImageManager = ({
     });
 
     const handleUpload = async files => {
-        if (!isAdmin || !files || files.length === 0) return;
+        if (!canUpload || !files || files.length === 0) return;
         setUploading(true);
         try {
             for (const file of Array.from(files)) {
@@ -100,7 +102,7 @@ const QuoteImageManager = ({
     };
 
     const handleDelete = async id => {
-        if (!isAdmin) return;
+        if (!canDelete) return;
         if (!window.confirm('Delete this image from the library?')) return;
         try {
             await COLLECTION().doc(id).delete();
@@ -117,7 +119,7 @@ const QuoteImageManager = ({
     const handleDrop = e => {
         e.preventDefault();
         setDragOver(false);
-        if (!isAdmin) return;
+        if (!canUpload) return;
         handleUpload(e.dataTransfer.files);
     };
 
@@ -140,8 +142,8 @@ const QuoteImageManager = ({
                     </div>
                 </div>
 
-                {/* Upload zone — admin only */}
-                {isAdmin && (
+                {/* Upload zone — upload permission only */}
+                {canUpload && (
                     <div
                         className={`mb-4 border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors ${
                             dragOver
@@ -187,8 +189,8 @@ const QuoteImageManager = ({
                     <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
                         <ImagePlus className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-3" />
                         <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider">No images yet</p>
-                        {isAdmin && <p className="text-xs text-slate-400 mt-1">Upload reference images above — they'll be available for all quotes</p>}
-                        {!isAdmin && <p className="text-xs text-slate-400 mt-1">Ask an admin to upload reference images</p>}
+                        {canUpload && <p className="text-xs text-slate-400 mt-1">Upload reference images above — they'll be available for all quotes</p>}
+                        {!canUpload && <p className="text-xs text-slate-400 mt-1">Ask an admin to upload reference images</p>}
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -204,7 +206,7 @@ const QuoteImageManager = ({
                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate flex-1" title={img.name}>
                                         {img.name}
                                     </p>
-                                    {isAdmin && (
+                                    {canDelete && (
                                         <button
                                             onClick={() => handleDelete(img.id)}
                                             className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"

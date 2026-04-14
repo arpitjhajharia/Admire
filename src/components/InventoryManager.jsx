@@ -3,7 +3,7 @@ import { Box, Edit, Plus, Trash2, X, Layers, Search, Package, ChevronDown, Chevr
 import { db, appId } from '../lib/firebase';
 import { formatCurrency, formatComponentSpecs } from '../lib/utils';
 
-const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeRate = 1 }) => {
+const InventoryManager = ({ user, transactions = [], exchangeRate = 1, perms = {} }) => {
     const [items, setItems] = React.useState([]);
     const [editingId, setEditingId] = React.useState(null);
     const [showForm, setShowForm] = React.useState(false);
@@ -283,7 +283,7 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                     </select>
 
                     {/* Add button */}
-                    {!showForm && !readOnly && (
+                    {!showForm && perms['inventory.add'] && (
                         <button
                             onClick={() => setShowForm(true)}
                             className="flex-shrink-0 bg-slate-800 dark:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 hover:bg-slate-900 dark:hover:bg-slate-500 transition-colors shadow-sm"
@@ -506,7 +506,7 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                                     <div className={`text-sm font-bold tabular-nums leading-tight ${stock < 0 ? 'text-red-500' : stock === 0 ? 'text-slate-300' : 'text-slate-700 dark:text-slate-200'}`}>
                                         {stock}
                                     </div>
-                                    {!readOnly && (
+                                    {perms['inventory.editPricing'] && (
                                         <div className="text-[9px] text-slate-400 tabular-nums">
                                             {formatCurrency(landedCost, item.currency || 'INR', false, true)}
                                         </div>
@@ -515,20 +515,20 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
 
                                 {/* Right: icon-only actions */}
                                 <div className="flex-shrink-0 flex items-center gap-0.5">
-                                    {item.type === 'module' && (
+                                    {item.type === 'module' && perms['inventory.batch'] && (
                                         <button onClick={() => openBatchModal(item)} className="w-7 h-7 flex items-center justify-center rounded-full text-purple-400 active:bg-purple-50" title="Batches">
                                             <Layers size={13} />
                                         </button>
                                     )}
-                                    {!readOnly && (
-                                        <>
-                                            <button onClick={() => handleEdit(item)} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 active:bg-blue-50 active:text-blue-600" title="Edit">
-                                                <Edit size={13} />
-                                            </button>
-                                            <button onClick={() => handleDelete(item.id)} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-300 active:bg-red-50 active:text-red-500" title="Delete">
-                                                <Trash2 size={13} />
-                                            </button>
-                                        </>
+                                    {perms['inventory.editSpecs'] && (
+                                        <button onClick={() => handleEdit(item)} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 active:bg-blue-50 active:text-blue-600" title="Edit">
+                                            <Edit size={13} />
+                                        </button>
+                                    )}
+                                    {perms['inventory.delete'] && (
+                                        <button onClick={() => handleDelete(item.id)} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-300 active:bg-red-50 active:text-red-500" title="Delete">
+                                            <Trash2 size={13} />
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -545,9 +545,9 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Component</th>
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Specs</th>
                                 <th scope="col" className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Stock</th>
-                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Landed Cost</th>}
-                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Stock Value (₹)</th>}
-                                <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
+                                {perms['inventory.editPricing'] && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Landed Cost</th>}
+                                {perms['inventory.editPricing'] && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Stock Value (₹)</th>}
+                                {(perms['inventory.editSpecs'] || perms['inventory.delete']) && <th scope="col" className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -592,14 +592,14 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
                                             </span>
                                         </td>
 
-                                        {!readOnly && (
+                                        {perms['inventory.editPricing'] && (
                                             <td className="px-3 py-1 whitespace-nowrap text-right">
                                                 <span className="text-[12px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
                                                     {formatCurrency(landedCost, item.currency || 'INR', false, true)}
                                                 </span>
                                             </td>
                                         )}
-                                        {!readOnly && (
+                                        {perms['inventory.editPricing'] && (
                                             <td className="px-3 py-1 whitespace-nowrap text-right">
                                                 <span className="text-[13px] font-bold tabular-nums text-slate-800 dark:text-slate-200">
                                                     {formatCurrency(item.currency === 'USD' ? landedCost * stock * exchangeRate : landedCost * stock, 'INR', false, true)}
@@ -609,19 +609,17 @@ const InventoryManager = ({ user, transactions = [], readOnly = false, exchangeR
 
                                         <td className="px-2 py-1 whitespace-nowrap">
                                             <div className="flex items-center justify-end gap-0">
-                                                {item.type === 'module' && (
+                                                {item.type === 'module' && perms['inventory.batch'] && (
                                                     <button onClick={() => openBatchModal(item)} className="w-6 h-6 rounded flex items-center justify-center text-purple-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors" title="Batches">
                                                         <Layers size={12} />
                                                     </button>
                                                 )}
-                                                {!readOnly && <>
-                                                    <button onClick={() => handleEdit(item)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
-                                                        <Edit size={12} />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(item.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                </>}
+                                                {perms['inventory.editSpecs'] && <button onClick={() => handleEdit(item)} className="w-6 h-6 rounded flex items-center justify-center text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" title="Edit">
+                                                    <Edit size={12} />
+                                                </button>}
+                                                {perms['inventory.delete'] && <button onClick={() => handleDelete(item.id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                                    <Trash2 size={12} />
+                                                </button>}
                                             </div>
                                         </td>
                                     </tr>

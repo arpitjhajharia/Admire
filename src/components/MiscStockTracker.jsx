@@ -14,7 +14,7 @@ const formatDate = (dateStr) => {
     return `${d}-${month}-${year}`;
 };
 
-const MiscStockTracker = ({ user, userRole }) => {
+const MiscStockTracker = ({ user, perms = {} }) => {
     const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' or 'ledger'
     const [items, setItems] = useState([]);
     const [transactions, setTransactions] = useState([]);
@@ -58,7 +58,11 @@ const MiscStockTracker = ({ user, userRole }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Permission checks
-    const readOnly = ['labour'].includes(userRole);
+    const canAddEdit = perms['miscStock.addEdit'];
+    const canDelete = perms['miscStock.delete'];
+    const canDuplicate = perms['miscStock.duplicate'];
+    const canTransaction = perms['miscStock.addTransaction'];
+    const canEditDeleteTx = perms['miscStock.editDeleteTransaction'];
 
     // --- FIREBASE SUBSCRIPTIONS ---
     useEffect(() => {
@@ -403,7 +407,7 @@ const MiscStockTracker = ({ user, userRole }) => {
                     </div>
 
                     {/* Add Button */}
-                    {!readOnly && (
+                    {(activeTab === 'inventory' ? canAddEdit : canTransaction) && (
                         <button 
                             onClick={() => {
                                 if (activeTab === 'inventory') {
@@ -802,8 +806,8 @@ const MiscStockTracker = ({ user, userRole }) => {
                                     <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Vendor</th>
                                     <th className="px-3 py-1.5 text-left font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Specs</th>
                                     <th className="px-3 py-1.5 text-center font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Stock</th>
-                                    {!readOnly && <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Rate/pc</th>}
-                                    {!readOnly && <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Value (₹)</th>}
+                                    {canAddEdit && <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Rate/pc</th>}
+                                    {canAddEdit && <th className="px-3 py-1.5 text-right font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Value (₹)</th>}
                                 </>
                             ) : (
                                 <>
@@ -926,14 +930,14 @@ const MiscStockTracker = ({ user, userRole }) => {
                                             {item.qty}
                                         </span>
                                     </td>
-                                    {!readOnly && (
+                                    {canAddEdit && (
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
                                             <span className="font-bold text-slate-600 dark:text-slate-400 tabular-nums">
                                                 {formatCurrency(item.rate, 'INR', false, true)}
                                             </span>
                                         </td>
                                     )}
-                                    {!readOnly && (
+                                    {canAddEdit && (
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
                                             <span className="font-extrabold text-slate-800 dark:text-slate-200 tabular-nums">
                                                 {formatCurrency(item.value, 'INR', false, true)}
@@ -942,13 +946,9 @@ const MiscStockTracker = ({ user, userRole }) => {
                                     )}
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                         <div className="flex justify-end gap-0.5">
-                                            {!readOnly && (
-                                                <>
-                                                    <button onClick={() => handleDuplicateItem(item)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded transition-all" title="Duplicate"><Copy size={13}/></button>
-                                                    <button onClick={() => handleEditItem(item)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all"><Edit size={13}/></button>
-                                                    <button onClick={async () => { if(confirm('Delete product?')) await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_inventory').doc(item.id).delete(); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 rounded transition-all"><Trash2 size={13}/></button>
-                                                </>
-                                            )}
+                                            {canDuplicate && <button onClick={() => handleDuplicateItem(item)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded transition-all" title="Duplicate"><Copy size={13}/></button>}
+                                            {canAddEdit && <button onClick={() => handleEditItem(item)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all"><Edit size={13}/></button>}
+                                            {canDelete && <button onClick={async () => { if(confirm('Delete product?')) await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_inventory').doc(item.id).delete(); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 rounded transition-all"><Trash2 size={13}/></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -988,7 +988,7 @@ const MiscStockTracker = ({ user, userRole }) => {
                                     </td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                         <div className="flex justify-end gap-0.5">
-                                            {!readOnly && (
+                                            {canEditDeleteTx && (
                                                 <>
                                                     <button onClick={() => handleEditTx(tx)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"><Edit size={13}/></button>
                                                     <button onClick={async () => { if(confirm('Delete record?')) await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_transactions').doc(tx.id).delete(); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all"><Trash2 size={13}/></button>

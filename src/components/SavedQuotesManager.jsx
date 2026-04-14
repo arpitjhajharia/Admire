@@ -18,7 +18,7 @@ const formatDate = (ts) => {
 
 // --- SUB-COMPONENTS (Moved outside to avoid "Cannot create components during render") ---
 
-const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx, readOnly, onHandleView, onLoadQuote, handleDownloadExcel, handleDelete }) => {
+const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx, perms, onHandleView, onHandleBOMView, onLoadQuote, handleDownloadExcel, handleDelete }) => {
     const state = quote.calculatorState || {};
     const isIndoor = state.selectedIndoor === 'true';
     const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
@@ -109,7 +109,7 @@ const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx, readOn
                 </div>
             </td>
 
-            {!readOnly && (
+            {!perms['savedQuotes.hideAmounts'] && (
                 <td className="px-3 py-1 whitespace-nowrap text-right">
                     <span className="text-[13px] font-extrabold text-slate-800 dark:text-white tabular-nums tracking-tight">
                         {formatCurrency(quote.finalAmount, 'INR')}
@@ -125,14 +125,21 @@ const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx, readOn
 
             <td className="px-3 py-1 whitespace-nowrap text-right">
                 <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onHandleView(quote)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="View"><Eye size={14} /></button>
-                    {!readOnly && (
-                        <>
-                            <button onClick={() => onLoadQuote(quote, false)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Edit"><Edit size={14} /></button>
-                            <button onClick={() => handleDownloadExcel(quote)} className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg" title="Download Excel"><Download size={14} /></button>
-                            <button onClick={() => onLoadQuote(quote, true)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Clone"><Copy size={14} /></button>
-                            <button onClick={() => handleDelete(quote.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete"><Trash2 size={14} /></button>
-                        </>
+                    {!perms['savedQuotes.hideAmounts'] && (
+                        <button onClick={() => onHandleView(quote)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="View Quote"><Eye size={14} /></button>
+                    )}
+                    <button onClick={() => onHandleBOMView(quote)} className="p-1.5 text-teal-500 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg" title="View BOM"><Box size={14} /></button>
+                    {perms['savedQuotes.load'] && (
+                        <button onClick={() => onLoadQuote(quote, false)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg" title="Edit"><Edit size={14} /></button>
+                    )}
+                    {perms['savedQuotes.downloadBOM'] && (
+                        <button onClick={() => handleDownloadExcel(quote)} className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg" title="Download BOM"><Download size={14} /></button>
+                    )}
+                    {perms['savedQuotes.clone'] && (
+                        <button onClick={() => onLoadQuote(quote, true)} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Clone"><Copy size={14} /></button>
+                    )}
+                    {perms['savedQuotes.delete'] && (
+                        <button onClick={() => handleDelete(quote.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Delete"><Trash2 size={14} /></button>
                     )}
                 </div>
             </td>
@@ -140,7 +147,7 @@ const QuoteRow = ({ quote, group, isLatest, isExpanded, onToggle, rowIdx, readOn
     );
 };
 
-const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle, readOnly, onHandleView, onLoadQuote, handleDownloadExcel, handleDelete }) => {
+const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle, perms, onHandleView, onHandleBOMView, onLoadQuote, handleDownloadExcel, handleDelete }) => {
     const state = quote.calculatorState || {};
     const isIndoor = state.selectedIndoor === 'true';
     const pitch = quote.allScreensData?.screenConfigs?.[0]?.selectedPitch || state.selectedPitch;
@@ -203,7 +210,7 @@ const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle, readOnly, onH
                                         <span className="text-slate-400 dark:text-slate-500"> ×{calc.screenQty}</span>
                                     </span>
                                 </div>
-                                {!readOnly && <span className="flex-shrink-0 text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(calc.totalProjectSell, 'INR', true)}</span>}
+                                {!perms['savedQuotes.hideAmounts'] && <span className="flex-shrink-0 text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(calc.totalProjectSell, 'INR', true)}</span>}
                             </div>
                         ))
                     ) : (
@@ -212,12 +219,12 @@ const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle, readOnly, onH
                                 <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">1</span>
                                 <span className="text-[11px] text-slate-500 dark:text-slate-400">Single Screen</span>
                             </div>
-                            {!readOnly && <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(quote.finalAmount, 'INR', true)}</span>}
+                            {!perms['savedQuotes.hideAmounts'] && <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(quote.finalAmount, 'INR', true)}</span>}
                         </div>
                     )}
                 </div>
 
-                {!readOnly && (
+                {!perms['savedQuotes.hideAmounts'] && (
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 mt-auto">
                         <div className="flex justify-between items-baseline">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estimate</span>
@@ -228,23 +235,21 @@ const QuoteCard = ({ quote, group, isLatest, isExpanded, onToggle, readOnly, onH
             </div>
 
             <div className={`flex items-center justify-evenly px-2 py-1.5 border-t border-slate-100 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/80`}>
-                <button onClick={() => onHandleView(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title={readOnly ? 'View BOM' : 'View'}>{readOnly ? <Box size={16} /> : <Eye size={16} />}</button>
-                {!readOnly && (
-                    <>
-                        <button onClick={() => onLoadQuote(quote, false)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit"><Edit size={16} /></button>
-                        <button onClick={() => handleDownloadExcel(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" title="Download Excel"><Download size={16} /></button>
-                        <button onClick={() => onLoadQuote(quote, true)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title="Clone"><Copy size={16} /></button>
-                        <button onClick={() => handleDelete(quote.id)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete"><Trash2 size={16} /></button>
-                    </>
-                )}
+                {!perms['savedQuotes.hideAmounts'] && <button onClick={() => onHandleView(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title="View Quote"><Eye size={16} /></button>}
+                <button onClick={() => onHandleBOMView(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-teal-500 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/20" title="View BOM"><Box size={16} /></button>
+                {perms['savedQuotes.load'] && <button onClick={() => onLoadQuote(quote, false)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit"><Edit size={16} /></button>}
+                {perms['savedQuotes.downloadBOM'] && <button onClick={() => handleDownloadExcel(quote)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" title="Download Excel"><Download size={16} /></button>}
+                {perms['savedQuotes.clone'] && <button onClick={() => onLoadQuote(quote, true)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700" title="Clone"><Copy size={16} /></button>}
+                {perms['savedQuotes.delete'] && <button onClick={() => handleDelete(quote.id)} className="quote-action-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete"><Trash2 size={16} /></button>}
             </div>
         </div>
     );
 };
 
-const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoadQuote, readOnly = false }) => {
+const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoadQuote, perms = {} }) => {
     const [quotes, setQuotes] = React.useState([]);
     const [viewQuote, setViewQuote] = React.useState(null);
+    const [viewBOMQuote, setViewBOMQuote] = React.useState(null);
     const [searchTerm, setSearchTerm] = React.useState('');
     const [expandedGroups, setExpandedGroups] = React.useState(new Set());
     const [allQuoteImages, setAllQuoteImages] = React.useState([]);
@@ -328,66 +333,59 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
         }
     };
 
-    const handleView = (quote) => {
-        let dataToView = null;
-
+    const resolveQuoteData = (quote) => {
         const refImageIds = quote.calculatorState?.refImages || [];
         const resolvedRefImages = refImageIds
             .map(id => allQuoteImages.find(img => img.id === id))
             .filter(Boolean);
 
         if (quote.allScreensData) {
-            dataToView = {
-                allScreensData: quote.allScreensData,
-                client: quote.client,
-                project: quote.project,
-                refImages: resolvedRefImages
-            };
-        } else {
-            const state = quote.calculatorState;
-            if (state.screens && state.screens.length > 0) {
-                const allCalculations = state.screens.map((screen) => {
-                    const screenCalcState = { ...state, ...screen };
-                    return calculateBOM(screenCalcState, inventory, transactions, exchangeRate);
-                }).filter(calc => calc !== null);
+            return { allScreensData: quote.allScreensData, client: quote.client, project: quote.project, refImages: resolvedRefImages };
+        }
 
-                if (allCalculations.length > 0) {
-                    const calculatedData = {
-                        totalProjectCost: allCalculations.reduce((sum, calc) => sum + calc.totalProjectCost, 0),
-                        totalProjectSell: allCalculations.reduce((sum, calc) => sum + calc.totalProjectSell, 0),
-                        totalLEDSell: allCalculations.reduce((sum, calc) => sum + (calc.matrix.led.sell * calc.screenQty), 0),
-                        totalServicesSell: allCalculations.reduce((sum, calc) => sum + (calc.matrix.sell.total - (calc.matrix.led.sell * calc.screenQty)), 0),
-                        totalMargin: 0,
-                        totalScreenQty: allCalculations.reduce((sum, calc) => sum + Number(calc.screenQty), 0),
-                        calculations: allCalculations,
-                        screenConfigs: state.screens
-                    };
-                    calculatedData.totalMargin = calculatedData.totalProjectSell - calculatedData.totalProjectCost;
+        const state = quote.calculatorState;
+        if (state.screens && state.screens.length > 0) {
+            const allCalculations = state.screens.map((screen) => {
+                const screenCalcState = { ...state, ...screen };
+                return calculateBOM(screenCalcState, inventory, transactions, exchangeRate);
+            }).filter(calc => calc !== null);
 
-                    dataToView = {
-                        allScreensData: calculatedData,
-                        client: quote.client,
-                        project: quote.project,
-                        refImages: resolvedRefImages
-                    };
-                }
-            } else {
-                const result = calculateBOM(state, inventory, transactions, exchangeRate);
-                if (result) {
-                    dataToView = { data: result, client: quote.client, project: quote.project, refImages: resolvedRefImages };
-                }
+            if (allCalculations.length > 0) {
+                const calculatedData = {
+                    totalProjectCost: allCalculations.reduce((sum, calc) => sum + calc.totalProjectCost, 0),
+                    totalProjectSell: allCalculations.reduce((sum, calc) => sum + calc.totalProjectSell, 0),
+                    totalLEDSell: allCalculations.reduce((sum, calc) => sum + (calc.matrix.led.sell * calc.screenQty), 0),
+                    totalServicesSell: allCalculations.reduce((sum, calc) => sum + (calc.matrix.sell.total - (calc.matrix.led.sell * calc.screenQty)), 0),
+                    totalMargin: 0,
+                    totalScreenQty: allCalculations.reduce((sum, calc) => sum + Number(calc.screenQty), 0),
+                    calculations: allCalculations,
+                    screenConfigs: state.screens
+                };
+                calculatedData.totalMargin = calculatedData.totalProjectSell - calculatedData.totalProjectCost;
+                return { allScreensData: calculatedData, client: quote.client, project: quote.project, refImages: resolvedRefImages };
             }
+        } else {
+            const result = calculateBOM(state, inventory, transactions, exchangeRate);
+            if (result) return { data: result, client: quote.client, project: quote.project, refImages: resolvedRefImages };
         }
 
-        if (dataToView) {
-            setViewQuote(dataToView);
-        } else {
-            alert("Could not load quote data.");
-        }
+        return null;
+    };
+
+    const handleView = (quote) => {
+        const data = resolveQuoteData(quote);
+        if (data) setViewQuote(data);
+        else alert("Could not load quote data.");
+    };
+
+    const handleBOMView = (quote) => {
+        const data = resolveQuoteData(quote);
+        if (data) setViewBOMQuote(data);
+        else alert("Could not load quote data.");
     };
 
     const handleDownloadExcel = (quote) => {
-        if (readOnly) return;
+        if (!perms['savedQuotes.downloadBOM']) return;
 
         let calculations = [];
         let grandTotalSell = 0;
@@ -459,20 +457,19 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
 
     return (
         <div className="p-3 md:p-4">
-            {/* ── View/Print Modal (unchanged logic) ── */}
+            {/* ── View Quote Modal ── */}
             {viewQuote && (
                 <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
                     <div className="bg-white max-w-4xl w-full h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
                         <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-2xl">
                             <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                {readOnly ? <Box size={20} className="text-teal-600" /> : <Eye size={20} className="text-slate-500" />}
-                                {readOnly ? 'Bill of Materials (BOM)' : 'View Saved Quote'}
+                                <Eye size={20} className="text-slate-500" /> View Saved Quote
                             </h2>
                             <div className="flex gap-2">
                                 <button onClick={() => setViewQuote(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Close</button>
                                 <button onClick={() => {
                                     const originalTitle = document.title;
-                                    document.title = `${viewQuote.client}_${viewQuote.project}_${readOnly ? 'BOM' : 'Quote'}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                                    document.title = `${viewQuote.client}_${viewQuote.project}_Quote`.replace(/[^a-zA-Z0-9_]/g, '_');
                                     window.print();
                                     document.title = originalTitle;
                                 }} className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
@@ -481,27 +478,50 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                             </div>
                         </div>
                         <div className="flex-1 overflow-auto p-8 bg-slate-200">
-                            {readOnly ? (
-                                <BOMLayout
-                                    data={viewQuote.data ? { ...viewQuote.data, clientName: viewQuote.client, projectName: viewQuote.project } : null}
-                                    allScreensData={viewQuote.allScreensData ? {
-                                        ...viewQuote.allScreensData,
-                                        clientName: viewQuote.client,
-                                        projectName: viewQuote.project,
-                                        screenConfigs: viewQuote.allScreensData.screenConfigs?.map(s => ({ ...s, unit: s.unit || 'm' }))
-                                    } : null}
-                                    inventory={inventory}
-                                    transactions={transactions}
-                                />
-                            ) : (
-                                <PrintLayout
-                                    data={viewQuote.data ? { ...viewQuote.data, clientName: viewQuote.client, projectName: viewQuote.project } : null}
-                                    allScreensData={viewQuote.allScreensData ? { ...viewQuote.allScreensData, clientName: viewQuote.client, projectName: viewQuote.project } : null}
-                                    currency='INR'
-                                    exchangeRate={exchangeRate}
-                                    refImages={viewQuote.refImages || []}
-                                />
-                            )}
+                            <PrintLayout
+                                data={viewQuote.data ? { ...viewQuote.data, clientName: viewQuote.client, projectName: viewQuote.project } : null}
+                                allScreensData={viewQuote.allScreensData ? { ...viewQuote.allScreensData, clientName: viewQuote.client, projectName: viewQuote.project } : null}
+                                currency='INR'
+                                exchangeRate={exchangeRate}
+                                refImages={viewQuote.refImages || []}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── View BOM Modal ── */}
+            {viewBOMQuote && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
+                    <div className="bg-white max-w-4xl w-full h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-2xl">
+                            <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <Box size={20} className="text-teal-600" /> Bill of Materials (BOM)
+                            </h2>
+                            <div className="flex gap-2">
+                                <button onClick={() => setViewBOMQuote(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Close</button>
+                                <button onClick={() => {
+                                    const originalTitle = document.title;
+                                    document.title = `${viewBOMQuote.client}_${viewBOMQuote.project}_BOM`.replace(/[^a-zA-Z0-9_]/g, '_');
+                                    window.print();
+                                    document.title = originalTitle;
+                                }} className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
+                                    <Printer size={16} /> Print / PDF
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-auto p-8 bg-slate-200">
+                            <BOMLayout
+                                data={viewBOMQuote.data ? { ...viewBOMQuote.data, clientName: viewBOMQuote.client, projectName: viewBOMQuote.project } : null}
+                                allScreensData={viewBOMQuote.allScreensData ? {
+                                    ...viewBOMQuote.allScreensData,
+                                    clientName: viewBOMQuote.client,
+                                    projectName: viewBOMQuote.project,
+                                    screenConfigs: viewBOMQuote.allScreensData.screenConfigs?.map(s => ({ ...s, unit: s.unit || 'm' }))
+                                } : null}
+                                inventory={inventory}
+                                transactions={transactions}
+                            />
                         </div>
                     </div>
                 </div>
@@ -548,20 +568,22 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                 isLatest={true} 
                                 isExpanded={isExpanded} 
                                 onToggle={toggleGroup} 
-                                readOnly={readOnly}
+                                perms={perms}
                                 onHandleView={handleView}
+                                onHandleBOMView={handleBOMView}
                                 onLoadQuote={onLoadQuote}
                                 handleDownloadExcel={handleDownloadExcel}
                                 handleDelete={handleDelete}
                             />
                             {isExpanded && group.older.map(v => (
                                 <QuoteCard 
-                                    key={v.id} 
-                                    group={group} 
-                                    quote={v} 
-                                    isLatest={false} 
-                                    readOnly={readOnly}
+                                    key={v.id}
+                                    group={group}
+                                    quote={v}
+                                    isLatest={false}
+                                    perms={perms}
                                     onHandleView={handleView}
+                                    onHandleBOMView={handleBOMView}
                                     onLoadQuote={onLoadQuote}
                                     handleDownloadExcel={handleDownloadExcel}
                                     handleDelete={handleDelete}
@@ -586,7 +608,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (ft)</th>
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Size (m)</th>
                                 <th scope="col" className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Qty</th>
-                                {!readOnly && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Estimate</th>}
+                                {!perms['savedQuotes.hideAmounts'] && <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Estimate</th>}
                                 <th scope="col" className="px-3 py-1.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Saved</th>
                                 <th scope="col" className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">Actions</th>
                             </tr>
@@ -596,28 +618,30 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
                                 const isExpanded = expandedGroups.has(group.ref);
                                 return (
                                     <React.Fragment key={group.ref}>
-                                        <QuoteRow 
-                                            group={group} 
-                                            quote={group.latest} 
-                                            isLatest={true} 
-                                            isExpanded={isExpanded} 
-                                            onToggle={toggleGroup} 
-                                            rowIdx={groupIdx} 
-                                            readOnly={readOnly}
+                                        <QuoteRow
+                                            group={group}
+                                            quote={group.latest}
+                                            isLatest={true}
+                                            isExpanded={isExpanded}
+                                            onToggle={toggleGroup}
+                                            rowIdx={groupIdx}
+                                            perms={perms}
                                             onHandleView={handleView}
+                                            onHandleBOMView={handleBOMView}
                                             onLoadQuote={onLoadQuote}
                                             handleDownloadExcel={handleDownloadExcel}
                                             handleDelete={handleDelete}
                                         />
                                         {isExpanded && group.older.map((v, vIdx) => (
-                                            <QuoteRow 
-                                                key={v.id} 
-                                                group={group} 
-                                                quote={v} 
-                                                isLatest={false} 
-                                                rowIdx={vIdx} 
-                                                readOnly={readOnly}
+                                            <QuoteRow
+                                                key={v.id}
+                                                group={group}
+                                                quote={v}
+                                                isLatest={false}
+                                                rowIdx={vIdx}
+                                                perms={perms}
                                                 onHandleView={handleView}
+                                                onHandleBOMView={handleBOMView}
                                                 onLoadQuote={onLoadQuote}
                                                 handleDownloadExcel={handleDownloadExcel}
                                                 handleDelete={handleDelete}

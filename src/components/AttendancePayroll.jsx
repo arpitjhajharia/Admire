@@ -197,11 +197,15 @@ function EmployeeModal({ emp, onClose }) {
 }
 
 // ─── Employee Tab ──────────────────────────────────────────────────────────────
-function EmployeeTab({ employees }) {
+function EmployeeTab({ employees, perms = {} }) {
   const [modalEmp, setModalEmp] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState(null);
+
+  const canAddEdit = !!perms['employee.addEdit'];
+  const canDelete = !!perms['employee.delete'];
+  const showActions = canAddEdit || canDelete;
 
   const filtered = employees.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -220,10 +224,12 @@ function EmployeeTab({ employees }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
         <input type="text" placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)}
           className={inp('sm:w-64')} />
-        <button onClick={() => { setModalEmp(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg">
-          <Plus size={16} /> Add Employee
-        </button>
+        {canAddEdit && (
+          <button onClick={() => { setModalEmp(null); setShowModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg">
+            <Plus size={16} /> Add Employee
+          </button>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -231,7 +237,7 @@ function EmployeeTab({ employees }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                {['Name','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT','Actions'].map(h => (
+                {['Name','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT',...(showActions ? ['Actions'] : [])].map(h => (
                   <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide ${h === 'Actions' ? 'text-center' : ['Base Salary','Current Salary'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
@@ -256,16 +262,18 @@ function EmployeeTab({ employees }) {
                         ? <span className="text-xs text-slate-400">Exempt</span>
                         : <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{fmt(emp.ptAmount)}/mo</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => { setModalEmp(emp); setShowModal(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-emerald-600"><Edit2 size={14} /></button>
-                        <button onClick={() => handleDelete(emp)} disabled={deleting === emp.id} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-40"><Trash2 size={14} /></button>
-                      </div>
-                    </td>
+                    {showActions && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          {canAddEdit && <button onClick={() => { setModalEmp(emp); setShowModal(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-emerald-600"><Edit2 size={14} /></button>}
+                          {canDelete && <button onClick={() => handleDelete(emp)} disabled={deleting === emp.id} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-40"><Trash2 size={14} /></button>}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
-              {!filtered.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">No employees found</td></tr>}
+              {!filtered.length && <tr><td colSpan={showActions ? 8 : 7} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">No employees found</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1159,7 +1167,7 @@ function DashboardTab({ employees, attendance, advances, salaries, selectedMonth
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export default function AttendancePayroll({ user, userRole }) {
+export default function AttendancePayroll({ user, perms = {} }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(todayYM());
   const [employees, setEmployees] = useState([]);
@@ -1218,10 +1226,10 @@ export default function AttendancePayroll({ user, userRole }) {
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
-    { id: 'employees', label: 'Employees', icon: Users },
+    ...(perms['employee.view'] ? [{ id: 'employees', label: 'Employees', icon: Users }] : []),
     { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'advances', label: 'Advances', icon: CreditCard },
-    { id: 'salary', label: 'Salary', icon: DollarSign },
+    ...(perms['employee.advances'] ? [{ id: 'advances', label: 'Advances', icon: CreditCard }] : []),
+    ...(perms['payroll.view'] ? [{ id: 'salary', label: 'Salary', icon: DollarSign }] : []),
   ];
 
   return (
@@ -1257,16 +1265,16 @@ export default function AttendancePayroll({ user, userRole }) {
           {activeTab === 'dashboard' && (
             <DashboardTab employees={employees} attendance={attendance} advances={advances} salaries={salaries} selectedMonth={selectedMonth} settings={settings} />
           )}
-          {activeTab === 'employees' && (
-            <EmployeeTab employees={employees} userRole={userRole} />
+          {activeTab === 'employees' && perms['employee.view'] && (
+            <EmployeeTab employees={employees} perms={perms} />
           )}
           {activeTab === 'attendance' && (
             <AttendanceTab employees={employees} attendance={attendance} selectedMonth={selectedMonth} />
           )}
-          {activeTab === 'advances' && (
+          {activeTab === 'advances' && perms['employee.advances'] && (
             <AdvanceTab employees={employees} advances={advances} />
           )}
-          {activeTab === 'salary' && (
+          {activeTab === 'salary' && perms['payroll.view'] && (
             <SalaryTab
               employees={employees}
               attendance={attendance}

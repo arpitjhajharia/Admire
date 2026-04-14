@@ -19,7 +19,7 @@ const useDebounce = (value, delay) => {
 };
 
 // --- Helper Components ---
-const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, updateScreenProp, inventory, getStock, overrides, onOverride, editingRow, setEditingRow, onClearOverride, isSupervisor }) => {
+const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, updateScreenProp, inventory, getStock, overrides, onOverride, editingRow, setEditingRow, onClearOverride, isSupervisor, canEditSpecs }) => {
     const activeScreen = state.screens[state.activeScreenIndex];
     const { screenQty, selectedPitch, selectedModuleId, selectedCabinetId, selectedCardId, selectedSMPSIds, selectedProcId, extraComponents, extras, commercials } = activeScreen;
     const { assemblyMode, selectedIndoor } = state;
@@ -66,10 +66,10 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
             return (
                 <div className="flex flex-col gap-1">
                     <div className="flex flex-col md:flex-row gap-2">
-                        <select value={selectedPitch} onChange={e => { updateScreenState('selectedPitch', e.target.value); updateScreenState('selectedModuleId', ''); }} className="w-full md:w-20 p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                        <select value={selectedPitch} onChange={e => { updateScreenState('selectedPitch', e.target.value); updateScreenState('selectedModuleId', ''); }} disabled={!canEditSpecs} className="w-full md:w-20 p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50">
                             <option value="">Pitch</option>{uniquePitches.map(p => <option key={p} value={p}>P{p}</option>)}
                         </select>
-                        <select value={selectedModuleId} onChange={e => updateScreenState('selectedModuleId', e.target.value)} disabled={!selectedPitch} className="w-full md:flex-1 p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50">
+                        <select value={selectedModuleId} onChange={e => updateScreenState('selectedModuleId', e.target.value)} disabled={!canEditSpecs || !selectedPitch} className="w-full md:flex-1 p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50">
                             <option value="">Select Module...</option>
                             {filteredModules.map(m => <option key={m.id} value={m.id}>{m.brand} {m.model} ({getStock(m.id)})</option>)}
                         </select>
@@ -78,8 +78,8 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                 </div>
             );
         }
-        if (item.id === 'cabinets') return <div className="flex flex-col gap-1"><select value={selectedCabinetId} onChange={e => updateScreenState('selectedCabinetId', e.target.value)} disabled={!selectedModule} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Cabinet...</option>{cabinets.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({c.width}x{c.height}) - Stock: {getStock(c.id)}</option>)}</select>{specDisplay}</div>;
-        if (item.id === 'cards') return <div className="flex flex-col gap-1"><select value={selectedCardId} onChange={e => updateScreenState('selectedCardId', e.target.value)} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"><option value="">Select Card...</option>{inventory.filter(i => i.type === 'card').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
+        if (item.id === 'cabinets') return <div className="flex flex-col gap-1"><select value={selectedCabinetId} onChange={e => updateScreenState('selectedCabinetId', e.target.value)} disabled={!canEditSpecs || !selectedModule} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Cabinet...</option>{cabinets.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({c.width}x{c.height}) - Stock: {getStock(c.id)}</option>)}</select>{specDisplay}</div>;
+        if (item.id === 'cards') return <div className="flex flex-col gap-1"><select value={selectedCardId} onChange={e => updateScreenState('selectedCardId', e.target.value)} disabled={!canEditSpecs} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Card...</option>{inventory.filter(i => i.type === 'card').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
         if (item.id === 'smps' || item.id?.startsWith('smps_')) {
             // Secondary mix rows (smps_1, smps_2...) are read-only spec lines
             if (item.id !== 'smps') {
@@ -116,6 +116,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                                         className="accent-teal-600 w-3 h-3 shrink-0"
                                         checked={isChecked}
                                         onChange={() => toggleSMPS(s.id)}
+                                        disabled={!canEditSpecs}
                                     />
                                     <span>{s.brand} {s.model}</span>
                                     {watts && <span className="ml-auto text-[10px] font-bold text-slate-400">{watts}</span>}
@@ -142,7 +143,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
             return (
                 <div className="flex flex-col gap-1">
                     <div className="flex flex-col gap-2 md:gap-1">
-                        <select value={selectedProcId} onChange={e => updateScreenState('selectedProcId', e.target.value)} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                        <select value={selectedProcId} onChange={e => updateScreenState('selectedProcId', e.target.value)} disabled={!canEditSpecs} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50">
                             <option value="">Select Processor...</option>
                             {inventory.filter(i => i.type === 'processor').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}
                         </select>
@@ -585,7 +586,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
 };
 
 // --- Main Component ---
-const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setState, exchangeRate, setExchangeRate, onSaveQuote, readOnly = false }) => {
+const QuoteCalculator = ({ user, inventory, transactions, state, setState, exchangeRate, setExchangeRate, onSaveQuote, perms = {} }) => {
     const {
         client, project, screenQty, targetWidth, targetHeight, unit,
         selectedIndoor, assemblyMode, sizingMode, margin, extras, overrides, editingRow
@@ -629,7 +630,11 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
     }, [db, appId]);
 
     // Check Role
-    const isSupervisor = userRole === 'supervisor';
+    const isSupervisor   = !perms['led.editPricing'];
+    const canCreateQuote = !!perms['led.createQuote'];
+    const canEditSpecs   = !!perms['led.editSpecs'];
+    const canEditTerms   = !!perms['led.editTerms'];
+    const canExportPdf   = !!perms['led.exportPdf'];
 
     // Using Debounce
     const debouncedState = useDebounce(state, 300);
@@ -946,9 +951,11 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                             Project Specs
                         </h3>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleReset} className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors mr-2 flex items-center gap-1">
-                                <RefreshCw size={10} /> Reset
-                            </button>
+                            {canCreateQuote && (
+                                <button onClick={handleReset} className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors mr-2 flex items-center gap-1">
+                                    <RefreshCw size={10} /> Reset
+                                </button>
+                            )}
                             <div className="flex bg-slate-200 dark:bg-slate-700 rounded-md p-0.5">
                                 <button onClick={() => updateState('unit', 'm')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${unit === 'm' ? 'bg-white dark:bg-slate-600 shadow text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>M</button>
                                 <button onClick={() => updateState('unit', 'ft')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${unit === 'ft' ? 'bg-white dark:bg-slate-600 shadow text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>FT</button>
@@ -1028,16 +1035,16 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-md overflow-hidden h-8">
                                 <div className="bg-slate-100 dark:bg-slate-700 px-3 h-full flex items-center border-r border-slate-200 dark:border-slate-600 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase w-20 justify-center">Type</div>
                                 <div className="flex-1 flex p-0.5 bg-slate-50 dark:bg-slate-800 h-full">
-                                    <button onClick={() => { updateState('selectedIndoor', 'true'); updateScreenProp(state.activeScreenIndex, 'selectedIndoor', 'true'); }} className={`flex-1 text-[10px] font-bold rounded-sm transition-all ${selectedIndoor === 'true' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Indoor</button>
-                                    <button onClick={() => { updateState('selectedIndoor', 'false'); updateScreenProp(state.activeScreenIndex, 'selectedIndoor', 'false'); }} className={`flex-1 text-[10px] font-bold rounded-sm transition-all ${selectedIndoor === 'false' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Outdoor</button>
+                                    <button onClick={() => { updateState('selectedIndoor', 'true'); updateScreenProp(state.activeScreenIndex, 'selectedIndoor', 'true'); }} disabled={!canEditSpecs} className={`flex-1 text-[10px] font-bold rounded-sm transition-all disabled:opacity-50 ${selectedIndoor === 'true' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Indoor</button>
+                                    <button onClick={() => { updateState('selectedIndoor', 'false'); updateScreenProp(state.activeScreenIndex, 'selectedIndoor', 'false'); }} disabled={!canEditSpecs} className={`flex-1 text-[10px] font-bold rounded-sm transition-all disabled:opacity-50 ${selectedIndoor === 'false' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Outdoor</button>
                                 </div>
                             </div>
 
                             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-md overflow-hidden h-8">
                                 <div className="bg-slate-100 dark:bg-slate-700 px-3 h-full flex items-center border-r border-slate-200 dark:border-slate-600 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase w-20 justify-center">Supply</div>
                                 <div className="flex-1 flex p-0.5 bg-slate-50 dark:bg-slate-800 h-full">
-                                    <button onClick={() => { updateState('assemblyMode', 'assembled'); updateScreenProp(state.activeScreenIndex, 'assemblyMode', 'assembled'); }} className={`flex-1 text-[10px] font-bold rounded-sm transition-all ${assemblyMode === 'assembled' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Assm</button>
-                                    <button onClick={() => { updateState('assemblyMode', 'ready'); updateScreenProp(state.activeScreenIndex, 'assemblyMode', 'ready'); }} className={`flex-1 text-[10px] font-bold rounded-sm transition-all ${assemblyMode === 'ready' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Ready</button>
+                                    <button onClick={() => { updateState('assemblyMode', 'assembled'); updateScreenProp(state.activeScreenIndex, 'assemblyMode', 'assembled'); }} disabled={!canEditSpecs} className={`flex-1 text-[10px] font-bold rounded-sm transition-all disabled:opacity-50 ${assemblyMode === 'assembled' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Assm</button>
+                                    <button onClick={() => { updateState('assemblyMode', 'ready'); updateScreenProp(state.activeScreenIndex, 'assemblyMode', 'ready'); }} disabled={!canEditSpecs} className={`flex-1 text-[10px] font-bold rounded-sm transition-all disabled:opacity-50 ${assemblyMode === 'ready' ? 'bg-white dark:bg-slate-600 shadow text-teal-700 dark:text-teal-300' : 'text-slate-400 hover:text-slate-600'}`}>Ready</button>
                                 </div>
                             </div>
                         </div>
@@ -1045,9 +1052,11 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                         <div>
                             <div className="flex justify-between items-center mb-1.5">
                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Screen Configurations</label>
-                                <button onClick={addScreen} className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1 bg-teal-50 dark:bg-teal-900/30 px-2 py-1 rounded transition-colors border border-teal-100 dark:border-teal-800">
-                                    <Plus size={12} /> Add Size
-                                </button>
+                                {canEditSpecs && (
+                                    <button onClick={addScreen} className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1 bg-teal-50 dark:bg-teal-900/30 px-2 py-1 rounded transition-colors border border-teal-100 dark:border-teal-800">
+                                        <Plus size={12} /> Add Size
+                                    </button>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-4 md:grid-cols-12 gap-2 mb-1 px-2 text-[9px] font-bold text-slate-400 uppercase tracking-wider hidden md:grid">
@@ -1071,32 +1080,34 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                             <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">#{index + 1}</span>
 
                                             {/* Mobile Actions (Moved to Top) */}
-                                            <div className="md:hidden flex gap-3">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const n = [...state.screens];
-                                                        const newId = Math.random().toString(36).substr(2, 9);
-                                                        n.splice(index + 1, 0, { ...n[index], id: newId });
-                                                        setState({ ...state, screens: n, activeScreenIndex: index + 1 });
-                                                    }}
-                                                    className="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded"
-                                                >
-                                                    <Copy size={16} />
-                                                </button>
-                                                {state.screens.length > 1 && (
+                                            {canEditSpecs && (
+                                                <div className="md:hidden flex gap-3">
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            const n = state.screens.filter((_, i) => i !== index);
-                                                            setState({ ...state, screens: n, activeScreenIndex: Math.max(0, index - 1) });
+                                                            const n = [...state.screens];
+                                                            const newId = Math.random().toString(36).substr(2, 9);
+                                                            n.splice(index + 1, 0, { ...n[index], id: newId });
+                                                            setState({ ...state, screens: n, activeScreenIndex: index + 1 });
                                                         }}
-                                                        className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded"
+                                                        className="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded"
                                                     >
-                                                        <Trash2 size={16} />
+                                                        <Copy size={16} />
                                                     </button>
-                                                )}
-                                            </div>
+                                                    {state.screens.length > 1 && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const n = state.screens.filter((_, i) => i !== index);
+                                                                setState({ ...state, screens: n, activeScreenIndex: Math.max(0, index - 1) });
+                                                            }}
+                                                            className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* 2. Width Input */}
@@ -1106,7 +1117,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                                 type="number"
                                                 value={screen.targetWidth}
                                                 onChange={e => updateScreenProp(index, 'targetWidth', e.target.value)}
-                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none"
+                                                disabled={!canEditSpecs}
+                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none disabled:opacity-60"
                                             />
                                         </div>
 
@@ -1117,7 +1129,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                                 type="number"
                                                 value={screen.targetHeight}
                                                 onChange={e => updateScreenProp(index, 'targetHeight', e.target.value)}
-                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none"
+                                                disabled={!canEditSpecs}
+                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none disabled:opacity-60"
                                                 placeholder="H"
                                             />
                                         </div>
@@ -1129,7 +1142,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                                 type="number"
                                                 value={screen.screenQty}
                                                 onChange={e => updateScreenProp(index, 'screenQty', e.target.value)}
-                                                className="w-full p-1.5 text-center text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none"
+                                                disabled={!canEditSpecs}
+                                                className="w-full p-1.5 text-center text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:border-teal-500 outline-none disabled:opacity-60"
                                                 placeholder="Qty"
                                             />
                                         </div>
@@ -1140,7 +1154,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                             <select
                                                 value={screen.sizingMode}
                                                 onChange={e => updateScreenProp(index, 'sizingMode', e.target.value)}
-                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white bg-white outline-none"
+                                                disabled={!canEditSpecs}
+                                                className="w-full p-1.5 text-sm border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white bg-white outline-none disabled:opacity-60"
                                             >
                                                 <option value="closest">Closest</option>
                                                 <option value="up">Round Up</option>
@@ -1150,20 +1165,22 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
 
                                         {/* 6. Desktop Actions (Hidden on Mobile) */}
                                         <div className="hidden md:flex col-span-1 justify-end gap-1">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const n = [...state.screens];
-                                                    const newId = Math.random().toString(36).substr(2, 9);
-                                                    n.splice(index + 1, 0, { ...n[index], id: newId });
-                                                    setState({ ...state, screens: n, activeScreenIndex: index + 1 });
-                                                }}
-                                                className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                                                title="Duplicate"
-                                            >
-                                                <Copy size={14} />
-                                            </button>
-                                            {state.screens.length > 1 && (
+                                            {canEditSpecs && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const n = [...state.screens];
+                                                        const newId = Math.random().toString(36).substr(2, 9);
+                                                        n.splice(index + 1, 0, { ...n[index], id: newId });
+                                                        setState({ ...state, screens: n, activeScreenIndex: index + 1 });
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                                                    title="Duplicate"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+                                            )}
+                                            {canEditSpecs && state.screens.length > 1 && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -1283,14 +1300,15 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 editingRow={state.screens[state.activeScreenIndex]?.editingRow}
                                 setEditingRow={(id) => updateScreenProp(state.activeScreenIndex, 'editingRow', id)}
                                 onClearOverride={onClearOverride}
-                                isSupervisor={isSupervisor} // Pass the role flag
+                                isSupervisor={isSupervisor}
+                                canEditSpecs={canEditSpecs}
                             />
                         </div>
                     </details>
                 </div>
 
-                {/* Terms - HIDDEN FOR SUPERVISOR */}
-                {!isSupervisor && (
+                {/* Terms & Conditions */}
+                {canEditTerms && (
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                         <details className="group p-3">
                             <summary className="flex justify-between items-center cursor-pointer list-none">
@@ -1531,8 +1549,8 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 <FileText size={16} className="text-blue-400" /> BOM
                             </button>
 
-                            {/* Image picker button */}
-                            {!isSupervisor && (
+                            {/* Image picker button — requires exportPdf to include images in quote */}
+                            {canExportPdf && (
                                 <button
                                     onClick={() => setShowImagePicker(prev => !prev)}
                                     className={`flex-1 rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors border py-2 ${
@@ -1547,15 +1565,15 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                                 </button>
                             )}
 
-                            {/* HIDE PRINT BUTTON FOR SUPERVISOR TO PREVENT PRICE LEAK */}
-                            {!isSupervisor && (
+                            {/* Print / PDF — gated by exportPdf to prevent pricing leak */}
+                            {canExportPdf && (
                                 <button onClick={() => setShowPreview(true)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors border border-slate-700 py-2">
                                     <Printer size={16} /> Print
                                 </button>
                             )}
 
                             {/* HIDE SAVE IF READONLY OR SUPERVISOR PREFERENCE? KEEPING SAVE AS IT DOESN'T SHOW COST */}
-                            {!readOnly && (
+                            {perms['led.save'] && (
                                 <button
                                     onClick={() => onSaveQuote(
                                         allScreensTotal ? allScreensTotal.totalProjectSell : calculation?.totalProjectSell,
@@ -1569,11 +1587,11 @@ const QuoteCalculator = ({ user, userRole, inventory, transactions, state, setSt
                         </div>
 
                         {/* ── Image Picker Panel ── */}
-                        {showImagePicker && !isSupervisor && (
+                        {showImagePicker && canExportPdf && (
                             <div className="mt-3 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: '420px' }}>
                                 <QuoteImageManager
                                     user={user}
-                                    userRole={userRole}
+                                    perms={perms}
                                     mode="picker"
                                     selectedIds={selectedRefImageIds}
                                     onSelectionChange={(ids) => setState(prev => ({ ...prev, refImages: ids }))}
