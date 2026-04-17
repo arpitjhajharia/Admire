@@ -65,16 +65,16 @@ Misc Stock — Duplicate item,Y,Y,No,No,No,No,No
 Misc Stock — Delete item,Y,Y,No,No,No,No,No
 Misc Stock — Add stock transaction,Y,Y,Y,Y,Y,Y,No
 Misc Stock — Edit / Delete transaction,Y,Y,Y,Y,Y,Y,No
-BOQ Tracker — View BOQ list,Y,Y,Y,Y,Y,Y,Y
-BOQ Tracker — Create BOQ,Y,Y,No,No,No,No,No
-BOQ Tracker — Edit BOQ name / pipeline stages,Y,Y,No,No,No,No,No
-BOQ Tracker — Update item status (factory stages),Y,Y,No,Y,Y,No,No
-BOQ Tracker — Update item status (site stages),Y,Y,No,Y,Y,No,Y
-BOQ Tracker — Upload images (artwork / factory),Y,Y,No,Y,Y,No,No
-BOQ Tracker — Upload images (site / handover),Y,Y,No,Y,Y,No,Y
-BOQ Tracker — Batch status update,Y,Y,No,Y,Y,No,Y
-BOQ Tracker — Batch delete items,Y,Y,No,No,No,No,No
-BOQ Tracker — Delete BOQ,Y,Y,No,No,No,No,No
+Project Tracker — View BOQ list,Y,Y,Y,Y,Y,Y,Y
+Project Tracker — Create BOQ,Y,Y,No,No,No,No,No
+Project Tracker — Edit BOQ name / pipeline stages,Y,Y,No,No,No,No,No
+Project Tracker — Update item status (factory stages),Y,Y,No,Y,Y,No,No
+Project Tracker — Update item status (site stages),Y,Y,No,Y,Y,No,Y
+Project Tracker — Upload images (artwork / factory),Y,Y,No,Y,Y,No,No
+Project Tracker — Upload images (site / handover),Y,Y,No,Y,Y,No,Y
+Project Tracker — Batch status update,Y,Y,No,Y,Y,No,Y
+Project Tracker — Batch delete items,Y,Y,No,No,No,No,No
+Project Tracker — Delete BOQ,Y,Y,No,No,No,No,No
 Cut List Calculator — Full use,Y,Y,No,Y,Y,Y,Y
 CRM — View leads (all),Y,Y,Y,No,No,No,No
 CRM — Create lead,Y,Y,No,No,No,No,No

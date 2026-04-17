@@ -36,7 +36,7 @@ const Home = ({ onSelectModule, darkMode, perms }) => {
         {
             id: 'reports',
             permKey: 'module.reports',
-            name: 'BOQ Tracker',
+            name: 'Project Tracker',
             description: 'Manage and track BOQ items and progress',
             icon: BarChart,
             color: 'text-orange-500',

@@ -31,7 +31,7 @@ export const RULES = {
   'module.signage': [SA, OW, AC, AS, FL],
   'module.tasks': ALL_ROLES,
   'module.crm': [SA, OW, AC],
-  'module.reports': ALL_ROLES,             // BOQ Tracker
+  'module.reports': ALL_ROLES,             // Project Tracker
   'module.misc_stock': STOCK_LEVEL,
   'module.structural': [SA, OW, AC, AS, FL, SM],
   'module.cut_list': [SA, OW, AS, FL, SM, ST],
@@ -135,7 +135,7 @@ export const RULES = {
   'miscStock.addTransaction': STOCK_LEVEL,
   'miscStock.editDeleteTransaction': STOCK_LEVEL,
 
-  // ── BOQ Tracker ─────────────────────────────────────────────────────────
+  // ── Project Tracker ──────────────────────────────────────────────────────
   'boq.view': ALL_ROLES,
   'boq.create': ADMIN_OWNER,
   'boq.editMeta': ADMIN_OWNER,           // name / pipeline stages

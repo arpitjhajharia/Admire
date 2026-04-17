@@ -105,7 +105,7 @@ const arrayBufferToBase64 = (buffer) => {
 
 // ── Gemini AI QC ─────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-3-flash-preview';
 
 // Key is stored in Firestore (never in the bundle) so it can be rotated without redeployment.
 // Path: artifacts/{appId}/public/data/app_config/ai_settings  →  field: geminiKey
@@ -161,17 +161,23 @@ const runGeminiQC = async (artworkImages, factoryPhotoDataUrl) => {
 
         parts.push({
             text:
-                `You are an expert quality-control inspector for a custom signage manufacturing company.\n\n` +
+                `You are a strict quality-control inspector for a custom signage manufacturing company.\n\n` +
                 `You will be shown ${artCount} Master Artwork reference image(s) (labeled Artwork 1 to ${artCount}), ` +
                 `followed by one factory production photograph.\n\n` +
                 `Your task:\n` +
-                `1. Identify which Master Artwork the factory photo most closely matches (based on overall layout, text, and visual elements). Output its 0-based index in "artworkIdx".\n` +
-                `2. Compare the factory photo ONLY against that identified matching artwork.\n` +
-                `3. Check: multilingual text spelling & layout, arrow directions & icon placement, color accuracy, ` +
-                `presence of all logos and graphic elements.\n\n` +
+                `1. Identify which Master Artwork the factory photo is intended to be. Output its 0-based index in "artworkIdx".\n` +
+                `2. Perform an EXACT match comparison between the factory photo and that artwork. The printed sign must replicate the artwork completely — no more, no less.\n` +
+                `3. FAIL (pass: false) if ANY of the following are true:\n` +
+                `   - The factory photo contains extra panels, sections, or content NOT present in the artwork\n` +
+                `   - The factory photo is missing any panel, section, or content shown in the artwork\n` +
+                `   - Overall sign layout or structure differs from the artwork\n` +
+                `   - Any multilingual text (Malayalam, Hindi, Arabic, English, etc.) is misspelled or missing\n` +
+                `   - Icons, logos, arrows, or graphic elements are wrong, missing, or misplaced\n` +
+                `   - Colors are significantly inaccurate\n` +
+                `   - The factory photo only partially matches the artwork (e.g. one matching section inside a larger sign)\n\n` +
                 `Respond ONLY with valid JSON (no markdown, no explanation):\n` +
                 `{ "artworkIdx": <integer>, "pass": <true|false>, "issues": ["issue 1", ...] }\n\n` +
-                `Set "pass": true and "issues": [] when all checks pass.`
+                `Set "pass": true and "issues": [] ONLY when the factory photo is an exact match of the entire artwork.`
         });
 
         for (let i = 0; i < artworkImages.length; i++) {
@@ -204,7 +210,10 @@ const runGeminiQC = async (artworkImages, factoryPhotoDataUrl) => {
 
         const data = await resp.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) return null;
+        if (!text) {
+            console.warn('Gemini QC: empty/blocked response', JSON.stringify(data).slice(0, 500));
+            return null;
+        }
 
         // Strip possible markdown code fences
         const jsonText = text.replace(/^```json\n?|\n?```$/g, '').trim();
@@ -245,7 +254,7 @@ const Loading = () => (
         <div className="animate-spin mr-3">
             <Package size={24} />
         </div>
-        Loading Admire BOQ Tracker...
+        Loading Admire Project Tracker...
     </div>
 );
 
@@ -308,10 +317,10 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
                 )}
             </div>
 
-            <div className="absolute bottom-6 left-0 right-0 text-center text-white/80 pointer-events-none">
+            <div className="absolute bottom-6 left-0 right-0 text-center text-white/80 pointer-events-none px-4">
                 <p className="font-bold text-lg mb-2">{currentImg.stage || 'Image Preview'}</p>
 
-                <div className="flex items-center justify-center gap-6 text-sm opacity-80">
+                <div className="flex items-center justify-center gap-6 text-sm opacity-80 mb-2">
                     <span>{currentIndex + 1} of {images.length}</span>
                     {currentImg.timestamp && (
                         <span className="flex items-center gap-1">
@@ -324,6 +333,17 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
                         </span>
                     )}
                 </div>
+
+                {currentImg.qcStatus === 'fail' && currentImg.qcIssues?.length > 0 && (
+                    <div className="pointer-events-auto inline-block bg-red-900/80 border border-red-500 rounded-lg px-4 py-2 text-left max-w-md mx-auto">
+                        <p className="text-xs font-bold text-red-300 uppercase tracking-wide mb-1.5">
+                            QC Rework Required — Artwork {(currentImg.qcArtworkIdx ?? 0) + 1}
+                        </p>
+                        {currentImg.qcIssues.map((issue, i) => (
+                            <p key={i} className="text-xs text-red-200">• {issue}</p>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -627,33 +647,6 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
 
     return (
         <div className="min-h-screen bg-slate-50">
-            {/* ── Nav bar — compact on mobile ── */}
-            <nav className="bg-white shadow-sm border-b px-3 sm:px-6 py-2.5 sm:py-4 flex justify-between items-center sticky top-0 z-10">
-                <div className="flex items-center gap-2.5">
-                    <div className="bg-indigo-600 p-1.5 sm:p-2 rounded-lg text-white">
-                        <Package size={18} />
-                    </div>
-                    <div>
-                        <h1 className="text-base sm:text-xl font-bold text-slate-800 leading-tight">Admire Sign</h1>
-                        <span className="text-[10px] text-slate-400 sm:hidden capitalize">{user.username} · {user.role}</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-1 sm:gap-4">
-                    <div className="hidden md:flex flex-col items-end">
-                        <span className="text-sm font-semibold text-slate-700">{user.username}</span>
-                        {getRoleBadge(user.role)}
-                    </div>
-                    {user.role === ROLES.ADMIN && (
-                        <button onClick={onManageUsers} className="p-2 hover:bg-slate-100 active:bg-slate-200 rounded-full text-slate-500" title="Manage Users">
-                            <Users size={18} />
-                        </button>
-                    )}
-                    <button onClick={onLogout} className="p-2 hover:bg-red-50 active:bg-red-100 text-red-500 rounded-full" title="Logout">
-                        <LogOut size={18} />
-                    </button>
-                </div>
-            </nav>
-
             <main className="max-w-7xl mx-auto px-3 py-4 sm:p-6">
                 {/* ── Page header ── */}
                 <div className="flex justify-between items-center mb-4 sm:mb-8">
@@ -967,6 +960,9 @@ const BOQManager = ({ boq, user, onBack }) => {
     // Sticky Stage State
     const [lastFactoryStage, setLastFactoryStage] = useState('');
     const [lastSiteStage, setLastSiteStage] = useState('');
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState('items');
 
     useEffect(() => {
         if (!boq) return;
@@ -1565,12 +1561,6 @@ const BOQManager = ({ boq, user, onBack }) => {
 
                     const newQcStatus = computeFactoryQcStatus(latestImages, artImages.length);
                     const finalUpdates = { [field]: latestImages, factoryQcStatus: newQcStatus };
-
-                    // Auto-advance status to Ready for Dispatch when all artworks verified
-                    if (newQcStatus === 'ready_for_dispatch') {
-                        finalUpdates.status = STATUS.READY_DISPATCH;
-                    }
-
                     await updateDoc(signRef, finalUpdates);
                 } catch (e) {
                     console.error('Background QC failed:', e);
@@ -1747,8 +1737,24 @@ const BOQManager = ({ boq, user, onBack }) => {
                 </div>
             </header>
 
+            {/* ── Tabs ── */}
+            <div className="bg-white border-b flex items-center px-3 gap-0">
+                <button
+                    onClick={() => setActiveTab('items')}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'items' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                >
+                    Items
+                </button>
+                <button
+                    onClick={() => setActiveTab('dpr')}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'dpr' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                >
+                    DPR
+                </button>
+            </div>
+
             {/* ── Filter Bar — horizontally scrollable pills on mobile ── */}
-            <div className="bg-white border-b">
+            {activeTab === 'items' && <div className="bg-white border-b">
                 <div className="flex items-center gap-2 px-3 py-1.5 overflow-x-auto scrollbar-hide">
                     {/* Status pill */}
                     <div className={`flex-shrink-0 flex items-center gap-1.5 pl-1.5 pr-0.5 py-1 rounded-full border text-xs font-medium transition whitespace-nowrap ${
@@ -1834,9 +1840,9 @@ const BOQManager = ({ boq, user, onBack }) => {
                         }
                     </button>
                 </div>
-            </div>
+            </div>}
 
-            {selectedSigns.size > 0 && user.role === ROLES.ADMIN && (
+            {activeTab === 'items' && selectedSigns.size > 0 && user.role === ROLES.ADMIN && (
                 <div className="bg-indigo-50 px-6 py-1.5 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-indigo-100 gap-2">
                     <span className="text-sm text-indigo-800 font-medium">{selectedSigns.size} selected</span>
                     <div className="flex flex-wrap gap-2">
@@ -1850,7 +1856,7 @@ const BOQManager = ({ boq, user, onBack }) => {
                 </div>
             )}
 
-            <div className="flex-1 overflow-auto relative bg-white">
+            {activeTab === 'items' && <div className="flex-1 overflow-auto relative bg-white">
 
                 {/* ── Mobile card list (< md) ── */}
                 <div className="md:hidden divide-y divide-slate-100">
@@ -1907,6 +1913,7 @@ const BOQManager = ({ boq, user, onBack }) => {
                             <th className="px-1.5 py-1.5 border-b border-slate-200 cursor-pointer hover:bg-slate-100 w-24" onClick={() => setSortConfig({ key: 'status', direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}>
                                 <div className="flex items-center gap-1">Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</div>
                             </th>
+                            <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">QC</th>
                             {activeColumns.map(col => (
                                 <th
                                     key={col.key}
@@ -1957,7 +1964,17 @@ const BOQManager = ({ boq, user, onBack }) => {
                         ))}
                     </tbody>
                 </table>
-            </div>
+            </div>}
+
+            {activeTab === 'dpr' && (
+                <div className="flex-1 overflow-auto relative bg-white flex items-center justify-center">
+                    <div className="text-center text-slate-400">
+                        <div className="text-4xl mb-3">📋</div>
+                        <div className="text-base font-medium text-slate-500">DPR</div>
+                        <div className="text-sm mt-1">Daily Progress Report — coming soon</div>
+                    </div>
+                </div>
+            )}
 
             {importConfig && (
                 <ImportMapper
@@ -2041,11 +2058,13 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                         {sign[idCol.key]}
                     </span>
                 )}
-                {/* Status badge */}
-                <span className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide ${statusColor(sign.status)}`}>
-                    {sign.status}
-                </span>
-                <QCBadge factoryQcStatus={sign.factoryQcStatus} />
+                {/* Status + QC badges */}
+                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide ${statusColor(sign.status)}`}>
+                        {sign.status}
+                    </span>
+                    <QCBadge factoryQcStatus={sign.factoryQcStatus} />
+                </div>
                 {/* Edit button (admin only) */}
                 {user.role === ROLES.ADMIN && (
                     <button
@@ -2223,12 +2242,12 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                 )}
             </td>
             <td className="px-1.5 py-1 align-middle">
-                <div className="flex flex-col gap-0.5 items-start">
-                    <span className={`px-1.5 py-0.5 rounded-sm font-semibold tracking-wide ${statusColor(sign.status)}`}>
-                        {sign.status}
-                    </span>
-                    <QCBadge factoryQcStatus={sign.factoryQcStatus} />
-                </div>
+                <span className={`px-1.5 py-0.5 rounded-sm font-semibold tracking-wide ${statusColor(sign.status)}`}>
+                    {sign.status}
+                </span>
+            </td>
+            <td className="px-1.5 py-1 align-middle">
+                <QCBadge factoryQcStatus={sign.factoryQcStatus} />
             </td>
             {columns.filter(c => c.visible).map(col => (
                 <td key={col.key} className="px-1.5 py-1 text-slate-700 whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis align-middle">
