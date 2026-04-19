@@ -2902,7 +2902,18 @@ const DPRTab = ({ boq, user }) => {
                                     const todayActual = taskEntryList.filter(e => e.date === logDate).reduce((s, e) => s + (e.actualCount || 0), 0);
                                     const dailyPct = task.defaultDailyTarget > 0 ? Math.min(100, Math.round(todayActual / task.defaultDailyTarget * 100)) : null;
                                     const lifetimePct = task.totalTarget > 0 ? Math.min(100, Math.round(stats.total / task.totalTarget * 100)) : null;
-                                    const filteredEmps = employees.filter(e => e.name?.toLowerCase().includes((row.workerSearch || '').toLowerCase()) && !row.workers.includes(e.name));
+                                    const workerSearch = (row.workerSearch || '').toLowerCase();
+                                    const filteredEmps = employees
+                                        .filter(e =>
+                                            e.department?.toLowerCase() === 'factory' &&
+                                            e.name?.toLowerCase().includes(workerSearch) &&
+                                            !row.workers.includes(e.name)
+                                        )
+                                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                                    // Allow adding a custom/temp worker if the typed name isn't already in the list
+                                    const showAddCustom = workerSearch.trim().length > 0 &&
+                                        !row.workers.map(w => w.toLowerCase()).includes(workerSearch.trim()) &&
+                                        !filteredEmps.some(e => e.name?.toLowerCase() === workerSearch.trim());
 
                                     return (
                                         <React.Fragment key={task.id}>
@@ -2942,16 +2953,31 @@ const DPRTab = ({ boq, user }) => {
                                                             onChange={e => updRow(task.id, { workerSearch: e.target.value, showDrop: true })}
                                                             onFocus={() => updRow(task.id, { showDrop: true })}
                                                             onBlur={() => setTimeout(() => updRow(task.id, { showDrop: false }), 150)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter') {
+                                                                    const trimmed = (row.workerSearch || '').trim();
+                                                                    if (trimmed && !row.workers.includes(trimmed)) {
+                                                                        updRow(task.id, { workers: [...row.workers, trimmed], workerSearch: '', showDrop: false });
+                                                                    }
+                                                                    e.preventDefault();
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
-                                                    {row.showDrop && filteredEmps.length > 0 && (
+                                                    {row.showDrop && (filteredEmps.length > 0 || showAddCustom) && (
                                                         <div className="absolute left-0 right-0 top-full mt-0.5 bg-white border rounded shadow-lg z-30 max-h-36 overflow-y-auto">
                                                             {filteredEmps.map(emp => (
                                                                 <button key={emp.id} className="w-full text-left px-2 py-1.5 text-sm hover:bg-indigo-50 text-slate-700"
                                                                     onMouseDown={() => updRow(task.id, { workers: [...row.workers, emp.name], workerSearch: '' })}>
-                                                                    {emp.name}{emp.department ? <span className="text-slate-400 ml-1">· {emp.department}</span> : ''}
+                                                                    {emp.name}
                                                                 </button>
                                                             ))}
+                                                            {showAddCustom && (
+                                                                <button className="w-full text-left px-2 py-1.5 text-sm hover:bg-amber-50 text-amber-700 border-t"
+                                                                    onMouseDown={() => { const t = (row.workerSearch || '').trim(); updRow(task.id, { workers: [...row.workers, t], workerSearch: '', showDrop: false }); }}>
+                                                                    + Add "{(row.workerSearch || '').trim()}" as temp worker
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
