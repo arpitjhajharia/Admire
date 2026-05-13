@@ -1463,7 +1463,7 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
                                                                 <span className="text-slate-500 dark:text-slate-400">
                                                                     Screen #{index + 1}
                                                                     <span className="text-[10px] ml-1">
-                                                                        ({state.screens[index].targetWidth}×{state.screens[index].targetHeight}{unit} ×{calc.screenQty})
+                                                                        ({allScreensTotal.screenConfigs[index]?.targetWidth}×{allScreensTotal.screenConfigs[index]?.targetHeight}{unit} ×{calc.screenQty})
                                                                     </span>
                                                                 </span>
                                                                 <span className="font-bold text-slate-700 dark:text-slate-300">
@@ -1478,7 +1478,7 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
                                                                 <span className="text-slate-400">Margin Strategy</span>
                                                                 <span className="text-teal-600 dark:text-teal-400 font-semibold">
                                                                     {(() => {
-                                                                        const s = state.screens[index];
+                                                                        const s = allScreensTotal.screenConfigs[index];
                                                                         const pm = s?.pricingMode ?? state.pricingMode ?? 'margin';
                                                                         if (pm === 'margin') return `${s?.margin ?? state.margin ?? 0}%`;
                                                                         if (pm === 'sqft') return `₹${s?.targetSellPrice ?? state.targetSellPrice ?? 0}/sqft`;

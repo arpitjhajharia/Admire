@@ -4,7 +4,8 @@ import { db, appId } from '../lib/firebase';
 import {
   Users, Calendar, DollarSign, BarChart2, Plus, Edit2, Trash2, Save, X,
   ChevronLeft, ChevronRight, Settings, RefreshCw, TrendingUp, CreditCard,
-  Clock, AlertCircle, CheckCircle2, Activity, Star
+  Clock, AlertCircle, CheckCircle2, Activity, Star, Camera, Upload,
+  ChevronDown, ChevronUp, Phone, MapPin, Droplets, ShieldCheck, Download
 } from 'lucide-react';
 
 // ─── Firestore helper ──────────────────────────────────────────────────────────
@@ -74,6 +75,25 @@ const getAdvanceBalance = (advances, empId) =>
 const inp = (extra = '') => `w-full border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none ${extra}`;
 const lbl = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1';
 
+// ─── Image compression ─────────────────────────────────────────────────────────
+const compressImage = (file, maxWidth = 800) =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target.result;
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+    };
+  });
+
 // ─── Month Picker ──────────────────────────────────────────────────────────────
 function MonthPicker({ value, onChange }) {
   const { year, month } = parseYM(value);
@@ -104,10 +124,24 @@ function EmployeeModal({ emp, onClose }) {
     ptType: emp?.ptType || 'fixed',
     ptAmount: emp?.ptAmount ?? 200,
     incrementHistory: emp?.incrementHistory || [],
+    // Additional personal details
+    photo: emp?.photo || null,
+    aadhaarPhoto: emp?.aadhaarPhoto || null,
+    permanentAddress: emp?.permanentAddress || '',
+    bloodGroup: emp?.bloodGroup || '',
+    emergencyContactName: emp?.emergencyContactName || '',
+    emergencyContactRelation: emp?.emergencyContactRelation || '',
+    emergencyContactNo: emp?.emergencyContactNo || '',
+    emergencyContactVerified: emp?.emergencyContactVerified || false,
   });
   const [newIncDate, setNewIncDate] = useState('');
   const [newIncAmt, setNewIncAmt] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAdditional, setShowAdditional] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [aadhaarUploading, setAadhaarUploading] = useState(false);
+  const photoRef = useRef(null);
+  const aadhaarRef = useRef(null);
 
   const addIncrement = () => {
     if (!newIncDate || !newIncAmt) return;
@@ -118,6 +152,17 @@ function EmployeeModal({ emp, onClose }) {
     }));
     setNewIncDate('');
     setNewIncAmt('');
+  };
+
+  const handlePhotoChange = async (e, field, setLoading) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const compressed = await compressImage(file, field === 'aadhaarPhoto' ? 1200 : 800);
+      setForm(f => ({ ...f, [field]: compressed }));
+    } catch { /* ignore */ }
+    setLoading(false);
   };
 
   const handleSave = async () => {
@@ -197,14 +242,159 @@ function EmployeeModal({ emp, onClose }) {
               ))}
               {!form.incrementHistory.length && <p className="text-xs text-slate-400 text-center py-2">No increments yet</p>}
             </div>
-            <div className="flex gap-2">
-              <input type="date" className={inp('flex-1')} value={newIncDate} onChange={e => setNewIncDate(e.target.value)} />
-              <input type="number" className={inp('w-28')} placeholder="₹ Amount" value={newIncAmt} onChange={e => setNewIncAmt(e.target.value)} />
-              <button onClick={addIncrement} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 flex items-center gap-1 whitespace-nowrap">
-                <Plus size={14} /> Add
-              </button>
+            <div className="space-y-2">
+              <input type="date" className={inp()} value={newIncDate} onChange={e => setNewIncDate(e.target.value)} />
+              <div className="flex gap-2">
+                <input type="number" className={inp('flex-1')} placeholder="₹ Amount" value={newIncAmt} onChange={e => setNewIncAmt(e.target.value)} />
+                <button onClick={addIncrement} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1">
+                  <Plus size={14} /> Add
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Additional Details — collapsible */}
+          <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdditional(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-700/50 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <span>Additional Details (Photo, Aadhaar, Address, Emergency Contact)</span>
+              {showAdditional ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showAdditional && (
+              <div className="p-4 space-y-4">
+
+                {/* Employee Photo */}
+                <div>
+                  <label className={lbl + ' flex items-center gap-1'}><Camera size={12} /> Employee Photo (on-site)</label>
+                  <div className="flex items-start gap-3">
+                    {form.photo
+                      ? <img src={form.photo} alt="Employee" className="w-20 h-20 rounded-xl object-cover border border-slate-200 dark:border-slate-600 shrink-0" />
+                      : <div className="w-20 h-20 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
+                          <Camera size={22} className="text-slate-400" />
+                        </div>
+                    }
+                    <div className="flex flex-col gap-2 flex-1">
+                      <input
+                        ref={photoRef}
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        className="hidden"
+                        onChange={e => handlePhotoChange(e, 'photo', setPhotoUploading)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => photoRef.current?.click()}
+                        disabled={photoUploading}
+                        className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-lg hover:bg-emerald-100 disabled:opacity-50"
+                      >
+                        {photoUploading ? <RefreshCw size={13} className="animate-spin" /> : <Camera size={13} />}
+                        {form.photo ? 'Retake / Replace' : 'Take / Upload Photo'}
+                      </button>
+                      {form.photo && (
+                        <button type="button" onClick={() => setForm(f => ({ ...f, photo: null }))} className="text-xs text-red-400 hover:text-red-600 text-left">Remove</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Aadhaar Card Photo */}
+                <div>
+                  <label className={lbl + ' flex items-center gap-1'}><Upload size={12} /> Aadhaar Card Photo</label>
+                  <div className="flex items-start gap-3">
+                    {form.aadhaarPhoto
+                      ? <img src={form.aadhaarPhoto} alt="Aadhaar" className="w-28 h-20 rounded-xl object-cover border border-slate-200 dark:border-slate-600 shrink-0" />
+                      : <div className="w-28 h-20 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
+                          <Upload size={22} className="text-slate-400" />
+                        </div>
+                    }
+                    <div className="flex flex-col gap-2 flex-1">
+                      <input
+                        ref={aadhaarRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => handlePhotoChange(e, 'aadhaarPhoto', setAadhaarUploading)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => aadhaarRef.current?.click()}
+                        disabled={aadhaarUploading}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        {aadhaarUploading ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
+                        {form.aadhaarPhoto ? 'Replace' : 'Upload Aadhaar'}
+                      </button>
+                      {form.aadhaarPhoto && (
+                        <button type="button" onClick={() => setForm(f => ({ ...f, aadhaarPhoto: null }))} className="text-xs text-red-400 hover:text-red-600 text-left">Remove</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Permanent Address */}
+                <div>
+                  <label className={lbl + ' flex items-center gap-1'}><MapPin size={12} /> Permanent Address</label>
+                  <textarea
+                    rows={2}
+                    className={inp()}
+                    value={form.permanentAddress}
+                    onChange={e => setForm(f => ({ ...f, permanentAddress: e.target.value }))}
+                    placeholder="Full permanent address"
+                  />
+                </div>
+
+                {/* Blood Group */}
+                <div>
+                  <label className={lbl + ' flex items-center gap-1'}><Droplets size={12} /> Blood Group</label>
+                  <select className={inp()} value={form.bloodGroup} onChange={e => setForm(f => ({ ...f, bloodGroup: e.target.value }))}>
+                    <option value="">— Select —</option>
+                    {['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+
+                {/* Emergency Contact */}
+                <div className="space-y-2">
+                  <label className={lbl + ' flex items-center gap-1'}><Phone size={12} /> Emergency Contact</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2">
+                      <label className={lbl}>Name</label>
+                      <input className={inp()} value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Contact person name" />
+                    </div>
+                    <div>
+                      <label className={lbl}>Relation</label>
+                      <input className={inp()} value={form.emergencyContactRelation} onChange={e => setForm(f => ({ ...f, emergencyContactRelation: e.target.value }))} placeholder="e.g. Spouse, Parent" />
+                    </div>
+                    <div>
+                      <label className={lbl}>Contact No.</label>
+                      <input type="tel" className={inp()} value={form.emergencyContactNo} onChange={e => setForm(f => ({ ...f, emergencyContactNo: e.target.value }))} placeholder="Mobile number" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Emergency Contact Verification */}
+                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/40 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={15} className={form.emergencyContactVerified ? 'text-emerald-500' : 'text-slate-400'} />
+                    <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Emergency contact verified</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, emergencyContactVerified: !f.emergencyContactVerified }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${form.emergencyContactVerified ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.emergencyContactVerified ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+              </div>
+            )}
+          </div>
+
         </div>
         <div className="flex justify-end gap-2 p-5 border-t border-slate-200 dark:border-slate-700">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
@@ -753,6 +943,16 @@ function AdvanceTab({ employees, advances }) {
   );
 }
 
+// ─── ExcelJS loader ────────────────────────────────────────────────────────────
+const loadExcelJS = () => new Promise((resolve, reject) => {
+  if (window.ExcelJS) return resolve(window.ExcelJS);
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+  s.onload = () => resolve(window.ExcelJS);
+  s.onerror = reject;
+  document.head.appendChild(s);
+});
+
 // ─── Salary Calculator Tab ─────────────────────────────────────────────────────
 function computeSalary(emp, attendance, advances, selectedMonth, settings) {
   const { year, month } = parseYM(selectedMonth);
@@ -882,20 +1082,371 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
     setShowSettings(false);
   };
 
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerateReport = async () => {
+    setGenerating(true);
+    try {
+      const ExcelJS = await loadExcelJS();
+      const { year: yr, month: mo } = parseYM(selectedMonth);
+      const totalDays = getDaysInMonth(yr, mo);
+      const mm = String(mo + 1).padStart(2, '0');
+      const monthStart = `${yr}-${mm}-01`;
+      const monthEnd   = `${yr}-${mm}-${String(totalDays).padStart(2,'0')}`;
+
+      // ── Previous month net pays for MoM column ─────────────────────
+      const prevNetMap = {};
+      try {
+        const snap = await COLL('payroll_salaries').where('month','==',prevMonth(selectedMonth)).get();
+        snap.docs.forEach(d => { const v = d.data(); prevNetMap[v.employeeId] = v.net ?? null; });
+      } catch { /* skip silently */ }
+
+      // ── Pre-compute all salaries ────────────────────────────────────
+      const allCalc = {};
+      employees.forEach(emp => { allCalc[emp.id] = computeSalary(emp, attendance, advances, selectedMonth, settings); });
+
+      const getNet = (empId) => {
+        const c = allCalc[empId]; if (!c) return 0;
+        return Math.round((c.gross + c.otPay - (advDeductions[empId]||0) - c.pt) * 100) / 100;
+      };
+      const getAdvB = (empId) => {
+        const opBal = advances.filter(a => a.employeeId===empId && a.date<monthStart)
+          .reduce((b,a) => a.type==='advance' ? b+(a.amount||0) : b-(a.amount||0), 0);
+        const mAdd = advances.filter(a => a.employeeId===empId && a.date>=monthStart && a.date<=monthEnd && a.type==='advance')
+          .reduce((s,a) => s+(a.amount||0), 0);
+        const ded = advDeductions[empId] || 0;
+        return { opBal, mAdd, ded, closing: opBal+mAdd-ded };
+      };
+
+      // ── Group by dept (sorted) ─────────────────────────────────────
+      const deptGroups = {};
+      employees.forEach(emp => {
+        const d = emp.department || 'Unassigned';
+        if (!deptGroups[d]) deptGroups[d] = [];
+        deptGroups[d].push(emp);
+      });
+      const depts = Object.keys(deptGroups).sort();
+
+      // ── Grand totals ───────────────────────────────────────────────
+      const gGross = employees.reduce((s,e) => s+Math.round(allCalc[e.id]?.gross||0),0);
+      const gOT    = employees.reduce((s,e) => s+Math.round(allCalc[e.id]?.otPay||0),0);
+      const gDed   = employees.reduce((s,e) => s+(advDeductions[e.id]||0),0);
+      const gPT    = employees.reduce((s,e) => s+(allCalc[e.id]?.pt||0),0);
+      const gNet   = employees.reduce((s,e) => s+getNet(e.id),0);
+
+      // ── Style helpers ──────────────────────────────────────────────
+      const hFill = (argb) => ({ type:'pattern', pattern:'solid', fgColor:{argb} });
+      const bdr   = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
+      const ctr   = { horizontal:'center', vertical:'middle', wrapText:true };
+      const rgt   = { horizontal:'right',  vertical:'middle' };
+      const lft   = { horizontal:'left',   vertical:'middle' };
+      const sc = (ws, ref, value, style) => { ws.getCell(ref).value=value; ws.getCell(ref).style=style; };
+      const genDate = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Admire Payroll System';
+
+      // ══════════════════════════════════════════════════════════════
+      // SHEET 1 — MANAGEMENT SUMMARY
+      // ══════════════════════════════════════════════════════════════
+      const ws1 = wb.addWorksheet('Summary');
+      ws1.columns = [{width:30},{width:16},{width:16},{width:30},{width:16},{width:16}];
+
+      // R1 company
+      ws1.mergeCells('A1:F1'); ws1.getRow(1).height = 26;
+      sc(ws1,'A1','Admire Sign & Display Private Limited ( Mumbai and Hyd )',
+        {font:{bold:true,size:14}, alignment:{horizontal:'center',vertical:'middle'}});
+
+      // R2 subtitle
+      ws1.mergeCells('A2:F2'); ws1.getRow(2).height = 20;
+      sc(ws1,'A2',`Payroll Summary — ${MONTHS_LONG[mo]} ${yr}`,
+        {font:{bold:true,size:12,color:{argb:'FF1A5C3A'}}, alignment:{horizontal:'center',vertical:'middle'}});
+
+      ws1.getRow(3).height = 10;
+
+      // KPI pairs (row 4–7, two per row)
+      const kpis = [
+        ['Total Headcount',        employees.length,                                             '0',    'FF1A5C3A'],
+        ['Total Gross Payroll',    Math.round(gGross),                                           '#,##0','FF1A5C3A'],
+        ['Total OT Pay',           Math.round(gOT),                                              '#,##0','FF1A5C3A'],
+        ['Total Advance Deducted', Math.round(gDed),                                             '#,##0','FF1A5C3A'],
+        ['Total Professional Tax', Math.round(gPT),                                              '#,##0','FF1A5C3A'],
+        ['Total Net Payable',      Math.round(gNet),                                             '#,##0','FF0B4D2B'],
+        ['Employees with Absences',employees.filter(e=>allCalc[e.id]?.absentDays>0).length,     '0',    'FFC7511E'],
+        ['Zero / Negative Net Pay',employees.filter(e=>getNet(e.id)<=0).length,                 '0',    'FFCC0000'],
+      ];
+      kpis.forEach(([label, value, fmt, color], i) => {
+        const row = 4 + Math.floor(i/2);
+        ws1.getRow(row).height = 26;
+        if (i%2===0) {
+          ws1.mergeCells(`A${row}:B${row}`);
+          sc(ws1,`A${row}`,label, {font:{bold:true,size:10},fill:hFill('FFF0F7F0'),alignment:lft,border:bdr});
+          sc(ws1,`C${row}`,value, {font:{bold:true,size:11,color:{argb:color}},fill:hFill('FFE8F5E9'),alignment:rgt,border:bdr,numFmt:fmt});
+        } else {
+          ws1.mergeCells(`D${row}:E${row}`);
+          sc(ws1,`D${row}`,label, {font:{bold:true,size:10},fill:hFill('FFF0F7F0'),alignment:lft,border:bdr});
+          sc(ws1,`F${row}`,value, {font:{bold:true,size:11,color:{argb:color}},fill:hFill('FFE8F5E9'),alignment:rgt,border:bdr,numFmt:fmt});
+        }
+      });
+
+      ws1.getRow(8).height = 12;
+
+      // Dept breakdown table (row 9 header, rows 10+ data)
+      ws1.getRow(9).height = 18;
+      ['Department','Employees','Gross Salary','OT Pay','Net Payable','% of Total Net'].forEach((h,i) => {
+        ws1.getRow(9).getCell(i+1).value = h;
+        ws1.getRow(9).getCell(i+1).style = {font:{bold:true,size:10,color:{argb:'FFFFFFFF'}},fill:hFill('FF2D6A4F'),alignment:ctr,border:bdr};
+      });
+      depts.forEach((dept,idx) => {
+        const emps = deptGroups[dept];
+        const dG = emps.reduce((s,e)=>s+Math.round(allCalc[e.id]?.gross||0),0);
+        const dO = emps.reduce((s,e)=>s+Math.round(allCalc[e.id]?.otPay||0),0);
+        const dN = emps.reduce((s,e)=>s+getNet(e.id),0);
+        const pct = gNet>0 ? (dN/gNet*100).toFixed(1)+'%' : '—';
+        const r = 10+idx; ws1.getRow(r).height = 15;
+        [dept,emps.length,dG,dO,Math.round(dN),pct].forEach((v,i) => {
+          ws1.getRow(r).getCell(i+1).value = v;
+          ws1.getRow(r).getCell(i+1).style = {
+            font:{size:10}, fill:hFill(idx%2===0?'FFF8FBF8':'FFFFFFFF'), border:bdr,
+            alignment:i===0?lft:i===1?ctr:rgt, numFmt:[2,3,4].includes(i)?'#,##0':undefined,
+          };
+        });
+      });
+      // Dept grand total
+      const dTotR = 10+depts.length; ws1.getRow(dTotR).height = 16;
+      ['Total',employees.length,Math.round(gGross),Math.round(gOT),Math.round(gNet),'100%'].forEach((v,i) => {
+        ws1.getRow(dTotR).getCell(i+1).value = v;
+        ws1.getRow(dTotR).getCell(i+1).style = {
+          font:{bold:true,size:10},fill:hFill('FFD9EAD3'),border:bdr,
+          alignment:i===0?lft:i===1?ctr:rgt, numFmt:[2,3,4].includes(i)?'#,##0':undefined,
+        };
+      });
+
+      // Signature block — sheet 1
+      const s1Sig = dTotR+3; ws1.getRow(s1Sig).height = 36;
+      ws1.mergeCells(`A${s1Sig}:B${s1Sig}`);
+      ws1.mergeCells(`C${s1Sig}:D${s1Sig}`);
+      ws1.mergeCells(`E${s1Sig}:F${s1Sig}`);
+      ['Prepared by\n\n_____________________','Checked by\n\n_____________________','Approved by\n\n_____________________']
+        .forEach((txt,i) => {
+          const cols=['A','C','E'];
+          ws1.getCell(`${cols[i]}${s1Sig}`).value = txt;
+          ws1.getCell(`${cols[i]}${s1Sig}`).style = {font:{size:9},alignment:{horizontal:'center',vertical:'bottom',wrapText:true},border:{bottom:{style:'thin'}}};
+        });
+      ws1.mergeCells(`A${s1Sig+1}:F${s1Sig+1}`);
+      sc(ws1,`A${s1Sig+1}`,`Generated on ${genDate}`,
+        {font:{size:8,italic:true,color:{argb:'FF888888'}},alignment:{horizontal:'right'}});
+
+      // ══════════════════════════════════════════════════════════════
+      // SHEET 2 — SALARY DETAIL (dept-grouped, trimmed, with MoM)
+      // ══════════════════════════════════════════════════════════════
+      const ws2 = wb.addWorksheet('Salary Detail');
+      // 18 cols: Name,Dept,Joining, DaysInMo,Absent,OTDays,DaysWorked, CurrSal,Gross, OTHrs,OTAmt, OpBal,Add,Ded,AdvBal, PT,Net, MoM
+      ws2.columns = [
+        {width:22},{width:11},{width:12},
+        {width:8},{width:7},{width:7},{width:10},
+        {width:11},{width:10},{width:7},{width:9},
+        {width:9},{width:9},{width:10},{width:9},
+        {width:7},{width:11},{width:10},
+      ];
+
+      let ri = 1;
+
+      // R1 company
+      ws2.mergeCells('A1:R1'); ws2.getRow(1).height = 24;
+      sc(ws2,'A1','Admire Sign & Display Private Limited ( Mumbai and Hyd )',
+        {font:{bold:true,size:13},alignment:{horizontal:'center',vertical:'middle'}});
+      ri = 2;
+
+      // R2 month banner
+      ws2.mergeCells('A2:G2'); ws2.getRow(2).height = 20;
+      sc(ws2,'A2','Salaries for the month of',{font:{bold:true,size:11},alignment:{horizontal:'center',vertical:'middle'}});
+      ws2.mergeCells('H2:I2');
+      sc(ws2,'H2',MONTHS_LONG[mo].toUpperCase(),{font:{bold:true,size:11},fill:hFill('FF92D050'),alignment:ctr});
+      sc(ws2,'J2',yr,                            {font:{bold:true,size:11},alignment:ctr});
+      sc(ws2,'K2','with',                        {font:{size:11},alignment:ctr});
+      sc(ws2,'L2',totalDays,                     {font:{bold:true,size:11},fill:hFill('FF92D050'),alignment:ctr});
+      ws2.mergeCells('M2:R2');
+      sc(ws2,'M2','Days',{font:{size:11},alignment:lft});
+      ri = 3;
+
+      // R3 spacer
+      ws2.getRow(3).height = 6; ri = 4;
+
+      // R4 group header — Advance spans cols 12-15
+      ws2.getRow(4).height = 16;
+      ws2.mergeCells('L4:O4');
+      sc(ws2,'L4','Advance',{font:{bold:true,size:10},fill:hFill('FFD9D9D9'),alignment:ctr,border:bdr});
+      for (let c=1;c<=18;c++) { const cell=ws2.getRow(4).getCell(c); if (!cell.value) cell.border=bdr; }
+      ri = 5;
+
+      // R5 col headers
+      const HDRS2 = [
+        'Name of the\nEmployee','Department','Joining\nDate',
+        'Days\nin Month','Absent','OT\nDays','Days\nWorked',
+        'Current\nSalary','Gross\nSalary','OT\nHrs','OT\nAmt',
+        'Op.Bal','Add','Deductions','Balance',
+        'PT','Net Salary\nPayable','vs Prev\nMonth',
+      ];
+      ws2.getRow(5).height = 32;
+      HDRS2.forEach((h,i) => {
+        ws2.getRow(5).getCell(i+1).value = h;
+        ws2.getRow(5).getCell(i+1).style = {font:{bold:true,size:9},fill:hFill('FFD9D9D9'),alignment:ctr,border:bdr};
+      });
+      ri = 6;
+
+      const NUMS2 = new Set([8,9,11,12,13,14,15,16,17]);
+      const CTRS2 = new Set([4,5,6,7,10]);
+      let g2Gross=0,g2OT=0,g2Ded=0,g2PT=0,g2Net=0;
+
+      depts.forEach(dept => {
+        const emps = deptGroups[dept];
+
+        // Dept header row
+        ws2.mergeCells(`A${ri}:R${ri}`);
+        ws2.getCell(`A${ri}`).value = dept.toUpperCase();
+        ws2.getCell(`A${ri}`).style = {font:{bold:true,size:10,color:{argb:'FFFFFFFF'}},fill:hFill('FF2D6A4F'),alignment:lft,border:bdr};
+        ws2.getRow(ri).height = 16; ri++;
+
+        let d2G=0,d2O=0,d2D=0,d2P=0,d2N=0;
+
+        emps.forEach(emp => {
+          const c = allCalc[emp.id]; if (!c) return;
+          const ded  = advDeductions[emp.id]||0;
+          const net  = getNet(emp.id);
+          const advB = getAdvB(emp.id);
+          const prevNet = prevNetMap[emp.id] ?? null;
+          const mom  = prevNet!==null ? Math.round(net-prevNet) : null;
+
+          // Row highlight
+          let bg = null;
+          if (net<=0)                              bg='FFFFF3CD'; // amber — zero pay
+          else if (c.absentDays/totalDays >= 0.5) bg='FFFCE8E6'; // red   — high absent
+          else if (c.otDays > 0)                  bg='FFE8F4FD'; // blue  — OT worker
+
+          const vals = [
+            emp.name, emp.department||'', emp.joiningDate||'',
+            c.totalDays, c.absentDays, c.otDays, c.effectiveDays,
+            c.currentSalary, Math.round(c.gross),
+            Number(c.otHours.toFixed(1)), Math.round(c.otPay),
+            advB.opBal, advB.mAdd, ded, advB.closing,
+            c.pt, Math.round(net), mom,
+          ];
+          const row = ws2.getRow(ri); row.height = 14;
+          vals.forEach((v,i) => {
+            const col = i+1;
+            const cell = row.getCell(col);
+            cell.value = v;
+            cell.border = bdr;
+            cell.alignment = NUMS2.has(col)?rgt : CTRS2.has(col)?ctr : lft;
+            if (col===17) cell.font = {bold:true,size:9,color:{argb:net<=0?'FFCC0000':'FF1A5C3A'}};
+            else if (col===18 && mom!==null) cell.font = {size:9,color:{argb:mom>=0?'FF1A5C3A':'FFCC0000'}};
+            else cell.font = {size:9};
+            if (NUMS2.has(col)&&col!==18) cell.numFmt='#,##0';
+            if (col===7) cell.numFmt='0.00';
+            if (col===10) cell.numFmt='0.0';
+            if (col===18&&mom!==null) { cell.numFmt='+#,##0;[Red]-#,##0;"-"'; }
+            if (bg) cell.fill=hFill(bg);
+          });
+          ri++;
+          d2G+=Math.round(c.gross); d2O+=Math.round(c.otPay); d2D+=ded; d2P+=c.pt; d2N+=Math.round(net);
+        });
+
+        // Dept subtotal row
+        ws2.mergeCells(`A${ri}:C${ri}`);
+        ws2.getRow(ri).height = 15;
+        const subNums = {9:d2G, 11:d2O, 14:d2D, 16:d2P, 17:d2N};
+        for (let col=1; col<=18; col++) {
+          if (col>1&&col<=3) { ws2.getRow(ri).getCell(col).border=bdr; continue; }
+          const cell = ws2.getRow(ri).getCell(col);
+          cell.value = col===1 ? `${dept} — Subtotal` : (subNums[col]??null);
+          cell.style = {
+            font:{bold:true,size:9,italic:true,color:{argb:'FF1A5C3A'}},
+            fill:hFill('FFE2EFDA'), border:bdr,
+            alignment:subNums[col]!==undefined?rgt:col===1?lft:ctr,
+            numFmt:subNums[col]!==undefined?'#,##0':undefined,
+          };
+        }
+        ri++;
+        g2Gross+=d2G; g2OT+=d2O; g2Ded+=d2D; g2PT+=d2P; g2Net+=d2N;
+      });
+
+      // Grand total row
+      ws2.mergeCells(`A${ri}:C${ri}`);
+      ws2.getRow(ri).height = 18;
+      const gtNums = {9:g2Gross, 11:g2OT, 14:g2Ded, 16:g2PT, 17:g2Net};
+      for (let col=1; col<=18; col++) {
+        if (col>1&&col<=3) { ws2.getRow(ri).getCell(col).border=bdr; continue; }
+        const cell = ws2.getRow(ri).getCell(col);
+        cell.value = col===1 ? 'GRAND TOTAL' : (gtNums[col]??null);
+        cell.style = {
+          font:{bold:true,size:10}, fill:hFill('FFD9EAD3'), border:bdr,
+          alignment:gtNums[col]!==undefined?rgt:col===1?lft:ctr,
+          numFmt:gtNums[col]!==undefined?'#,##0':undefined,
+        };
+      }
+      ri += 2;
+
+      // Colour legend
+      ws2.getRow(ri).height = 14;
+      [['FFE8F4FD','OT worker'],['FFFCE8E6','High absences (≥ 50% of working days)'],['FFFFF3CD','Zero / negative net pay']].forEach(([color,label]) => {
+        ws2.mergeCells(`A${ri}:D${ri}`);
+        ws2.getCell(`A${ri}`).value = '  '+label;
+        ws2.getCell(`A${ri}`).style = {font:{size:8},fill:hFill('FF'+color.slice(2)),border:bdr,alignment:lft};
+        ws2.getRow(ri).height = 13; ri++;
+      });
+
+      // Signature block — sheet 2
+      ri += 2;
+      ws2.getRow(ri).height = 36;
+      ws2.mergeCells(`A${ri}:F${ri}`);
+      ws2.mergeCells(`G${ri}:L${ri}`);
+      ws2.mergeCells(`M${ri}:R${ri}`);
+      ['Prepared by\n\n_____________________','Checked by\n\n_____________________','Approved by\n\n_____________________']
+        .forEach((txt,i) => {
+          const cols=['A','G','M'];
+          ws2.getCell(`${cols[i]}${ri}`).value = txt;
+          ws2.getCell(`${cols[i]}${ri}`).style = {font:{size:9},alignment:{horizontal:'center',vertical:'bottom',wrapText:true},border:{bottom:{style:'thin'}}};
+        });
+      ri++;
+      ws2.mergeCells(`A${ri}:R${ri}`);
+      sc(ws2,`A${ri}`,`Generated on ${genDate}`,
+        {font:{size:8,italic:true,color:{argb:'FF888888'}},alignment:{horizontal:'right'}});
+
+      ws2.views = [{ state:'frozen', ySplit:5, xSplit:1 }];
+
+      // ── Download ───────────────────────────────────────────────────
+      const buf  = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `Salary_${MONTHS_LONG[mo]}_${yr}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Error generating report: ' + e.message); }
+    setGenerating(false);
+  };
+
   const { year, month } = parseYM(selectedMonth);
   const { lateDeductFraction = 0.25, leftEarlyDeductFraction = 0.25 } = settings;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="text-sm text-slate-500 dark:text-slate-400">
           Late deduction: <span className="font-semibold text-slate-700 dark:text-slate-200">{Math.round(lateDeductFraction * 100)}%</span> of a day •
           Left early: <span className="font-semibold text-slate-700 dark:text-slate-200">{Math.round(leftEarlyDeductFraction * 100)}%</span> of a day
         </div>
-        <button onClick={() => setShowSettings(!showSettings)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
-          <Settings size={14} /> Settings
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleGenerateReport} disabled={generating || !employees.length}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg border border-emerald-300 dark:border-emerald-700 disabled:opacity-50">
+            {generating ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+            {generating ? 'Generating…' : 'Export Report'}
+          </button>
+          <button onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+            <Settings size={14} /> Settings
+          </button>
+        </div>
       </div>
 
       {showSettings && (

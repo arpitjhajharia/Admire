@@ -329,7 +329,7 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
             </div>
 
             <div className="absolute bottom-6 left-0 right-0 text-center text-white/80 pointer-events-none px-4">
-                <p className="font-bold text-lg mb-2">{currentImg.stage || 'Image Preview'}</p>
+                <p className="font-bold text-lg mb-2">{(currentImg.stages?.join(', ') || currentImg.stage) || 'Image Preview'}</p>
 
                 <div className="flex items-center justify-center gap-6 text-sm opacity-80 mb-2">
                     <span>{currentIndex + 1} of {images.length}</span>
@@ -361,7 +361,7 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
 };
 
 const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) => {
-    const [items, setItems] = useState([]); // [{id, file, stage, preview}]
+    const [items, setItems] = useState([]); // [{id, file, stages: [], preview}]
     const [uploading, setUploading] = useState(false);
 
     const defaultSt = defaultStage || (stages && stages.length > 0 ? stages[0] : '');
@@ -376,19 +376,23 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
         const newItems = Array.from(fileList).map(file => ({
             id: Math.random().toString(36).slice(2),
             file,
-            stage: defaultSt,
+            stages: defaultSt ? [defaultSt] : [],
             preview: URL.createObjectURL(file),
         }));
         setItems(prev => [...prev, ...newItems]);
     };
 
     const removeItem = (id) => setItems(prev => prev.filter(i => i.id !== id));
-    const setItemStage = (id, stage) => setItems(prev => prev.map(i => i.id === id ? { ...i, stage } : i));
+    const toggleItemStage = (id, stage) => setItems(prev => prev.map(i => {
+        if (i.id !== id) return i;
+        const next = i.stages.includes(stage) ? i.stages.filter(s => s !== stage) : [...i.stages, stage];
+        return { ...i, stages: next };
+    }));
 
     const handleSubmit = async () => {
         if (items.length === 0) return;
         setUploading(true);
-        await onUpload(items.map(i => ({ file: i.file, stage: i.stage })));
+        await onUpload(items.map(i => ({ file: i.file, stages: i.stages })));
         setUploading(false);
         onClose();
     };
@@ -419,23 +423,28 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
 
                 {/* Pending images list */}
                 {items.length > 0 && (
-                    <div className="space-y-2 max-h-56 overflow-y-auto mb-4 pr-1">
+                    <div className="space-y-2 max-h-64 overflow-y-auto mb-4 pr-1">
                         {items.map(item => (
-                            <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border">
-                                <img src={item.preview} className="h-11 w-11 object-cover rounded border flex-shrink-0 bg-white" alt="" />
-                                <span className="flex-1 text-xs text-slate-600 truncate min-w-0">{item.file.name}</span>
-                                {stages && stages.length > 0 ? (
-                                    <select
-                                        className="text-xs border rounded-lg px-1.5 py-1 bg-white flex-shrink-0 max-w-[130px]"
-                                        value={item.stage}
-                                        onChange={e => setItemStage(item.id, e.target.value)}
-                                    >
-                                        {stages.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                ) : (
-                                    <span className="text-[10px] text-slate-400 flex-shrink-0">{item.stage || '—'}</span>
+                            <div key={item.id} className="bg-slate-50 p-2 rounded-lg border">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <img src={item.preview} className="h-10 w-10 object-cover rounded border flex-shrink-0 bg-white" alt="" />
+                                    <span className="flex-1 text-xs text-slate-600 truncate min-w-0">{item.file.name}</span>
+                                    <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-0.5"><X size={13} /></button>
+                                </div>
+                                {stages && stages.length > 0 && (
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1">
+                                        {stages.map(s => (
+                                            <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${item.stages.includes(s) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}
+                                                    onClick={() => toggleItemStage(item.id, s)}>
+                                                    {item.stages.includes(s) && <CheckSquare size={9} className="text-white" />}
+                                                </span>
+                                                <span className="text-[11px] text-slate-600" onClick={() => toggleItemStage(item.id, s)}>{s}</span>
+                                            </label>
+                                        ))}
+                                        {item.stages.length === 0 && <span className="text-[11px] text-amber-500 italic">Select at least one stage</span>}
+                                    </div>
                                 )}
-                                <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-0.5"><X size={13} /></button>
                             </div>
                         ))}
                     </div>
@@ -1045,16 +1054,30 @@ const BOQManager = ({ boq, user, onBack }) => {
     const [showIdDropdown, setShowIdDropdown] = useState(false);
     const idDropdownRef = React.useRef(null);
 
+    // Active filter dropdown key for column multi-select filters
+    const [activeFilterKey, setActiveFilterKey] = useState(null);
+    const [filterDropdownLeft, setFilterDropdownLeft] = useState(0);
+
+    const openFilterDropdown = (key, e) => {
+        if (activeFilterKey === key) { setActiveFilterKey(null); return; }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const containerRect = idDropdownRef.current?.getBoundingClientRect();
+        setFilterDropdownLeft(rect.left - (containerRect?.left || 0));
+        setActiveFilterKey(key);
+        setShowIdDropdown(false);
+    };
+
     useEffect(() => {
-        if (!showIdDropdown) return;
+        if (!showIdDropdown && !activeFilterKey) return;
         const handler = (e) => {
             if (idDropdownRef.current && !idDropdownRef.current.contains(e.target)) {
                 setShowIdDropdown(false);
+                setActiveFilterKey(null);
             }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showIdDropdown]);
+    }, [showIdDropdown, activeFilterKey]);
 
     // Tab state
     const [activeTab, setActiveTab] = useState('items');
@@ -1583,21 +1606,22 @@ const BOQManager = ({ boq, user, onBack }) => {
     };
 
     const handleImageUpload = async (uploads) => {
-        // uploads: [{file, stage}, ...]
+        // uploads: [{file, stages: []}, ...]
         const { sign, isFactory } = uploadModal;
         if (!sign || !uploads.length) return;
 
-        const lastStage = uploads[uploads.length - 1].stage;
+        const lastUploadStages = uploads[uploads.length - 1].stages;
+        const lastStage = lastUploadStages?.[0] || '';
         if (isFactory) setLastFactoryStage(lastStage);
         else setLastSiteStage(lastStage);
 
-        for (const { file, stage } of uploads) {
-            const finalStage = stage || (isFactory ? 'General Production' : 'Installation');
-            await executeUpload(sign, file, finalStage, isFactory);
+        for (const { file, stages } of uploads) {
+            const finalStages = stages?.length ? stages : [isFactory ? 'General Production' : 'Installation'];
+            await executeUpload(sign, file, finalStages, isFactory);
         }
     };
 
-    const executeUpload = async (sign, file, stage, isFactory) => {
+    const executeUpload = async (sign, file, stages, isFactory) => {
         if (!file) return;
         const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id);
         const field = isFactory ? 'factoryImages' : 'siteImages';
@@ -1614,7 +1638,7 @@ const BOQManager = ({ boq, user, onBack }) => {
 
         const newImage = {
             url: compressed,
-            stage,
+            stages,
             uploadedBy: user.username,
             timestamp: new Date().toISOString(),
             ...(isFactory ? { qcStatus: hasArtworks ? 'pending' : 'na', qcArtworkIdx: null, qcIssues: [] } : {})
@@ -1680,16 +1704,23 @@ const BOQManager = ({ boq, user, onBack }) => {
     };
 
 
+    const toggleFilterValue = (key, value) => {
+        const current = new Set(filters[key] || []);
+        if (current.has(value)) current.delete(value); else current.add(value);
+        setFilters({ ...filters, [key]: current });
+    };
+
     const filteredSigns = useMemo(() => {
         let data = [...signs];
         Object.keys(filters).forEach(key => {
-            if (!filters[key]) return;
+            const vals = filters[key];
+            if (!vals || vals.size === 0) return;
             if (key === '_factoryStage') {
-                data = data.filter(s => s.factoryStageChecks?.[filters[key]]?.checked);
+                data = data.filter(s => [...vals].some(v => s.factoryStageChecks?.[v]?.checked));
             } else if (key === '_siteStage') {
-                data = data.filter(s => s.siteStageChecks?.[filters[key]]?.checked);
+                data = data.filter(s => [...vals].some(v => s.siteStageChecks?.[v]?.checked));
             } else {
-                data = data.filter(s => s[key] === filters[key]);
+                data = data.filter(s => vals.has(s[key]));
             }
         });
         if (idFilter.size > 0) {
@@ -1891,24 +1922,21 @@ const BOQManager = ({ boq, user, onBack }) => {
                 <div className="bg-white border-b relative" ref={idDropdownRef}>
                 <div className="flex items-center gap-2 px-3 py-1.5 overflow-x-auto scrollbar-hide">
                     {/* Status pill */}
-                    <div className={`flex-shrink-0 flex items-center gap-1.5 pl-1.5 pr-0.5 py-1 rounded-full border text-xs font-medium transition whitespace-nowrap ${
-                        filters.status ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                    }`}>
+                    <button
+                        onClick={(e) => openFilterDropdown('status', e)}
+                        className={`flex-shrink-0 flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full border text-xs font-medium transition whitespace-nowrap ${
+                            (filters.status?.size || 0) > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}
+                    >
                         <Filter size={11} className="flex-shrink-0" />
-                        <select
-                            className="bg-transparent border-none focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[130px]"
-                            value={filters.status || ''}
-                            onChange={e => setFilters({ ...filters, status: e.target.value })}
-                        >
-                            <option value="">All Statuses</option>
-                            {uniqueValues['status']?.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
+                        <span>{(filters.status?.size || 0) > 0 ? `${filters.status.size} Status${filters.status.size > 1 ? 'es' : ''}` : 'All Statuses'}</span>
+                        <ChevronDown size={11} />
+                    </button>
 
                     {/* ID multi-select trigger pill */}
                     {idCol && (
                         <button
-                            onClick={() => setShowIdDropdown(v => !v)}
+                            onClick={() => { setShowIdDropdown(v => !v); setActiveFilterKey(null); }}
                             className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
                                 idFilter.size > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
                             }`}
@@ -1922,59 +1950,51 @@ const BOQManager = ({ boq, user, onBack }) => {
 
                     {/* Factory stage filter */}
                     {boq.factoryStages?.length > 0 && (
-                        <div className={`flex-shrink-0 flex items-center gap-1 pl-2 pr-0.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
-                            filters._factoryStage ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                        }`}>
+                        <button
+                            onClick={(e) => openFilterDropdown('_factoryStage', e)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                                (filters._factoryStage?.size || 0) > 0 ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                        >
                             <span className="opacity-70">Factory:</span>
-                            <select
-                                className="bg-transparent border-none p-0 focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[110px]"
-                                value={filters._factoryStage || ''}
-                                onChange={e => setFilters({ ...filters, _factoryStage: e.target.value })}
-                            >
-                                <option value="">All</option>
-                                {boq.factoryStages.map(s => <option key={s} value={s}>{s} ✓</option>)}
-                            </select>
-                        </div>
+                            <span className="font-semibold">{(filters._factoryStage?.size || 0) > 0 ? `${filters._factoryStage.size} selected` : 'All'}</span>
+                            <ChevronDown size={11} />
+                        </button>
                     )}
 
                     {/* Site stage filter */}
                     {boq.siteStages?.length > 0 && (
-                        <div className={`flex-shrink-0 flex items-center gap-1 pl-2 pr-0.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
-                            filters._siteStage ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                        }`}>
+                        <button
+                            onClick={(e) => openFilterDropdown('_siteStage', e)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                                (filters._siteStage?.size || 0) > 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                        >
                             <span className="opacity-70">Site:</span>
-                            <select
-                                className="bg-transparent border-none p-0 focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[110px]"
-                                value={filters._siteStage || ''}
-                                onChange={e => setFilters({ ...filters, _siteStage: e.target.value })}
-                            >
-                                <option value="">All</option>
-                                {boq.siteStages.map(s => <option key={s} value={s}>{s} ✓</option>)}
-                            </select>
-                        </div>
+                            <span className="font-semibold">{(filters._siteStage?.size || 0) > 0 ? `${filters._siteStage.size} selected` : 'All'}</span>
+                            <ChevronDown size={11} />
+                        </button>
                     )}
 
                     {/* Dynamic filter pills — exclude ID column to avoid duplication */}
                     {columns.filter(c => c.isFilter && !c.isId).map(col => (
-                        <div key={col.key} className={`flex-shrink-0 flex items-center gap-1 pl-2 pr-0.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
-                            filters[col.key] ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                        }`}>
+                        <button
+                            key={col.key}
+                            onClick={(e) => openFilterDropdown(col.key, e)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                                (filters[col.key]?.size || 0) > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                        >
                             <span className="opacity-70">{col.label}:</span>
-                            <select
-                                className="bg-transparent border-none p-0 focus:ring-0 text-xs font-medium cursor-pointer pr-1 max-w-[90px]"
-                                value={filters[col.key] || ''}
-                                onChange={e => setFilters({ ...filters, [col.key]: e.target.value })}
-                            >
-                                <option value="">All</option>
-                                {uniqueValues[col.key]?.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                        </div>
+                            <span className="font-semibold">{(filters[col.key]?.size || 0) > 0 ? `${filters[col.key].size} selected` : 'All'}</span>
+                            <ChevronDown size={11} />
+                        </button>
                     ))}
 
                     {/* Clear button */}
-                    {(Object.keys(filters).some(k => filters[k]) || idFilter.size > 0) && (
+                    {(Object.keys(filters).some(k => (filters[k]?.size || 0) > 0) || idFilter.size > 0) && (
                         <button
-                            onClick={() => { setFilters({}); setIdFilter(new Set()); setIdSearch(''); }}
+                            onClick={() => { setFilters({}); setIdFilter(new Set()); setIdSearch(''); setActiveFilterKey(null); }}
                             className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-600 text-xs font-semibold active:bg-red-100"
                         >
                             <X size={11} /> Clear
@@ -2036,6 +2056,64 @@ const BOQManager = ({ boq, user, onBack }) => {
                     </div>
                 )}
 
+                {/* Multi-select filter dropdown panel */}
+                {activeFilterKey && (() => {
+                    const isFactoryStage = activeFilterKey === '_factoryStage';
+                    const isSiteStage = activeFilterKey === '_siteStage';
+                    const opts = activeFilterKey === 'status'
+                        ? (uniqueValues['status'] || [])
+                        : isFactoryStage
+                            ? (boq.factoryStages || [])
+                            : isSiteStage
+                                ? (boq.siteStages || [])
+                                : (uniqueValues[activeFilterKey] || []);
+                    const selected = filters[activeFilterKey] || new Set();
+                    const allSel = opts.length > 0 && opts.every(o => selected.has(o));
+                    const colorClass = isFactoryStage ? 'bg-orange-600 border-orange-600' : isSiteStage ? 'bg-green-600 border-green-600' : 'bg-indigo-600 border-indigo-600';
+                    const toggleAll = () => {
+                        if (allSel) setFilters({ ...filters, [activeFilterKey]: new Set() });
+                        else setFilters({ ...filters, [activeFilterKey]: new Set(opts) });
+                    };
+                    return (
+                        <div className="absolute top-full mt-0 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden" style={{ left: filterDropdownLeft }}>
+                            <div className="max-h-52 overflow-y-auto">
+                                <button
+                                    onClick={toggleAll}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition text-left border-b border-slate-100"
+                                >
+                                    <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${allSel ? colorClass : 'border-slate-300 bg-white'}`}>
+                                        {allSel && <Minus size={10} className="text-white" />}
+                                    </span>
+                                    <span className="text-xs font-semibold text-slate-700">(Select All)</span>
+                                </button>
+                                {opts.map(opt => (
+                                    <button
+                                        key={opt}
+                                        onClick={() => toggleFilterValue(activeFilterKey, opt)}
+                                        className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 transition text-left"
+                                    >
+                                        <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${selected.has(opt) ? colorClass : 'border-slate-300 bg-white'}`}>
+                                            {selected.has(opt) && <CheckSquare size={10} className="text-white" />}
+                                        </span>
+                                        <span className="text-xs text-slate-700 truncate">{opt}</span>
+                                    </button>
+                                ))}
+                                {opts.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No options</p>}
+                            </div>
+                            {selected.size > 0 && (
+                                <div className="p-2 border-t border-slate-100">
+                                    <button
+                                        onClick={() => { setFilters({ ...filters, [activeFilterKey]: new Set() }); setActiveFilterKey(null); }}
+                                        className="w-full text-xs text-red-600 font-semibold py-1.5 rounded-lg hover:bg-red-50 transition"
+                                    >
+                                        Clear Filter
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
+
                 {/* ── Mobile-only sort bar ── */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-1.5 border-t border-slate-100 pt-1.5">
                     <ArrowUpDown size={11} className="text-slate-400 flex-shrink-0" />
@@ -2085,6 +2163,14 @@ const BOQManager = ({ boq, user, onBack }) => {
                 <div className="bg-indigo-50 px-6 py-1.5 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-indigo-100 gap-2">
                     <span className="text-sm text-indigo-800 font-medium">{selectedSigns.size} selected</span>
                     <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => updateStatus(selectedSigns, STATUS.DRAFT)}
+                            className="text-xs bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 px-3 py-1 rounded flex items-center gap-1"
+                            title="Reset to Draft"
+                        >
+                            ↩ Reset to Draft
+                        </button>
+                        <div className="w-px bg-indigo-200 mx-1 hidden md:block"></div>
                         {(boq.statusButtons || DEFAULT_STATUS_BUTTONS).map((btn, i, arr) => (
                             <button
                                 key={i}
@@ -2461,7 +2547,7 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                     {factImages.filter(img => img.qcStatus === 'fail').map((img, i) => (
                         <div key={i} className="mb-1 last:mb-0">
                             <p className="text-[9px] font-semibold text-red-600">
-                                {img.stage} → Artwork {(img.qcArtworkIdx ?? 0) + 1}
+                                {img.stages?.join(', ') || img.stage} → Artwork {(img.qcArtworkIdx ?? 0) + 1}
                             </p>
                             {(img.qcIssues || []).map((issue, j) => (
                                 <p key={j} className="text-[9px] text-red-500 pl-2">• {issue}</p>
@@ -2739,7 +2825,7 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
         const source = colConfig.type === 'factory' ? (sign.factoryImages || []) : (sign.siteImages || []);
 
         if (colConfig.mode === 'all') return source;
-        return source.filter(img => img.stage === colConfig.stage);
+        return source.filter(img => img.stages ? img.stages.includes(colConfig.stage) : img.stage === colConfig.stage);
     };
 
     return (
