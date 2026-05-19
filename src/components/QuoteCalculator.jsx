@@ -219,7 +219,9 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
     const installCost = getExtraCost('install');
     const structureCost = getExtraCost('structure');
     const serviceItemsTotal = serviceItems.reduce((sum, item) => sum + (item.total * screenQty), 0);
-    const additionalSubtotal = serviceItemsTotal + ((installCost + structureCost) * screenQty);
+    const dynamicCosts = Array.isArray(commercials?.dynamicCosts) ? commercials.dynamicCosts : [];
+    const dynamicCostTotal = dynamicCosts.reduce((sum, dc) => sum + getExtraCost(`dynamic_${dc.id}`) * screenQty, 0);
+    const additionalSubtotal = serviceItemsTotal + ((installCost + structureCost) * screenQty) + dynamicCostTotal;
     const additionalPerScreen = additionalSubtotal / (screenQty || 1);
     const additionalPerSqFt = additionalPerScreen / areaSqFt;
 
@@ -240,6 +242,24 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
         const newExtras = [...extras];
         newExtras[index] = { ...newExtras[index], [key]: val };
         updateScreenProp(state.activeScreenIndex, 'extras', newExtras);
+    };
+
+    const handleAddDynamicCost = () => {
+        const newRow = { id: safeGenId(), name: 'New Item', unit: 'sqft', costRate: 0, sellRate: 0 };
+        updateScreenProp(state.activeScreenIndex, 'commercials', {
+            ...commercials, dynamicCosts: [...dynamicCosts, newRow]
+        });
+    };
+    const handleRemoveDynamicCost = (id) => {
+        updateScreenProp(state.activeScreenIndex, 'commercials', {
+            ...commercials, dynamicCosts: dynamicCosts.filter(dc => dc.id !== id)
+        });
+    };
+    const handleUpdateDynamicCost = (id, field, val) => {
+        updateScreenProp(state.activeScreenIndex, 'commercials', {
+            ...commercials,
+            dynamicCosts: dynamicCosts.map(dc => dc.id === id ? { ...dc, [field]: val } : dc)
+        });
     };
 
     // --- RENDER HELPERS ---
@@ -476,6 +496,64 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                                         </tr>
                                     );
                                 })}
+                                {/* Dynamic Cost Rows */}
+                                {dynamicCosts.map(dc => (
+                                    <tr key={dc.id} className="text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                        <td className="p-2 pl-4">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex justify-between items-center gap-1">
+                                                    <input
+                                                        type="text"
+                                                        value={dc.name}
+                                                        onChange={e => handleUpdateDynamicCost(dc.id, 'name', e.target.value)}
+                                                        className="text-xs font-medium border-b border-transparent hover:border-slate-300 focus:border-teal-500 bg-transparent outline-none flex-1 text-slate-700 dark:text-slate-200"
+                                                    />
+                                                    <select
+                                                        value={dc.unit}
+                                                        onChange={e => handleUpdateDynamicCost(dc.id, 'unit', e.target.value)}
+                                                        className="text-[10px] p-0.5 border rounded bg-slate-50 dark:bg-slate-700"
+                                                    >
+                                                        <option value="sqft">/Sq.Ft</option>
+                                                        <option value="screen">/Screen</option>
+                                                    </select>
+                                                    <button onClick={() => handleRemoveDynamicCost(dc.id)} className="text-red-400 hover:text-red-600 ml-1"><Trash2 size={12} /></button>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-green-600 font-bold">Sell:</span>
+                                                    <input
+                                                        type="number"
+                                                        className="w-20 p-0.5 text-xs border border-green-200 rounded bg-green-50 text-green-800"
+                                                        value={dc.sellRate}
+                                                        onChange={e => handleUpdateDynamicCost(dc.id, 'sellRate', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="p-2 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <span className="text-[10px] text-slate-400 mr-1">Cost:</span>
+                                                <input
+                                                    type="number"
+                                                    value={dc.costRate}
+                                                    onChange={e => handleUpdateDynamicCost(dc.id, 'costRate', e.target.value)}
+                                                    className="w-16 p-1 text-right text-xs border rounded bg-white dark:bg-slate-800 dark:border-slate-600"
+                                                />
+                                            </div>
+                                        </td>
+                                        <td className="p-2 text-center border-l border-slate-100 dark:border-slate-700 text-xs">
+                                            {dc.unit === 'sqft' ? calculation?.matrix.sqft.perScreen.toFixed(1) || '-' : '1'}
+                                        </td>
+                                        <td className="p-2 text-right">{formatCurrency(getExtraCost(`dynamic_${dc.id}`), 'INR', false)}</td>
+                                        <td className="p-2 text-right border-l border-slate-100 dark:border-slate-700">{formatCurrency(getExtraCost(`dynamic_${dc.id}`) * screenQty, 'INR', false)}</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-slate-50 dark:bg-slate-800/20">
+                                    <td colSpan="5" className="p-1 text-center">
+                                        <button onClick={handleAddDynamicCost} className="text-[10px] text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider flex items-center justify-center gap-1 py-1 w-full hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">
+                                            <Plus size={10} /> Add Cost
+                                        </button>
+                                    </td>
+                                </tr>
                                 <tr className="bg-blue-50 dark:bg-blue-900/20 font-bold border-t border-blue-100 dark:border-blue-800">
                                     <td className="p-2 text-right text-blue-800 dark:text-blue-300">Sub-total (Additional)</td>
                                     <td className="p-2 text-right text-blue-700 dark:text-blue-400 text-[10px] font-normal">{formatCurrency(additionalPerSqFt, 'INR')}/sqft</td>
@@ -561,6 +639,43 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                                 </div>
                             );
                         })}
+                        {/* Mobile Dynamic Cost Rows */}
+                        {dynamicCosts.map(dc => (
+                            <div key={dc.id} className="bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 mb-2 shadow-sm">
+                                <div className="flex justify-between items-center mb-2 gap-2">
+                                    <input
+                                        type="text"
+                                        value={dc.name}
+                                        onChange={e => handleUpdateDynamicCost(dc.id, 'name', e.target.value)}
+                                        className="text-xs font-bold border-b border-transparent focus:border-teal-500 bg-transparent outline-none flex-1 text-slate-700 dark:text-slate-200"
+                                    />
+                                    <select
+                                        value={dc.unit}
+                                        onChange={e => handleUpdateDynamicCost(dc.id, 'unit', e.target.value)}
+                                        className="text-[10px] p-0.5 border rounded bg-slate-50 dark:bg-slate-700"
+                                    >
+                                        <option value="sqft">/Sq.Ft</option>
+                                        <option value="screen">/Screen</option>
+                                    </select>
+                                    <button onClick={() => handleRemoveDynamicCost(dc.id)} className="text-red-400 p-1"><Trash2 size={14} /></button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mb-2">
+                                    <div className="flex items-center gap-1 bg-green-50 p-1 rounded border border-green-100">
+                                        <span className="text-[10px] text-green-600 font-bold">Sell:</span>
+                                        <input type="number" className="w-full p-0.5 text-xs bg-transparent outline-none text-green-800 font-bold" value={dc.sellRate} onChange={e => handleUpdateDynamicCost(dc.id, 'sellRate', e.target.value)} />
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-slate-50 p-1 rounded border border-slate-100">
+                                        <span className="text-[10px] text-slate-400">Cost:</span>
+                                        <input type="number" className="w-full p-0.5 text-xs bg-transparent outline-none" value={dc.costRate} onChange={e => handleUpdateDynamicCost(dc.id, 'costRate', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
+                                    <span className="text-[10px] text-slate-400 font-bold">Total Cost</span>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{formatCurrency(getExtraCost(`dynamic_${dc.id}`) * screenQty, 'INR', false)}</span>
+                                </div>
+                            </div>
+                        ))}
+                        <button onClick={handleAddDynamicCost} className="w-full py-2 mb-4 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Plus size={14} /> Add Cost</button>
 
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-800 mb-4">
                             <div className="flex justify-between items-center text-xs font-bold text-blue-800 dark:text-blue-300">
@@ -686,10 +801,12 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
                         pricingMode: 'margin',
                         margin: 0,
                         targetSellPrice: 0,
+                        sparesPercent: 2,
                         commercials: {
                             processor: { val: 0, unit: 'screen', cost: 0, costType: 'abs' },
                             installation: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
-                            structure: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' }
+                            structure: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
+                            dynamicCosts: []
                         }
                     }
                 ],
@@ -739,10 +856,12 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
             pricingMode: 'margin',
             margin: 0,
             targetSellPrice: 0,
+            sparesPercent: 2,
             commercials: {
                 processor: { val: 0, unit: 'screen', cost: 0, costType: 'abs' },
                 installation: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
-                structure: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' }
+                structure: { val: 0, unit: 'sqft', cost: 0, costType: 'abs' },
+                dynamicCosts: []
             }
         };
         setState(prev => ({
@@ -865,6 +984,7 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
     const activePricingMode = activeScreen?.pricingMode ?? state.pricingMode ?? 'margin';
     const activeMargin = activeScreen?.margin ?? state.margin ?? 0;
     const activeTargetSellPrice = activeScreen?.targetSellPrice ?? state.targetSellPrice ?? 0;
+    const activeSparesPercent = activeScreen?.sparesPercent ?? 2;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative items-start">
@@ -1407,7 +1527,7 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
                                     </select>
                                 </div>
 
-                                <div className="flex items-center gap-2 mb-4">
+                                <div className="flex items-center gap-2 mb-3">
                                     <input
                                         type="number"
                                         value={activePricingMode === 'margin' ? activeMargin : activeTargetSellPrice}
@@ -1428,6 +1548,22 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
                                                 ? formatCurrency(allScreensTotal.totalMargin, 'INR')
                                                 : (calculation ? formatCurrency(calculation.matrix.margin.total, 'INR') : '-')}
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between mb-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-600">
+                                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Spares %</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.5"
+                                            value={activeSparesPercent}
+                                            onChange={e => updateScreenProp(state.activeScreenIndex, 'sparesPercent', parseFloat(e.target.value) || 0)}
+                                            className="w-16 text-center text-sm font-bold p-1 border rounded bg-white dark:bg-slate-600 dark:border-slate-500 shadow-sm focus:ring-2 focus:ring-teal-500/50 outline-none dark:text-white"
+                                        />
+                                        <span className="text-sm font-bold text-slate-400">%</span>
                                     </div>
                                 </div>
 

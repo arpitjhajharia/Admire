@@ -112,7 +112,7 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         selectedSMPSIds,  // new multi-select array
         selectedProcId,
         sizingMode, readyId, margin, extras, overrides, extraComponents,
-        pricingMode, targetSellPrice, commercials, terms
+        pricingMode, targetSellPrice, commercials, terms, sparesPercent
     } = state;
 
     // Normalise: prefer the new array; fall back to legacy single id
@@ -418,6 +418,16 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
     calculatedExtras['structure'] = structCostVal;
     serviceOpsCost += structCostVal;
 
+    // 3. Dynamic Service Costs
+    const dynamicCostRows = Array.isArray(commercials?.dynamicCosts) ? commercials.dynamicCosts : [];
+    dynamicCostRows.forEach(dc => {
+        const costVal = dc.unit === 'sqft'
+            ? Number(dc.costRate || 0) * areaSqFt
+            : Number(dc.costRate || 0);
+        calculatedExtras[`dynamic_${dc.id}`] = costVal;
+        serviceOpsCost += costVal;
+    });
+
     // COST TOTALS (Per Screen)
     const costLEDPerScreen = ledItemsTotal + ledOpsCost;
     const costServicesPerScreen = serviceItemsTotal + serviceOpsCost;
@@ -451,8 +461,15 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
         sellStructureTotal = Number(comms.structure.val) * screenQty;
     }
 
-    const totalServiceSell = sellProcTotal + sellInstallTotal + sellStructureTotal;
-    // Removed unused sellServicesPerScreen
+    let sellDynamicTotal = 0;
+    dynamicCostRows.forEach(dc => {
+        const sellVal = dc.unit === 'sqft'
+            ? Number(dc.sellRate || 0) * areaSqFt
+            : Number(dc.sellRate || 0);
+        sellDynamicTotal += sellVal * screenQty;
+    });
+
+    const totalServiceSell = sellProcTotal + sellInstallTotal + sellStructureTotal + sellDynamicTotal;
 
     // 2. Calculate LED Panel Sell Price
     let sellLEDPerScreen = 0;
@@ -511,9 +528,16 @@ export const calculateBOM = (state, inventory, transactions, exchangeRate) => {
             structureVal: Number(comms.structure?.val || 0),
             processorUnit: comms.processor?.unit || 'unit',
             processorVal: Number(comms.processor?.val || 0),
+            dynamicCosts: dynamicCostRows.map(dc => ({
+                ...dc,
+                sellPerScreen: dc.unit === 'sqft'
+                    ? Number(dc.sellRate || 0) * areaSqFt
+                    : Number(dc.sellRate || 0),
+            })),
         },
         pricingMode: mode,
         targetSellPrice: Number(targetSellPrice || 0),
+        sparesPercent: Number(sparesPercent ?? 2),
         terms: terms || { price: 'Ex-works Mumbai', deliveryWeeks: 10, payment: [] },
 
         // Matrix for UI

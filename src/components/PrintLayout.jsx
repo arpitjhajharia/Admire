@@ -67,7 +67,7 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                     finalWidth, finalHeight, totalCabinets,
                     moduleType = {}, cabinetType = {}, processor, screenQty, totalProjectSell,
                     gridCols, gridRows, commercials, pricingMode, targetSellPrice,
-                    assemblyMode, breakdown = {}, finalWarranty
+                    assemblyMode, breakdown = {}, finalWarranty, sparesPercent = 2
                 } = config;
 
                 // Technical Calculations
@@ -94,10 +94,12 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
                 const sellProc = (comms.sellProcTotal || 0) / (screenQty || 1);
                 const sellInstall = (comms.sellInstallTotal || 0) / (screenQty || 1);
                 const sellStructure = (comms.sellStructureTotal || 0) / (screenQty || 1);
+                const dynamicCostRows = Array.isArray(comms.dynamicCosts) ? comms.dynamicCosts : [];
+                const sellDynamicPerScreen = dynamicCostRows.reduce((sum, dc) => sum + (dc.sellPerScreen || 0), 0);
 
-                const sellLEDBase = sellTotalPerScreen - sellProc - sellInstall - sellStructure;
-                const sellLEDFinal = sellLEDBase;           // Full LED panel price (unchanged)
-                const sellSpares = sellLEDBase * 0.02;      // 2% added ON TOP of LED panel price
+                const sellLEDBase = sellTotalPerScreen - sellProc - sellInstall - sellStructure - sellDynamicPerScreen;
+                const sellLEDFinal = sellLEDBase;
+                const sellSpares = sellLEDBase * (sparesPercent / 100);
 
                 const ledPanelLabel = pricingMode === 'sqft' && targetSellPrice
                     ? `LED Panel (${formatCurrency(targetSellPrice, currency)} per sqft)`
@@ -130,12 +132,23 @@ const PrintLayout = ({ data, allScreensData, currency = 'INR', exchangeRate, dat
 
                 const sparesTotal = sellSpares * screenQty;  // total spares across all screens
 
+                const dynamicCommercialRows = dynamicCostRows
+                    .filter(dc => (dc.sellPerScreen || 0) > 0)
+                    .map(dc => ({
+                        name: dc.name || 'Additional Cost',
+                        rateLabel: dc.unit === 'sqft'
+                            ? `${formatCurrency(Number(dc.sellRate || 0), currency)}/sqft`
+                            : '',
+                        rate: dc.sellPerScreen || 0,
+                    }));
+
                 const commercialRows = [
                     { name: ledPanelLabel, rateLabel: ledRateLabel, rate: sellLEDFinal },
                     { name: "Processor", rateLabel: procRateLabel, rate: sellProc },
                     { name: installLabel, rateLabel: installRateLabel, rate: sellInstall },
-                    { name: "Spares (2%)", rateLabel: '2% of LED Panel', rate: sellSpares },
                     { name: structureLabel, rateLabel: structureRateLabel, rate: sellStructure },
+                    ...dynamicCommercialRows,
+                    { name: `Spares (${sparesPercent}%)`, rateLabel: `${sparesPercent}% of LED Panel`, rate: sellSpares },
                 ].filter(r => r.rate > 0);
 
                 return (
