@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import ExcelJS from 'exceljs';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
@@ -1024,7 +1024,22 @@ const EditSignModal = ({ sign, columns, onClose, onUpdate }) => {
 };
 
 // ... BOQManager (Same as before) ...
-const BOQManager = ({ boq, user, onBack }) => {
+const BOQManager = ({ boq: initialBoq, user, onBack }) => {
+    // Keep BOQ metadata in sync with Firestore so stage/settings changes
+    // made by any admin are reflected immediately without a page refresh.
+    const [liveBoqMeta, setLiveBoqMeta] = useState({});
+    const boq = useMemo(() => ({ ...initialBoq, ...liveBoqMeta }), [initialBoq, liveBoqMeta]);
+
+    useEffect(() => {
+        const boqRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', initialBoq.id);
+        return onSnapshot(boqRef, (snap) => {
+            if (snap.exists()) {
+                const { name, factoryStages, siteStages, statusButtons, columns } = snap.data();
+                setLiveBoqMeta({ name, factoryStages, siteStages, statusButtons, columns });
+            }
+        });
+    }, [initialBoq.id]);
+
     const [signs, setSigns] = useState([]);
     const [viewMode, setViewMode] = useState('table');
     const [importConfig, setImportConfig] = useState(null);
@@ -1660,6 +1675,20 @@ const BOQManager = ({ boq, user, onBack }) => {
             updates.status = STATUS.INSTALL_APPROVAL;
         }
 
+        // Auto-mark uploaded stages as checked so stage dots turn green immediately
+        const checksField = isFactory ? 'factoryStageChecks' : 'siteStageChecks';
+        const stagesArray = Array.isArray(stages) ? stages : (stages ? [stages] : []);
+        if (stagesArray.length > 0) {
+            const currentChecks = freshSign[checksField] || {};
+            const updatedChecks = { ...currentChecks };
+            stagesArray.forEach(stage => {
+                if (!updatedChecks[stage]?.checked) {
+                    updatedChecks[stage] = { checked: true, by: user.username, at: new Date().toISOString() };
+                }
+            });
+            updates[checksField] = updatedChecks;
+        }
+
         await updateDoc(signRef, updates);
 
         // ── Background QC for factory photos that have artworks ──────────────
@@ -2264,8 +2293,8 @@ const BOQManager = ({ boq, user, onBack }) => {
                                 </th>
                             ))}
                             <th className="px-1.5 py-1.5 border-b border-slate-200">Artwork</th>
-                            <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Factory</th>
-                            <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Site</th>
+                            {(boq.factoryStages || []).length > 0 && <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Factory</th>}
+                            {(boq.siteStages || []).length > 0 && <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Site</th>}
                             {user.role === ROLES.ADMIN && <th className="px-1.5 py-1.5 border-b border-slate-200 text-center w-16">Actions</th>}
                         </tr>
                     </thead>
@@ -2611,7 +2640,8 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                 </div>
             </td>
 
-            {/* Factory Column */}
+            {/* Factory Column — only when factory stages are configured */}
+            {factoryStages.length > 0 && (
             <td className="px-1.5 py-1 align-middle">
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
@@ -2636,8 +2666,10 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                         onToggle={isFactory ? (stage) => onToggleStage(sign, stage, true) : null} />
                 </div>
             </td>
+            )}
 
-            {/* Site Column */}
+            {/* Site Column — only when site stages are configured */}
+            {siteStages.length > 0 && (
             <td className="px-1.5 py-1 align-middle">
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
@@ -2661,6 +2693,7 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                         onToggle={isSite ? (stage) => onToggleStage(sign, stage, false) : null} />
                 </div>
             </td>
+            )}
 
             {/* Actions Column */}
             {user.role === ROLES.ADMIN && (
@@ -2777,32 +2810,31 @@ const ImportMapper = ({ config, onClose, onConfirm }) => {
 
 const PrintView = ({ boq, signs, columns, onClose }) => {
     const [showColMenu, setShowColMenu] = useState(false);
-    const [selectedColIds, setSelectedColIds] = useState(new Set(['art', 'fact_all', 'site_all']));
+    const [selectedColIds, setSelectedColIds] = useState(() => {
+        const initial = new Set(['art']);
+        if ((boq.factoryStages || []).length > 0) initial.add('fact_all');
+        if ((boq.siteStages || []).length > 0) initial.add('site_all');
+        return initial;
+    });
 
-    // Construct available report options dynamically
+    // Construct available report options dynamically — factory/site only appear when stages are configured
     const reportOptions = useMemo(() => {
         const opts = [
             { id: 'art', label: 'Artwork', type: 'artwork', color: 'text-indigo-600' },
-            { id: 'fact_all', label: 'Factory (All)', type: 'factory', mode: 'all', color: 'text-orange-600' }
         ];
 
         if (boq.factoryStages && boq.factoryStages.length > 0) {
+            opts.push({ id: 'fact_all', label: 'Factory (All)', type: 'factory', mode: 'all', color: 'text-orange-600' });
             boq.factoryStages.forEach(s => {
                 opts.push({ id: `fact_${s}`, label: `Factory - ${s}`, type: 'factory', mode: 'stage', stage: s, color: 'text-orange-500' });
             });
-        } else {
-            // Default fallback if no custom stages defined
-            opts.push({ id: 'fact_gen', label: 'Factory - General', type: 'factory', mode: 'stage', stage: 'General Production', color: 'text-orange-500' });
         }
 
-        opts.push({ id: 'site_all', label: 'Site (All)', type: 'site', mode: 'all', color: 'text-green-600' });
-
         if (boq.siteStages && boq.siteStages.length > 0) {
+            opts.push({ id: 'site_all', label: 'Site (All)', type: 'site', mode: 'all', color: 'text-green-600' });
             boq.siteStages.forEach(s => {
                 opts.push({ id: `site_${s}`, label: `Site - ${s}`, type: 'site', mode: 'stage', stage: s, color: 'text-green-500' });
             });
-        } else {
-            opts.push({ id: 'site_inst', label: 'Site - Install', type: 'site', mode: 'stage', stage: 'Installation', color: 'text-green-500' });
         }
 
         return opts;
@@ -2828,23 +2860,102 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
         return source.filter(img => img.stages ? img.stages.includes(colConfig.stage) : img.stage === colConfig.stage);
     };
 
+    // ── Column resize ──────────────────────────────────────────────────────────
+    const tableRef = useRef(null);
+
+    const defaultWidths = () => {
+        const imgCount = activeReportCols.length || 1;
+        const w = { __details__: 28 };
+        activeReportCols.forEach(c => { w[c.id] = 72 / imgCount; });
+        return w;
+    };
+    const [colWidths, setColWidths] = useState(defaultWidths);
+
+    // Reset when the set of visible columns changes
+    useEffect(() => { setColWidths(defaultWidths()); }, [selectedColIds]);
+
+    const startResize = (e, colIdx) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const allIds = ['__details__', ...activeReportCols.map(c => c.id)];
+        const snapshot = { ...colWidths };
+        const tableWidth = tableRef.current?.offsetWidth || 800;
+
+        const onMove = (mv) => {
+            const delta = ((mv.clientX - startX) / tableWidth) * 100;
+            const aId = allIds[colIdx];
+            const bId = allIds[colIdx + 1];
+            if (!bId) return;
+            const newA = Math.max(5, snapshot[aId] + delta);
+            const newB = Math.max(5, snapshot[bId] - delta);
+            if (newA >= 5 && newB >= 5)
+                setColWidths(prev => ({ ...prev, [aId]: newA, [bId]: newB }));
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    // ── A4 page sizing ─────────────────────────────────────────────────────────
+    const [orientation, setOrientation] = useState('landscape');
+    const previewRef = useRef(null);
+    const [scale, setScale] = useState(1);
+
+    const CM = 37.795; // px per cm at 96 dpi
+    const PAGE_W_PX = (orientation === 'landscape' ? 29.7 : 21) * CM;
+    const PAGE_H_PX = (orientation === 'landscape' ? 21 : 29.7) * CM;
+
+    useEffect(() => {
+        const pageW = (orientation === 'landscape' ? 29.7 : 21) * CM;
+        const compute = () => {
+            if (!previewRef.current) return;
+            const avail = previewRef.current.offsetWidth - 48;
+            setScale(Math.min(1, avail / pageW));
+        };
+        compute();
+        const ro = new ResizeObserver(compute);
+        if (previewRef.current) ro.observe(previewRef.current);
+        return () => ro.disconnect();
+    }, [orientation]);
+
     return (
-        <div className="min-h-screen bg-white text-black p-4">
-            <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-2 px-6 flex justify-between items-center print:hidden shadow-lg z-50">
-                <div className="flex items-center gap-4">
-                    <button onClick={onClose} className="hover:bg-slate-700 p-2 rounded"><ChevronUp className="rotate-[-90deg]" /></button>
-                    <span className="font-bold">Report Preview (Landscape)</span>
+        <div className="min-h-screen flex flex-col bg-slate-600">
+            {/* ── Toolbar ── */}
+            <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white py-2 px-4 flex items-center justify-between print:hidden shadow-lg z-50 gap-3">
+                <div className="flex items-center gap-3">
+                    <button onClick={onClose} className="hover:bg-slate-700 p-1.5 rounded">
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span className="font-bold text-sm">Report Preview</span>
                 </div>
-                <div className="flex items-center gap-4 text-sm relative">
+                <div className="flex items-center gap-3 text-sm relative">
+                    {/* Orientation toggle */}
+                    <div className="flex bg-slate-700 rounded p-0.5 gap-0.5">
+                        {['portrait', 'landscape'].map(o => (
+                            <button
+                                key={o}
+                                onClick={() => setOrientation(o)}
+                                className={`px-2.5 py-1 rounded text-xs font-medium capitalize transition-colors ${
+                                    orientation === o ? 'bg-white text-slate-900' : 'text-slate-300 hover:text-white'
+                                }`}
+                            >
+                                {o}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Column selector */}
                     <button
                         onClick={() => setShowColMenu(!showColMenu)}
-                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded"
+                        className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded"
                     >
-                        <List size={16} /> Report Columns
+                        <List size={14} /> Columns
                     </button>
-
                     {showColMenu && (
-                        <div className="absolute top-full right-0 mt-2 bg-white text-slate-800 rounded-xl shadow-xl border w-64 p-2 max-h-[80vh] overflow-y-auto z-50">
+                        <div className="absolute top-full right-16 mt-2 bg-white text-slate-800 rounded-xl shadow-xl border w-64 p-2 max-h-[80vh] overflow-y-auto z-50">
                             <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 px-2">Select Image Columns</h4>
                             {reportOptions.map(opt => (
                                 <button
@@ -2852,7 +2963,9 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
                                     onClick={() => toggleCol(opt.id)}
                                     className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded flex items-center gap-2 text-sm"
                                 >
-                                    {selectedColIds.has(opt.id) ? <CheckSquare size={16} className="text-indigo-600" /> : <div className="w-4 h-4 border rounded border-slate-300"></div>}
+                                    {selectedColIds.has(opt.id)
+                                        ? <CheckSquare size={16} className="text-indigo-600" />
+                                        : <div className="w-4 h-4 border rounded border-slate-300" />}
                                     <span className={opt.color}>{opt.label}</span>
                                 </button>
                             ))}
@@ -2860,56 +2973,108 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
                     )}
 
                     <button onClick={() => window.print()} className="bg-white text-slate-900 px-4 py-1 rounded font-bold flex items-center gap-2">
-                        <Printer size={16} /> Print
+                        <Printer size={14} /> Print
                     </button>
                 </div>
             </div>
 
-            <div className="mt-12">
-                {renderReportTable()}
+            {/* ── A4 page preview ── */}
+            <div ref={previewRef} className="mt-12 flex-1 flex flex-col items-center py-8 px-6 print:hidden overflow-auto">
+                {/* Outer shell at scaled dimensions so the page takes up correct space in the flow */}
+                <div style={{ width: PAGE_W_PX * scale, minHeight: PAGE_H_PX * scale, position: 'relative', flexShrink: 0 }}>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: PAGE_W_PX,
+                            minHeight: PAGE_H_PX,
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left',
+                            padding: '1cm',
+                            boxSizing: 'border-box',
+                            backgroundColor: 'white',
+                            boxShadow: '0 4px 32px rgba(0,0,0,0.4)',
+                        }}
+                    >
+                        {renderReportTable(true)}
+                    </div>
+                </div>
             </div>
 
+            {/* ── Print portal ── */}
             {ReactDOM.createPortal(
                 <div className="print-only-portal">
-                    {renderReportTable()}
+                    {renderReportTable(false)}
                 </div>,
                 document.body
             )}
+
+            <style>{`
+                @media print {
+                    @page { size: A4 ${orientation}; margin: 1cm; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            `}</style>
         </div>
     );
 
-    function renderReportTable() {
+    function renderReportTable(forScreen = false) {
+        const allIds = ['__details__', ...activeReportCols.map(c => c.id)];
         return (
-            <div className="p-4 bg-white text-black text-xs">
-                <div className="mb-4 border-b pb-2 flex justify-between items-end">
+            <div className="text-xs text-black">
+                <div className="mb-3 border-b pb-2 flex justify-between items-end">
                     <h1 className="text-xl font-bold uppercase">{boq.name}</h1>
                     <p className="text-xs text-slate-500">Generated {new Date().toLocaleDateString()}</p>
                 </div>
 
-                <table className="w-full text-xs border-collapse border border-slate-300">
+                <table
+                    ref={forScreen ? tableRef : undefined}
+                    className="w-full text-xs border-collapse border border-slate-300 table-fixed"
+                >
+                    <colgroup>
+                        <col style={{ width: `${colWidths['__details__'] ?? 28}%` }} />
+                        {activeReportCols.map(col => (
+                            <col key={col.id} style={{ width: `${colWidths[col.id] ?? (72 / activeReportCols.length)}%` }} />
+                        ))}
+                    </colgroup>
                     <thead>
                         <tr className="bg-slate-100">
-                            <th className="border border-slate-300 p-1.5 text-left w-52">Sign Details</th>
-                            {activeReportCols.map(col => (
-                                <th key={col.id} className={`border border-slate-300 p-1.5 w-40 text-left uppercase ${col.color}`}>
-                                    {col.label}
-                                </th>
-                            ))}
+                            {allIds.map((id, idx) => {
+                                const col = activeReportCols.find(c => c.id === id);
+                                const isLast = idx === allIds.length - 1;
+                                return (
+                                    <th
+                                        key={id}
+                                        className={`border border-slate-300 p-1.5 text-left relative select-none ${col ? `uppercase ${col.color}` : ''}`}
+                                    >
+                                        {col ? col.label : 'Sign Details'}
+                                        {forScreen && !isLast && (
+                                            <span
+                                                onMouseDown={(e) => startResize(e, idx)}
+                                                className="print:hidden absolute top-0 right-0 h-full w-2 cursor-col-resize flex items-center justify-center group"
+                                                title="Drag to resize"
+                                            >
+                                                <span className="w-px h-4/5 bg-slate-300 group-hover:bg-indigo-400 group-active:bg-indigo-600 transition-colors rounded" />
+                                            </span>
+                                        )}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody>
                         {signs.map(sign => (
                             <tr key={sign._id} className="break-inside-avoid">
                                 <td className="border border-slate-300 p-1 align-top">
-                                    <div className="flex justify-between items-start">
+                                    <div className="flex items-start">
                                         <span className="font-bold text-sm leading-none">{sign[idCol?.key] || sign._id}</span>
-                                        <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-50 px-1 rounded border leading-none">{sign.status.split(' ')[0]}</span>
                                     </div>
                                     <div className="mt-0.5 leading-[1.1]">
                                         {textCols.map(c => (
-                                            <div key={c.key} className="grid grid-cols-[60px_1fr] gap-x-1 text-xs">
-                                                <span className="text-slate-500 font-medium truncate">{c.label}:</span>
-                                                <span className="font-semibold">{sign[c.key]}</span>
+                                            <div key={c.key} className="flex gap-x-1 text-xs">
+                                                <span className="text-slate-500 font-medium whitespace-nowrap flex-shrink-0">{c.label}:</span>
+                                                <span className="font-semibold break-words min-w-0">{sign[c.key]}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -2933,7 +3098,6 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
                     </tbody>
                 </table>
 
-                <style>{`@media print { @page { size: landscape; margin: 0.5cm; } body { -webkit-print-color-adjust: exact; } }`}</style>
             </div>
         );
     }
