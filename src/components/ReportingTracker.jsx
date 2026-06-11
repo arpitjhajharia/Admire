@@ -114,150 +114,6 @@ const arrayBufferToBase64 = (buffer) => {
     return window.btoa(binary);
 };
 
-// ── Gemini AI QC ─────────────────────────────────────────────────────────────
-
-const GEMINI_MODEL = 'gemini-3-flash-preview';
-
-// Key is stored in Firestore (never in the bundle) so it can be rotated without redeployment.
-// Path: artifacts/{appId}/public/data/app_config/ai_settings  →  field: geminiKey
-let _geminiKeyCache = null;
-const getGeminiKey = async () => {
-    if (_geminiKeyCache) return _geminiKeyCache;
-    try {
-        const snap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'app_config', 'ai_settings'));
-        if (snap.exists()) _geminiKeyCache = snap.data().geminiKey || null;
-    } catch { /* silently fail — QC will be skipped */ }
-    return _geminiKeyCache;
-};
-
-// Convert a stored image URL (data URI or external URL) to a Gemini inlineData part.
-// Returns null if the image cannot be loaded.
-const imageUrlToBase64Part = async (url) => {
-    if (!url) return null;
-    if (url.startsWith('data:')) {
-        const m = url.match(/^data:([^;]+);base64,(.+)$/);
-        if (!m) return null;
-        return { inlineData: { mimeType: m[1], data: m[2] } };
-    }
-    // External URL — attempt browser fetch (may fail on CORS-restricted hosts)
-    try {
-        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onerror = () => resolve(null);
-            reader.onloadend = () => {
-                const dataUrl = reader.result;
-                if (!dataUrl) { resolve(null); return; }
-                const parts = dataUrl.split(',');
-                if (parts.length < 2) { resolve(null); return; }
-                resolve({ inlineData: { mimeType: blob.type || 'image/jpeg', data: parts[1] } });
-            };
-            reader.readAsDataURL(blob);
-        });
-    } catch {
-        return null;
-    }
-};
-
-// Call Gemini Vision to compare a factory photo against all artwork images.
-// Returns { artworkIdx: number, pass: boolean, issues: string[] } or null on failure.
-const runGeminiQC = async (artworkImages, factoryPhotoDataUrl) => {
-    const apiKey = await getGeminiKey();
-    if (!apiKey || !artworkImages?.length || !factoryPhotoDataUrl) return null;
-    try {
-        const artCount = artworkImages.length;
-        const parts = [];
-
-        parts.push({
-            text:
-                `You are a strict quality-control inspector for a custom signage manufacturing company.\n\n` +
-                `You will be shown ${artCount} Master Artwork reference image(s) (labeled Artwork 1 to ${artCount}), ` +
-                `followed by one factory production photograph.\n\n` +
-                `Your task:\n` +
-                `1. Identify which Master Artwork the factory photo is intended to be. Output its 0-based index in "artworkIdx".\n` +
-                `2. Perform an EXACT match comparison between the factory photo and that artwork. The printed sign must replicate the artwork completely — no more, no less.\n` +
-                `3. FAIL (pass: false) if ANY of the following are true:\n` +
-                `   - The factory photo contains extra panels, sections, or content NOT present in the artwork\n` +
-                `   - The factory photo is missing any panel, section, or content shown in the artwork\n` +
-                `   - Overall sign layout or structure differs from the artwork\n` +
-                `   - Any multilingual text (Malayalam, Hindi, Arabic, English, etc.) is misspelled or missing\n` +
-                `   - Icons, logos, arrows, or graphic elements are wrong, missing, or misplaced\n` +
-                `   - Colors are significantly inaccurate\n` +
-                `   - The factory photo only partially matches the artwork (e.g. one matching section inside a larger sign)\n\n` +
-                `Respond ONLY with valid JSON (no markdown, no explanation):\n` +
-                `{ "artworkIdx": <integer>, "pass": <true|false>, "issues": ["issue 1", ...] }\n\n` +
-                `Set "pass": true and "issues": [] ONLY when the factory photo is an exact match of the entire artwork.`
-        });
-
-        for (let i = 0; i < artworkImages.length; i++) {
-            parts.push({ text: `Master Artwork ${i + 1}:` });
-            const part = await imageUrlToBase64Part(artworkImages[i].url);
-            if (part) parts.push(part);
-        }
-
-        parts.push({ text: 'Factory Production Photo (compare against the identified artwork):' });
-        const factPart = await imageUrlToBase64Part(factoryPhotoDataUrl);
-        if (factPart) parts.push(factPart);
-
-        const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts }],
-                    generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-                })
-            }
-        );
-
-        if (!resp.ok) {
-            const errBody = await resp.json().catch(() => ({}));
-            console.error('Gemini QC API error', resp.status, errBody);
-            return null;
-        }
-
-        const data = await resp.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-            console.warn('Gemini QC: empty/blocked response', JSON.stringify(data).slice(0, 500));
-            return null;
-        }
-
-        // Strip possible markdown code fences
-        const jsonText = text.replace(/^```json\n?|\n?```$/g, '').trim();
-        return JSON.parse(jsonText);
-    } catch (e) {
-        console.error('runGeminiQC error:', e);
-        return null;
-    }
-};
-
-// Derive the sign-level factory QC status from its factory photos array.
-const computeFactoryQcStatus = (factoryImages, artworkCount) => {
-    if (artworkCount === 0) return 'na';
-    if (!factoryImages || factoryImages.length === 0) return 'awaiting_photos';
-
-    // Rework beats everything — if any photo failed, flag it immediately
-    if (factoryImages.some(img => img.qcStatus === 'fail')) return 'rework_needed';
-
-    // Still waiting on in-flight QC calls
-    if (factoryImages.some(img => img.qcStatus === 'pending')) return 'processing';
-
-    // All results are in — check all-sides coverage
-    const coveredArtworks = new Set(
-        factoryImages
-            .filter(img => img.qcStatus === 'pass' && img.qcArtworkIdx != null)
-            .map(img => img.qcArtworkIdx)
-    );
-
-    if (coveredArtworks.size >= artworkCount) return 'ready_for_dispatch';
-
-    return 'awaiting_photos';
-};
-
 // --- Components ---
 
 const Loading = () => (
@@ -357,17 +213,6 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete, field, onUpdate
                         </span>
                     )}
                 </div>
-
-                {currentImg.qcStatus === 'fail' && currentImg.qcIssues?.length > 0 && (
-                    <div className="pointer-events-auto inline-block bg-red-900/80 border border-red-500 rounded-lg px-4 py-2 text-left max-w-md mx-auto">
-                        <p className="text-xs font-bold text-red-300 uppercase tracking-wide mb-1.5">
-                            QC Rework Required — Artwork {(currentImg.qcArtworkIdx ?? 0) + 1}
-                        </p>
-                        {currentImg.qcIssues.map((issue, i) => (
-                            <p key={i} className="text-xs text-red-200">• {issue}</p>
-                        ))}
-                    </div>
-                )}
 
                 {field === 'siteImages' && (
                     <div className="pointer-events-auto mt-3 flex items-start gap-2 justify-center">
@@ -1733,7 +1578,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             stages,
             uploadedBy: user.username,
             timestamp: new Date().toISOString(),
-            ...(isFactory ? { qcStatus: hasArtworks ? 'pending' : 'na', qcArtworkIdx: null, qcIssues: [] } : { remarks }),
+            ...(isFactory ? {} : { remarks }),
         };
 
         const currentImages = freshSign[field] || [];
@@ -1741,13 +1586,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         let updates = { [field]: newImagesList };
 
         if (isFactory) {
-            if (!hasArtworks) {
-                updates.status = STATUS.READY_DISPATCH;
-                updates.factoryQcStatus = 'na';
-            } else {
-                updates.status = STATUS.PROD_APPROVAL;
-                updates.factoryQcStatus = computeFactoryQcStatus(newImagesList, artImages.length);
-            }
+            updates.status = hasArtworks ? STATUS.PROD_APPROVAL : STATUS.READY_DISPATCH;
         } else {
             updates.status = STATUS.INSTALL_APPROVAL;
         }
@@ -1767,46 +1606,6 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         }
 
         await updateDoc(signRef, updates);
-
-        // ── Background QC for factory photos that have artworks ──────────────
-        if (isFactory && hasArtworks) {
-            const photoUrl = newImagesList[newImagesList.length - 1].url;
-            const newPhotoIdx = newImagesList.length - 1;
-
-            (async () => {
-                try {
-                    const result = await runGeminiQC(artImages, photoUrl);
-
-                    const currentDoc = await getDoc(signRef);
-                    if (!currentDoc.exists()) return;
-                    const latestImages = [...(currentDoc.data()[field] || [])];
-
-                    if (latestImages[newPhotoIdx]) {
-                        if (!result) {
-                            latestImages[newPhotoIdx] = {
-                                ...latestImages[newPhotoIdx],
-                                qcStatus: 'error',
-                                qcIssues: ['Automated QC could not complete. Please review manually.'],
-                                qcCheckedAt: new Date().toISOString()
-                            };
-                        } else {
-                            latestImages[newPhotoIdx] = {
-                                ...latestImages[newPhotoIdx],
-                                qcStatus: result.pass ? 'pass' : 'fail',
-                                qcArtworkIdx: result.artworkIdx ?? 0,
-                                qcIssues: result.issues || [],
-                                qcCheckedAt: new Date().toISOString()
-                            };
-                        }
-                    }
-
-                    const newQcStatus = computeFactoryQcStatus(latestImages, artImages.length);
-                    await updateDoc(signRef, { [field]: latestImages, factoryQcStatus: newQcStatus });
-                } catch (e) {
-                    console.error('Background QC failed:', e);
-                }
-            })();
-        }
     };
 
 
@@ -2518,7 +2317,6 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             <th className="px-2 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 w-24" onClick={() => setSortConfig({ key: 'status', direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}>
                                 <div className="flex items-center gap-1">Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</div>
                             </th>
-                            <th className="px-2 py-2 border-b border-slate-200 w-24">QC</th>
                             {activeColumns.map(col => (
                                 <th
                                     key={col.key}
@@ -2608,37 +2406,6 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 };
 
 // ── QC UI helpers ─────────────────────────────────────────────────────────────
-
-// Small coloured dot overlaid on a factory photo thumbnail indicating its QC result
-const QcDot = ({ qcStatus }) => {
-    const colours = {
-        pending: 'bg-slate-400 animate-pulse',
-        pass:    'bg-green-500',
-        fail:    'bg-red-500',
-        error:   'bg-orange-400',
-    };
-    const cls = colours[qcStatus];
-    if (!cls) return null;
-    return (
-        <span className={`absolute top-0 right-0 w-2 h-2 rounded-full border border-white shadow-sm ${cls}`} />
-    );
-};
-
-// Sign-level QC status pill shown next to the sign status badge
-const QCBadge = ({ factoryQcStatus }) => {
-    if (!factoryQcStatus || factoryQcStatus === 'na') return null;
-    const cfg = {
-        processing:          { label: 'QC…',           cls: 'bg-slate-100 text-slate-500 animate-pulse' },
-        awaiting_photos:     { label: '🟡 Awaiting',   cls: 'bg-yellow-100 text-yellow-700' },
-        rework_needed:       { label: '🔴 Rework',     cls: 'bg-red-100 text-red-700' },
-        ready_for_dispatch:  { label: '🟢 QC ✓',      cls: 'bg-green-100 text-green-700' },
-    };
-    const c = cfg[factoryQcStatus];
-    if (!c) return null;
-    return (
-        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${c.cls}`}>{c.label}</span>
-    );
-};
 
 // ── Stage checklist chips ─────────────────────────────────────────────────────
 // Abbreviate a stage label to 2–3 chars for the dense desktop table.
@@ -2773,12 +2540,11 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                         {sign[col.key]}
                     </span>
                 ))}
-                {/* Status + QC */}
+                {/* Status */}
                 <div className="flex flex-col items-end gap-0.5 min-w-0">
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide text-right break-words leading-tight ${statusColor(sign.status)}`}>
                         {sign.status}
                     </span>
-                    <QCBadge factoryQcStatus={sign.factoryQcStatus} />
                 </div>
                 {/* Actions */}
                 {user.role === ROLES.ADMIN && (
@@ -2830,7 +2596,6 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                                 <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in">
                                     <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
-                                    <QcDot qcStatus={img.qcStatus} />
                                 </div>
                             )) : <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Package size={12} /></div>}
                             {isFactory && (
@@ -2916,22 +2681,6 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                 </div>
             )}
 
-            {/* QC failure feedback — visible to all roles so factory workers see what to fix */}
-            {sign.factoryQcStatus === 'rework_needed' && (
-                <div className="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-[9px] font-bold text-red-700 uppercase tracking-wide mb-1">QC Issues Found:</p>
-                    {factImages.filter(img => img.qcStatus === 'fail').map((img, i) => (
-                        <div key={i} className="mb-1 last:mb-0">
-                            <p className="text-[9px] font-semibold text-red-600">
-                                {img.stages?.join(', ') || img.stage} → Artwork {(img.qcArtworkIdx ?? 0) + 1}
-                            </p>
-                            {(img.qcIssues || []).map((issue, j) => (
-                                <p key={j} className="text-[9px] text-red-500 pl-2">• {issue}</p>
-                            ))}
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 };
@@ -2969,9 +2718,6 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                     {sign.status}
                 </span>
             </td>
-            <td className="px-2 py-1.5 align-middle">
-                <QCBadge factoryQcStatus={sign.factoryQcStatus} />
-            </td>
             {columns.filter(c => c.visible).map(col => (
                 <td key={col.key}
                     style={{ width: colWidths[col.key], maxWidth: colWidths[col.key] }}
@@ -3003,7 +2749,6 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                             <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
                                 className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition">
                                 <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
-                                <QcDot qcStatus={img.qcStatus} />
                             </div>
                         )) : <div className="w-7 h-7 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Package size={12} /></div>}
                     </div>
