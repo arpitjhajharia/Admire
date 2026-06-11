@@ -269,15 +269,28 @@ const Loading = () => (
     </div>
 );
 
-const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
+const Lightbox = ({ images, initialIndex = 0, onClose, onDelete, field, onUpdateRemark }) => {
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
+    const [remarkDraft, setRemarkDraft] = useState('');
+    const [remarkSaving, setRemarkSaving] = useState(false);
 
     const next = (e) => { e.stopPropagation(); setCurrentIndex((prev) => (prev + 1) % images.length); };
     const prev = (e) => { e.stopPropagation(); setCurrentIndex((prev) => (prev - 1 + images.length) % images.length); };
 
+    useEffect(() => {
+        setRemarkDraft(images[currentIndex]?.remarks || '');
+    }, [currentIndex, images]);
+
     if (!images || images.length === 0) return null;
 
     const currentImg = images[currentIndex];
+
+    const saveRemark = async () => {
+        if (!onUpdateRemark) return;
+        setRemarkSaving(true);
+        await onUpdateRemark(currentIndex, remarkDraft);
+        setRemarkSaving(false);
+    };
 
     const handleDelete = (e) => {
         e.stopPropagation();
@@ -355,6 +368,21 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete }) => {
                         ))}
                     </div>
                 )}
+
+                {field === 'siteImages' && (
+                    <div className="pointer-events-auto mt-3 flex items-start gap-2 justify-center">
+                        <textarea
+                            rows={3}
+                            className="text-xs bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white placeholder:text-white/40 w-72 focus:outline-none focus:border-white/40 resize-none"
+                            placeholder="Add remarks (optional)..."
+                            value={remarkDraft}
+                            onChange={e => setRemarkDraft(e.target.value)}
+                            onBlur={saveRemark}
+                            onClick={e => e.stopPropagation()}
+                        />
+                        {remarkSaving && <span className="text-xs text-white/50 mt-1">Saving...</span>}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -378,6 +406,7 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
             file,
             stages: defaultSt ? [defaultSt] : [],
             preview: URL.createObjectURL(file),
+            remarks: '',
         }));
         setItems(prev => [...prev, ...newItems]);
     };
@@ -388,11 +417,12 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
         const next = i.stages.includes(stage) ? i.stages.filter(s => s !== stage) : [...i.stages, stage];
         return { ...i, stages: next };
     }));
+    const updateItemRemark = (id, value) => setItems(prev => prev.map(i => i.id !== id ? i : { ...i, remarks: value }));
 
     const handleSubmit = async () => {
         if (items.length === 0) return;
         setUploading(true);
-        await onUpload(items.map(i => ({ file: i.file, stages: i.stages })));
+        await onUpload(items.map(i => ({ file: i.file, stages: i.stages, remarks: i.remarks })));
         setUploading(false);
         onClose();
     };
@@ -444,6 +474,15 @@ const UploadModal = ({ isOpen, onClose, onUpload, type, stages, defaultStage }) 
                                         ))}
                                         {item.stages.length === 0 && <span className="text-[11px] text-amber-500 italic">Select at least one stage</span>}
                                     </div>
+                                )}
+                                {type === 'Site' && (
+                                    <textarea
+                                        rows={2}
+                                        placeholder="Remarks (optional)"
+                                        value={item.remarks}
+                                        onChange={e => updateItemRemark(item.id, e.target.value)}
+                                        className="mt-1.5 w-full text-xs border border-slate-200 rounded px-2 py-1 text-slate-600 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 resize-none"
+                                    />
                                 )}
                             </div>
                         ))}
@@ -1045,6 +1084,8 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     const [importConfig, setImportConfig] = useState(null);
     const [selectedSigns, setSelectedSigns] = useState(new Set());
     const [filters, setFilters] = useState({});
+    const [dateFilters, setDateFilters] = useState({ siteFrom: '', siteTo: '', factoryFrom: '', factoryTo: '' });
+    const [dateFilterOpen, setDateFilterOpen] = useState(null); // 'site' | 'factory' | null
     const [sortConfig, setSortConfig] = useState(null);
     const [loadingImport, setLoadingImport] = useState(false);
     const [columns, setColumns] = useState([]);
@@ -1072,6 +1113,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     // Active filter dropdown key for column multi-select filters
     const [activeFilterKey, setActiveFilterKey] = useState(null);
     const [filterDropdownLeft, setFilterDropdownLeft] = useState(0);
+    const [dateFilterLeft, setDateFilterLeft] = useState(0);
 
     const openFilterDropdown = (key, e) => {
         if (activeFilterKey === key) { setActiveFilterKey(null); return; }
@@ -1080,19 +1122,30 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         setFilterDropdownLeft(rect.left - (containerRect?.left || 0));
         setActiveFilterKey(key);
         setShowIdDropdown(false);
+        setDateFilterOpen(null);
+    };
+
+    const openDateFilter = (type, e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const containerRect = idDropdownRef.current?.getBoundingClientRect();
+        setDateFilterLeft(rect.left - (containerRect?.left || 0));
+        setDateFilterOpen(prev => prev === type ? null : type);
+        setActiveFilterKey(null);
+        setShowIdDropdown(false);
     };
 
     useEffect(() => {
-        if (!showIdDropdown && !activeFilterKey) return;
+        if (!showIdDropdown && !activeFilterKey && !dateFilterOpen) return;
         const handler = (e) => {
             if (idDropdownRef.current && !idDropdownRef.current.contains(e.target)) {
                 setShowIdDropdown(false);
                 setActiveFilterKey(null);
+                setDateFilterOpen(null);
             }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showIdDropdown, activeFilterKey]);
+    }, [showIdDropdown, activeFilterKey, dateFilterOpen]);
 
     // Tab state
     const [activeTab, setActiveTab] = useState('items');
@@ -1597,6 +1650,30 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         }
     };
 
+    const handleUpdateRemark = async (signId, field, imageIndex, newRemark) => {
+        try {
+            const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
+            const signDoc = await getDoc(signRef);
+            if (signDoc.exists()) {
+                const images = [...(signDoc.data()[field] || [])];
+                if (images[imageIndex]) {
+                    images[imageIndex] = { ...images[imageIndex], remarks: newRemark };
+                    await updateDoc(signRef, { [field]: images });
+                    setLightboxImages(prev => {
+                        if (!prev) return prev;
+                        const updatedImages = [...prev.images];
+                        if (updatedImages[imageIndex]) {
+                            updatedImages[imageIndex] = { ...updatedImages[imageIndex], remarks: newRemark };
+                        }
+                        return { ...prev, images: updatedImages };
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Error updating remark", e);
+        }
+    };
+
     const handleToggleStage = async (sign, stage, isFactory) => {
         const checksField = isFactory ? 'factoryStageChecks' : 'siteStageChecks';
         const current = sign[checksField] || {};
@@ -1630,13 +1707,13 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         if (isFactory) setLastFactoryStage(lastStage);
         else setLastSiteStage(lastStage);
 
-        for (const { file, stages } of uploads) {
+        for (const { file, stages, remarks } of uploads) {
             const finalStages = stages?.length ? stages : [isFactory ? 'General Production' : 'Installation'];
-            await executeUpload(sign, file, finalStages, isFactory);
+            await executeUpload(sign, file, finalStages, isFactory, remarks || '');
         }
     };
 
-    const executeUpload = async (sign, file, stages, isFactory) => {
+    const executeUpload = async (sign, file, stages, isFactory, remarks = '') => {
         if (!file) return;
         const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id);
         const field = isFactory ? 'factoryImages' : 'siteImages';
@@ -1656,7 +1733,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             stages,
             uploadedBy: user.username,
             timestamp: new Date().toISOString(),
-            ...(isFactory ? { qcStatus: hasArtworks ? 'pending' : 'na', qcArtworkIdx: null, qcIssues: [] } : {})
+            ...(isFactory ? { qcStatus: hasArtworks ? 'pending' : 'na', qcArtworkIdx: null, qcIssues: [] } : { remarks }),
         };
 
         const currentImages = freshSign[field] || [];
@@ -1752,20 +1829,52 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 data = data.filter(s => vals.has(s[key]));
             }
         });
+
+        // Date range filters for image timestamps
+        const { siteFrom, siteTo, factoryFrom, factoryTo } = dateFilters;
+        if (siteFrom || siteTo) {
+            const from = siteFrom ? new Date(siteFrom).getTime() : 0;
+            const to = siteTo ? new Date(siteTo + 'T23:59:59').getTime() : Infinity;
+            data = data.filter(s => (s.siteImages || []).some(img => {
+                const t = img.timestamp ? new Date(img.timestamp).getTime() : 0;
+                return t >= from && t <= to;
+            }));
+        }
+        if (factoryFrom || factoryTo) {
+            const from = factoryFrom ? new Date(factoryFrom).getTime() : 0;
+            const to = factoryTo ? new Date(factoryTo + 'T23:59:59').getTime() : Infinity;
+            data = data.filter(s => (s.factoryImages || []).some(img => {
+                const t = img.timestamp ? new Date(img.timestamp).getTime() : 0;
+                return t >= from && t <= to;
+            }));
+        }
         if (idFilter.size > 0) {
             const idKey = columns.find(c => c.isId)?.key;
             if (idKey) data = data.filter(s => idFilter.has(String(s[idKey])));
         }
 
         if (sortConfig) {
+            const getVal = (sign, key) => {
+                if (key === '_siteImageDate') {
+                    const imgs = sign.siteImages || [];
+                    return imgs.length ? imgs.reduce((latest, img) => img.timestamp > latest ? img.timestamp : latest, '') : '';
+                }
+                if (key === '_factoryImageDate') {
+                    const imgs = sign.factoryImages || [];
+                    return imgs.length ? imgs.reduce((latest, img) => img.timestamp > latest ? img.timestamp : latest, '') : '';
+                }
+                return sign[key] ?? '';
+            };
             data.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+                const av = getVal(a, sortConfig.key);
+                const bv = getVal(b, sortConfig.key);
+                if (av < bv) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (av > bv) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
         return data;
-    }, [signs, filters, idFilter, sortConfig, columns]);
+    }, [signs, filters, dateFilters, idFilter, sortConfig, columns]);
 
     const uniqueValues = useMemo(() => {
         const map = {};
@@ -1790,6 +1899,39 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     // Render columns based on visibility settings (but always include ID)
     const activeColumns = columns.filter(c => (c.isId || visibleColumnKeys.has(c.key)) && c.visible);
 
+    // Optimised per-column widths: size each data column to fit its uploaded data on one line,
+    // while letting multi-word headers wrap. Columns with short data (e.g. "2.0 DIA") stay narrow
+    // even when the header label is long ("PIER SIZE IN METER"), freeing space for other columns.
+    const colWidths = useMemo(() => {
+        const sample = filteredSigns.length > 400 ? filteredSigns.slice(0, 400) : filteredSigns;
+        const map = {};
+        activeColumns.forEach(col => {
+            let dataChars = 0;
+            for (const s of sample) {
+                const v = s[col.key];
+                if (v != null && v !== '') dataChars = Math.max(dataChars, String(v).length);
+            }
+            // Header wraps at spaces, so only its longest word constrains the width.
+            const headerWord = String(col.label).split(/\s+/).reduce((m, w) => Math.max(m, w.length), 0);
+            const chars = Math.max(dataChars, headerWord, 3);
+            // ~7.5px/char + cell padding, clamped so nothing is too cramped or too greedy.
+            map[col.key] = Math.round(Math.min(Math.max(chars * 7.5 + 22, 56), 170));
+        });
+        return map;
+    }, [filteredSigns, activeColumns]);
+
+    // Shared column template for the mobile "table-like" view: a single fixed header row up top,
+    // and every card aligns its values under the same columns. Images/stages span full width.
+    const mobileIdCol = activeColumns.find(c => c.isId);
+    const mobileBodyCols = activeColumns.filter(c => !c.isId && c.visible).slice(0, 6);
+    const mobileGridTemplate = [
+        user.role === ROLES.ADMIN && '1rem',                  // selection checkbox
+        mobileIdCol && 'minmax(40px,1.1fr)',                  // ID
+        ...mobileBodyCols.map(() => 'minmax(36px,1fr)'),      // data columns
+        'minmax(48px,0.9fr)',                                 // status
+        user.role === ROLES.ADMIN && '2.5rem',               // actions
+    ].filter(Boolean).join(' ');
+
     if (viewMode === 'print') {
         return (
             <PrintView
@@ -1808,9 +1950,15 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     images={lightboxImages.images}
                     initialIndex={lightboxImages.index}
                     onClose={() => setLightboxImages(null)}
+                    field={lightboxImages.field}
                     onDelete={
                         canDeleteImage(lightboxImages.field)
                             ? (idx) => handleDeleteImage(lightboxImages.signId, lightboxImages.field, idx)
+                            : null
+                    }
+                    onUpdateRemark={
+                        lightboxImages.field === 'siteImages'
+                            ? (idx, remark) => handleUpdateRemark(lightboxImages.signId, lightboxImages.field, idx, remark)
                             : null
                     }
                 />
@@ -1842,7 +1990,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             />
 
             {/* ── Header ── */}
-            <header className="bg-white border-b px-3 py-2 flex items-center justify-between shadow-sm z-20 gap-2">
+            <header className="relative bg-white border-b px-3 py-2 flex items-center justify-between shadow-sm z-30 gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                     <button onClick={onBack} className="p-2 hover:bg-slate-100 active:bg-slate-200 rounded-full text-slate-500 flex-shrink-0">
                         <ChevronUp className="rotate-[-90deg]" size={18} />
@@ -1949,7 +2097,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 };
                 return (
                 <div className="bg-white border-b relative" ref={idDropdownRef}>
-                <div className="flex items-center gap-2 px-3 py-1.5 overflow-x-auto scrollbar-hide">
+                <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
                     {/* Status pill */}
                     <button
                         onClick={(e) => openFilterDropdown('status', e)}
@@ -2005,6 +2153,44 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                         </button>
                     )}
 
+                    {/* Site date filter pill */}
+                    {boq.siteStages?.length > 0 && (
+                        <button
+                            onClick={(e) => openDateFilter('site', e)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                                (dateFilters.siteFrom || dateFilters.siteTo) ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                        >
+                            <Clock size={11} className="flex-shrink-0" />
+                            <span className="opacity-70">Site Date:</span>
+                            <span className="font-semibold">
+                                {(dateFilters.siteFrom || dateFilters.siteTo)
+                                    ? `${dateFilters.siteFrom || '…'} → ${dateFilters.siteTo || '…'}`
+                                    : 'All'}
+                            </span>
+                            <ChevronDown size={11} />
+                        </button>
+                    )}
+
+                    {/* Factory date filter pill */}
+                    {boq.factoryStages?.length > 0 && (
+                        <button
+                            onClick={(e) => openDateFilter('factory', e)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-full border text-xs font-medium whitespace-nowrap transition ${
+                                (dateFilters.factoryFrom || dateFilters.factoryTo) ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                        >
+                            <Clock size={11} className="flex-shrink-0" />
+                            <span className="opacity-70">Factory Date:</span>
+                            <span className="font-semibold">
+                                {(dateFilters.factoryFrom || dateFilters.factoryTo)
+                                    ? `${dateFilters.factoryFrom || '…'} → ${dateFilters.factoryTo || '…'}`
+                                    : 'All'}
+                            </span>
+                            <ChevronDown size={11} />
+                        </button>
+                    )}
+
                     {/* Dynamic filter pills — exclude ID column to avoid duplication */}
                     {columns.filter(c => c.isFilter && !c.isId).map(col => (
                         <button
@@ -2021,9 +2207,9 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     ))}
 
                     {/* Clear button */}
-                    {(Object.keys(filters).some(k => (filters[k]?.size || 0) > 0) || idFilter.size > 0) && (
+                    {(Object.keys(filters).some(k => (filters[k]?.size || 0) > 0) || idFilter.size > 0 || dateFilters.siteFrom || dateFilters.siteTo || dateFilters.factoryFrom || dateFilters.factoryTo) && (
                         <button
-                            onClick={() => { setFilters({}); setIdFilter(new Set()); setIdSearch(''); setActiveFilterKey(null); }}
+                            onClick={() => { setFilters({}); setIdFilter(new Set()); setIdSearch(''); setActiveFilterKey(null); setDateFilters({ siteFrom: '', siteTo: '', factoryFrom: '', factoryTo: '' }); setDateFilterOpen(null); }}
                             className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-600 text-xs font-semibold active:bg-red-100"
                         >
                             <X size={11} /> Clear
@@ -2143,6 +2329,42 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     );
                 })()}
 
+                {/* ── Date filter panels — rendered outside overflow-x-auto ── */}
+                {dateFilterOpen === 'site' && (
+                    <div className="absolute top-full mt-0 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-3" style={{ left: dateFilterLeft }}>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Site Photo Date Range</p>
+                        <label className="block text-xs text-slate-600 mb-1">From</label>
+                        <input type="date" value={dateFilters.siteFrom}
+                            onChange={e => setDateFilters(p => ({ ...p, siteFrom: e.target.value }))}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2 focus:outline-none focus:border-green-400" />
+                        <label className="block text-xs text-slate-600 mb-1">To</label>
+                        <input type="date" value={dateFilters.siteTo}
+                            onChange={e => setDateFilters(p => ({ ...p, siteTo: e.target.value }))}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2 focus:outline-none focus:border-green-400" />
+                        {(dateFilters.siteFrom || dateFilters.siteTo) && (
+                            <button onClick={() => setDateFilters(p => ({ ...p, siteFrom: '', siteTo: '' }))}
+                                className="w-full text-xs text-red-500 hover:text-red-700 py-1 text-center">Clear dates</button>
+                        )}
+                    </div>
+                )}
+                {dateFilterOpen === 'factory' && (
+                    <div className="absolute top-full mt-0 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-3" style={{ left: dateFilterLeft }}>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Factory Photo Date Range</p>
+                        <label className="block text-xs text-slate-600 mb-1">From</label>
+                        <input type="date" value={dateFilters.factoryFrom}
+                            onChange={e => setDateFilters(p => ({ ...p, factoryFrom: e.target.value }))}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2 focus:outline-none focus:border-orange-400" />
+                        <label className="block text-xs text-slate-600 mb-1">To</label>
+                        <input type="date" value={dateFilters.factoryTo}
+                            onChange={e => setDateFilters(p => ({ ...p, factoryTo: e.target.value }))}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2 focus:outline-none focus:border-orange-400" />
+                        {(dateFilters.factoryFrom || dateFilters.factoryTo) && (
+                            <button onClick={() => setDateFilters(p => ({ ...p, factoryFrom: '', factoryTo: '' }))}
+                                className="w-full text-xs text-red-500 hover:text-red-700 py-1 text-center">Clear dates</button>
+                        )}
+                    </div>
+                )}
+
                 {/* ── Mobile-only sort bar ── */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-1.5 border-t border-slate-100 pt-1.5">
                     <ArrowUpDown size={11} className="text-slate-400 flex-shrink-0" />
@@ -2162,6 +2384,8 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             {activeColumns.map(col => (
                                 <option key={col.key} value={col.key}>{col.label}</option>
                             ))}
+                            {(boq.factoryStages || []).length > 0 && <option value="_factoryImageDate">Factory Photo Date</option>}
+                            {(boq.siteStages || []).length > 0 && <option value="_siteImageDate">Site Photo Date</option>}
                         </select>
                     </div>
 
@@ -2189,7 +2413,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             })()} {/* close IIFE */}
 
             {activeTab === 'items' && selectedSigns.size > 0 && user.role === ROLES.ADMIN && (
-                <div className="bg-indigo-50 px-6 py-1.5 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-indigo-100 gap-2">
+                <div className="bg-indigo-50 px-3 py-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-indigo-100 gap-2">
                     <span className="text-sm text-indigo-800 font-medium">{selectedSigns.size} selected</span>
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -2221,6 +2445,20 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 
             {activeTab === 'items' && <div className="flex-1 overflow-auto relative bg-white">
 
+                {/* ── Mobile fixed column header (< md) ── */}
+                <div className="md:hidden sticky top-0 z-20 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+                    <div className="grid gap-x-2 px-3 py-1.5 items-end text-[8px] font-bold text-slate-400 uppercase tracking-wide"
+                        style={{ gridTemplateColumns: mobileGridTemplate }}>
+                        {user.role === ROLES.ADMIN && <div />}
+                        {mobileIdCol && <div className="break-words leading-tight">{mobileIdCol.label}</div>}
+                        {mobileBodyCols.map(c => (
+                            <div key={c.key} className="break-words leading-tight">{c.label}</div>
+                        ))}
+                        <div className="text-right">Status</div>
+                        {user.role === ROLES.ADMIN && <div />}
+                    </div>
+                </div>
+
                 {/* ── Mobile card list (< md) ── */}
                 <div className="md:hidden divide-y divide-slate-100">
                     {filteredSigns.map(sign => (
@@ -2228,6 +2466,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             key={sign._id}
                             sign={sign}
                             columns={activeColumns}
+                            gridTemplate={mobileGridTemplate}
                             user={user}
                             selected={selectedSigns.has(sign._id)}
                             onSelect={(id) => {
@@ -2262,9 +2501,9 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 
                 {/* ── Desktop table (≥ md) ── */}
                 <table className="hidden md:table w-full text-left border-collapse">
-                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-slate-500 uppercase tracking-[0.08em] whitespace-nowrap">
+                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-slate-500 uppercase tracking-[0.08em] align-bottom">
                         <tr>
-                            <th className="px-1.5 py-1.5 w-8 text-center border-b border-slate-200">
+                            <th className="px-2 py-2 w-8 text-center border-b border-slate-200">
                                 {user.role === ROLES.ADMIN && (
                                     <input
                                         type="checkbox"
@@ -2276,26 +2515,45 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                     />
                                 )}
                             </th>
-                            <th className="px-1.5 py-1.5 border-b border-slate-200 cursor-pointer hover:bg-slate-100 w-24" onClick={() => setSortConfig({ key: 'status', direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}>
+                            <th className="px-2 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 w-24" onClick={() => setSortConfig({ key: 'status', direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}>
                                 <div className="flex items-center gap-1">Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</div>
                             </th>
-                            <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">QC</th>
+                            <th className="px-2 py-2 border-b border-slate-200 w-24">QC</th>
                             {activeColumns.map(col => (
                                 <th
                                     key={col.key}
-                                    className="px-1.5 py-1.5 border-b border-slate-200 cursor-pointer hover:bg-slate-100"
+                                    style={{ width: colWidths[col.key] }}
+                                    className="px-2 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 whitespace-normal break-words leading-tight"
                                     onClick={() => setSortConfig({ key: col.key, direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}
                                 >
-                                    <div className="flex items-center gap-1">
-                                        {col.label}
-                                        {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                                    <div className="flex items-start gap-1">
+                                        <span>{col.label}</span>
+                                        {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ChevronUp size={12} className="flex-shrink-0 mt-0.5" /> : <ChevronDown size={12} className="flex-shrink-0 mt-0.5" />)}
                                     </div>
                                 </th>
                             ))}
-                            <th className="px-1.5 py-1.5 border-b border-slate-200">Artwork</th>
-                            {(boq.factoryStages || []).length > 0 && <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Factory</th>}
-                            {(boq.siteStages || []).length > 0 && <th className="px-1.5 py-1.5 border-b border-slate-200 w-24">Site</th>}
-                            {user.role === ROLES.ADMIN && <th className="px-1.5 py-1.5 border-b border-slate-200 text-center w-16">Actions</th>}
+                            <th className="px-2 py-2 border-b border-slate-200">Artwork</th>
+                            {(boq.factoryStages || []).length > 0 && (
+                                <th className="px-2 py-2 border-b border-slate-200 w-24 cursor-pointer hover:bg-slate-100 select-none"
+                                    onClick={() => setSortConfig({ key: '_factoryImageDate', direction: sortConfig?.key === '_factoryImageDate' && sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                                    title="Sort by latest factory photo date">
+                                    <div className="flex items-center gap-1">
+                                        Factory
+                                        {sortConfig?.key === '_factoryImageDate' ? (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={10} className="text-slate-300" />}
+                                    </div>
+                                </th>
+                            )}
+                            {(boq.siteStages || []).length > 0 && (
+                                <th className="px-2 py-2 border-b border-slate-200 w-24 cursor-pointer hover:bg-slate-100 select-none"
+                                    onClick={() => setSortConfig({ key: '_siteImageDate', direction: sortConfig?.key === '_siteImageDate' && sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                                    title="Sort by latest site photo date">
+                                    <div className="flex items-center gap-1">
+                                        Site
+                                        {sortConfig?.key === '_siteImageDate' ? (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={10} className="text-slate-300" />}
+                                    </div>
+                                </th>
+                            )}
+                            {user.role === ROLES.ADMIN && <th className="px-2 py-2 border-b border-slate-200 text-center w-16">Actions</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100/50">
@@ -2304,6 +2562,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                 key={sign._id}
                                 sign={sign}
                                 columns={activeColumns}
+                                colWidths={colWidths}
                                 user={user}
                                 selected={selectedSigns.has(sign._id)}
                                 onSelect={(id) => {
@@ -2381,10 +2640,64 @@ const QCBadge = ({ factoryQcStatus }) => {
     );
 };
 
-// ── Mobile card component ─────────────────────────────────────────────────────
-// Compact named stage chips — dot + truncated label, single tap toggles done/pending.
-const StageDots = ({ stages, checks, onToggle, isFactory }) => {
+// ── Stage checklist chips ─────────────────────────────────────────────────────
+// Abbreviate a stage label to 2–3 chars for the dense desktop table.
+// Multi-word → initials ("Double Nut" → "DN"); single word → first two letters ("Board" → "Bo").
+const abbrevStage = (s) => {
+    const words = String(s).trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '?';
+    if (words.length > 1) return words.map(w => w[0]).join('').slice(0, 3).toUpperCase();
+    const w = words[0];
+    return (w[0].toUpperCase() + (w[1] || '')).slice(0, 2);
+};
+
+// Latest image timestamp (ISO string) from an images array, or '' if none.
+const latestImageTs = (imgs) =>
+    (imgs && imgs.length)
+        ? imgs.reduce((latest, img) => (img.timestamp && img.timestamp > latest ? img.timestamp : latest), '')
+        : '';
+
+// Compact "6 Jun" date for the dense table (full date-time available on hover via title).
+const fmtShortDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+};
+
+// Stage checklist chips. `compact` renders a single line of tiny abbreviated chips plus a
+// done/total count — used in the dense desktop table where each row must stay short.
+// Otherwise it renders the roomier full-label chips that wrap (used on mobile cards).
+const StageDots = ({ stages, checks, onToggle, isFactory, compact = false }) => {
     if (!stages || stages.length === 0) return null;
+    const doneCount = stages.filter(st => checks?.[st]?.checked).length;
+
+    if (compact) {
+        return (
+            <div className="flex items-center gap-0.5 flex-nowrap">
+                {stages.map(stage => {
+                    const info = checks?.[stage];
+                    const done = info?.checked;
+                    return (
+                        <button
+                            key={stage}
+                            onClick={onToggle ? (e) => { e.stopPropagation(); onToggle(stage); } : undefined}
+                            title={done ? `✓ ${stage}${info.by ? ` — by ${info.by}` : ''}` : `${stage} — tap to mark done`}
+                            className={`px-1 py-0.5 rounded text-[9px] font-bold leading-none tracking-tight transition-all select-none ${
+                                done
+                                    ? isFactory ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                                    : 'bg-slate-100 text-slate-400'
+                            } ${onToggle ? 'cursor-pointer hover:ring-1 hover:ring-slate-300 active:scale-95' : 'cursor-default'}`}
+                        >
+                            {abbrevStage(stage)}
+                        </button>
+                    );
+                })}
+                <span className="ml-0.5 text-[9px] font-semibold text-slate-400 tabular-nums whitespace-nowrap">{doneCount}/{stages.length}</span>
+            </div>
+        );
+    }
+
     return (
         <div className="flex gap-1 flex-wrap mt-0.5">
             {stages.map(stage => {
@@ -2415,13 +2728,17 @@ const StageDots = ({ stages, checks, onToggle, isFactory }) => {
     );
 };
 
-const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
     const artImages = sign.artworkImages || (sign.artworkImage ? [{ url: sign.artworkImage }] : []);
     const factImages = sign.factoryImages || [];
     const siteImages = sign.siteImages || [];
+
+    // Latest photo timestamps (mirrors the desktop table)
+    const factoryTs = latestImageTs(factImages);
+    const siteTs = latestImageTs(siteImages);
 
     const statusColor = (s) => {
         if (s.includes('Ready')) return 'bg-blue-100 text-blue-700';
@@ -2435,60 +2752,59 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
     const bodyColumns = columns.filter(c => !c.isId && c.visible).slice(0, 6);
 
     return (
-        <div className={`px-3 py-2.5 transition-colors active:bg-slate-50 ${selected ? 'bg-indigo-50/60' : 'bg-white'}`}>
-            {/* Row 1: Checkbox + ID + Status badge + Actions */}
-            <div className="flex items-center gap-2 mb-1.5">
+        <div className={`px-3 py-2 transition-colors active:bg-slate-50 ${selected ? 'bg-indigo-50/60' : 'bg-white'}`}>
+            {/* Aligned data grid — same columns as the fixed mobile header */}
+            <div className="grid gap-x-2 gap-y-0.5 items-start" style={{ gridTemplateColumns: gridTemplate }}>
                 {user.role === ROLES.ADMIN && (
                     <input
                         type="checkbox"
                         checked={selected}
                         onChange={() => onSelect(sign._id)}
-                        className="flex-shrink-0 w-4 h-4 accent-indigo-600"
+                        className="w-4 h-4 mt-0.5 accent-indigo-600"
                     />
                 )}
-                {/* Sign ID */}
                 {idCol && (
-                    <span className="text-xs font-bold text-slate-800 flex-1 truncate">
+                    <span className="text-xs font-bold text-slate-800 break-words leading-tight">
                         {sign[idCol.key]}
                     </span>
                 )}
-                {/* Status + QC badges */}
-                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide ${statusColor(sign.status)}`}>
+                {bodyColumns.map(col => (
+                    <span key={col.key} className="text-[10px] text-slate-700 break-words leading-tight">
+                        {sign[col.key]}
+                    </span>
+                ))}
+                {/* Status + QC */}
+                <div className="flex flex-col items-end gap-0.5 min-w-0">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide text-right break-words leading-tight ${statusColor(sign.status)}`}>
                         {sign.status}
                     </span>
                     <QCBadge factoryQcStatus={sign.factoryQcStatus} />
                 </div>
-                {/* Edit button (admin only) */}
+                {/* Actions */}
                 {user.role === ROLES.ADMIN && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                        className="flex-shrink-0 p-1 rounded text-slate-400 active:bg-blue-50 active:text-blue-600"
-                    >
-                        <Edit size={13} />
-                    </button>
+                    <div className="flex items-start justify-end">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                            className="p-1 rounded text-slate-400 active:bg-blue-50 active:text-blue-600"
+                        >
+                            <Edit size={13} />
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            className="p-1 rounded text-slate-300 active:bg-red-50 active:text-red-500"
+                        >
+                            <Trash2 size={13} />
+                        </button>
+                    </div>
                 )}
             </div>
 
-            {/* Row 2: Key columns as label: value pairs */}
-            {bodyColumns.length > 0 && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
-                    {bodyColumns.map(col => (
-                        sign[col.key] ? (
-                            <span key={col.key} className="text-[10px] text-slate-500">
-                                <span className="font-semibold text-slate-600">{col.label}:</span> {sign[col.key]}
-                            </span>
-                        ) : null
-                    ))}
-                </div>
-            )}
-
-            {/* Row 3: Photo strips */}
-            <div className="flex items-center gap-3">
+            {/* Images — full width, the 3 sections (Art / Fab / Site) spread evenly */}
+            <div className="flex items-start gap-2 mt-2">
                 {/* Artwork */}
-                <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide">Art</span>
-                    <div className="flex gap-0.5">
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Art</span>
+                    <div className="flex flex-wrap gap-0.5">
                         {artImages.length > 0 ? artImages.map((img, idx) => (
                             <div
                                 key={idx}
@@ -2505,11 +2821,11 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                     </div>
                 </div>
 
-                {/* Factory */}
-                <div className="flex items-start gap-1.5">
-                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide mt-0.5">Fab</span>
-                    <div className="flex flex-col gap-0.5">
-                        <div className="flex gap-0.5">
+                {/* Factory photos */}
+                {(factImages.length > 0 || isFactory) && (
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Fab</span>
+                        <div className="flex flex-wrap gap-0.5">
                             {factImages.length > 0 ? factImages.map((img, idx) => (
                                 <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in">
@@ -2519,7 +2835,7 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                             )) : <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Package size={12} /></div>}
                             {isFactory && (
                                 <button onClick={() => onUploadRequest(sign, true)}
-                                    className="w-7 h-7 flex items-center justify-center bg-white border rounded-full text-blue-400 active:bg-blue-50 shadow-sm flex-shrink-0"
+                                    className="w-8 h-8 flex items-center justify-center bg-white border rounded-full text-blue-400 active:bg-blue-50 shadow-sm flex-shrink-0"
                                     title="Add photo">
                                     <Camera size={11} />
                                     <input id={`file-fact-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
@@ -2527,25 +2843,25 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                                 </button>
                             )}
                         </div>
-                        <StageDots stages={factoryStages} checks={sign.factoryStageChecks} isFactory={true}
-                            onToggle={isFactory ? (stage) => onToggleStage(sign, stage, true) : null} />
                     </div>
-                </div>
+                )}
 
-                {/* Site */}
-                <div className="flex items-start gap-1.5">
-                    <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide mt-0.5">Site</span>
-                    <div className="flex flex-col gap-0.5">
-                        <div className="flex gap-0.5">
+                {/* Site photos */}
+                {(siteImages.length > 0 || isSite) && (
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Site</span>
+                        <div className="flex flex-wrap gap-0.5">
                             {siteImages.length > 0 ? siteImages.map((img, idx) => (
                                 <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
-                                    className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in">
+                                    className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
+                                    title={img.remarks || undefined}>
                                     <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                    {img.remarks && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white" />}
                                 </div>
                             )) : <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Truck size={12} /></div>}
                             {isSite && (
                                 <button onClick={() => onUploadRequest(sign, false)}
-                                    className="w-7 h-7 flex items-center justify-center bg-white border rounded-full text-green-400 active:bg-green-50 shadow-sm flex-shrink-0"
+                                    className="w-8 h-8 flex items-center justify-center bg-white border rounded-full text-green-400 active:bg-green-50 shadow-sm flex-shrink-0"
                                     title="Add photo">
                                     <Camera size={11} />
                                     <input id={`file-site-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
@@ -2553,21 +2869,52 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
                                 </button>
                             )}
                         </div>
-                        <StageDots stages={siteStages} checks={sign.siteStageChecks} isFactory={false}
-                            onToggle={isSite ? (stage) => onToggleStage(sign, stage, false) : null} />
                     </div>
-                </div>
-
-                {/* Delete (admin far right) */}
-                {user.role === ROLES.ADMIN && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                        className="ml-auto p-1.5 rounded text-slate-300 active:bg-red-50 active:text-red-500"
-                    >
-                        <Trash2 size={13} />
-                    </button>
                 )}
             </div>
+
+            {/* Stage checklists + photo dates — full width */}
+            {(factoryStages.length > 0 || siteStages.length > 0) && (
+                <div className="mt-1.5 space-y-1">
+                    {factoryStages.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide w-7 flex-shrink-0">Fab</span>
+                            {factoryTs && (
+                                <span title={`Latest factory photo: ${new Date(factoryTs).toLocaleString()}`}
+                                    className="flex items-center gap-0.5 text-[9px] text-slate-400 tabular-nums whitespace-nowrap flex-shrink-0">
+                                    <Clock size={9} /> {fmtShortDate(factoryTs)}
+                                </span>
+                            )}
+                            <StageDots stages={factoryStages} checks={sign.factoryStageChecks} isFactory={true} compact
+                                onToggle={isFactory ? (stage) => onToggleStage(sign, stage, true) : null} />
+                        </div>
+                    )}
+                    {siteStages.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide w-7 flex-shrink-0">Site</span>
+                            {siteTs && (
+                                <span title={`Latest site photo: ${new Date(siteTs).toLocaleString()}`}
+                                    className="flex items-center gap-0.5 text-[9px] text-slate-400 tabular-nums whitespace-nowrap flex-shrink-0">
+                                    <Clock size={9} /> {fmtShortDate(siteTs)}
+                                </span>
+                            )}
+                            <StageDots stages={siteStages} checks={sign.siteStageChecks} isFactory={false} compact
+                                onToggle={isSite ? (stage) => onToggleStage(sign, stage, false) : null} />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Site remarks */}
+            {siteImages.some(img => img.remarks) && (
+                <div className="mt-1 space-y-0.5 pl-[34px]">
+                    {siteImages.map((img, idx) => img.remarks ? (
+                        <p key={idx} className="text-[9px] text-slate-500 italic leading-tight">
+                            <span className="font-semibold not-italic text-slate-400">#{idx + 1}</span> {img.remarks}
+                        </p>
+                    ) : null)}
+                </div>
+            )}
 
             {/* QC failure feedback — visible to all roles so factory workers see what to fix */}
             {sign.factoryQcStatus === 'rework_needed' && (
@@ -2590,7 +2937,7 @@ const SignCard = ({ sign, columns, user, selected, onSelect, onUploadRequest, on
 };
 
 // ── Desktop table row ─────────────────────────────────────────────────────────
-const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
@@ -2598,6 +2945,10 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
     const artImages = sign.artworkImages || (sign.artworkImage ? [{ url: sign.artworkImage }] : []);
     const factImages = sign.factoryImages || [];
     const siteImages = sign.siteImages || [];
+
+    // Latest photo timestamps surfaced compactly in the Factory/Site cells
+    const factoryTs = latestImageTs(factImages);
+    const siteTs = latestImageTs(siteImages);
 
     const statusColor = (s) => {
         if (s.includes('Ready')) return 'bg-blue-100 text-blue-700';
@@ -2607,26 +2958,29 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
     };
 
     return (
-        <tr className={`hover:bg-slate-50 transition text-xs ${selected ? 'bg-indigo-50/50' : ''}`}>
-            <td className="px-1.5 py-1 text-center align-middle">
+        <tr className={`hover:bg-slate-50 transition text-xs group ${selected ? 'bg-indigo-50/50' : ''}`}>
+            <td className="px-2 py-1.5 text-center align-middle">
                 {user.role === ROLES.ADMIN && (
                     <input type="checkbox" checked={selected} onChange={() => onSelect(sign._id)} />
                 )}
             </td>
-            <td className="px-1.5 py-1 align-middle">
+            <td className="px-2 py-1.5 align-middle">
                 <span className={`px-1.5 py-0.5 rounded-sm font-semibold tracking-wide ${statusColor(sign.status)}`}>
                     {sign.status}
                 </span>
             </td>
-            <td className="px-1.5 py-1 align-middle">
+            <td className="px-2 py-1.5 align-middle">
                 <QCBadge factoryQcStatus={sign.factoryQcStatus} />
             </td>
             {columns.filter(c => c.visible).map(col => (
-                <td key={col.key} className="px-1.5 py-1 text-slate-700 whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis align-middle">
+                <td key={col.key}
+                    style={{ width: colWidths[col.key], maxWidth: colWidths[col.key] }}
+                    title={sign[col.key] != null ? String(sign[col.key]) : undefined}
+                    className="px-2 py-1.5 text-slate-700 whitespace-nowrap overflow-hidden text-ellipsis align-middle">
                     {sign[col.key]}
                 </td>
             ))}
-            <td className="px-1.5 py-1 align-middle">
+            <td className="px-2 py-1.5 align-middle">
                 <div className="flex -space-x-1 overflow-hidden hover:space-x-1 transition-all">
                     {artImages.length > 0 ? artImages.map((img, idx) => (
                         <div
@@ -2642,7 +2996,7 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
 
             {/* Factory Column — only when factory stages are configured */}
             {factoryStages.length > 0 && (
-            <td className="px-1.5 py-1 align-middle">
+            <td className="px-2 py-1.5 align-middle">
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
                         {factImages.length > 0 ? factImages.map((img, idx) => (
@@ -2662,7 +3016,13 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                                 onChange={(e) => onDirectUpload(e.target.files[0], 'General Production', true)} />
                         </button>
                     )}
-                    <StageDots stages={factoryStages} checks={sign.factoryStageChecks} isFactory={true}
+                    {factoryTs && (
+                        <span title={`Latest factory photo: ${new Date(factoryTs).toLocaleString()}`}
+                            className="flex items-center gap-0.5 text-[9px] text-slate-400 tabular-nums whitespace-nowrap flex-shrink-0">
+                            <Clock size={9} /> {fmtShortDate(factoryTs)}
+                        </span>
+                    )}
+                    <StageDots stages={factoryStages} checks={sign.factoryStageChecks} isFactory={true} compact
                         onToggle={isFactory ? (stage) => onToggleStage(sign, stage, true) : null} />
                 </div>
             </td>
@@ -2670,13 +3030,15 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
 
             {/* Site Column — only when site stages are configured */}
             {siteStages.length > 0 && (
-            <td className="px-1.5 py-1 align-middle">
+            <td className="px-2 py-1.5 align-top">
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
                         {siteImages.length > 0 ? siteImages.map((img, idx) => (
                             <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
-                                className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition">
+                                className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
+                                title={img.remarks || undefined}>
                                 <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                {img.remarks && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white" />}
                             </div>
                         )) : <div className="w-7 h-7 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Truck size={12} /></div>}
                     </div>
@@ -2689,15 +3051,30 @@ const SignRow = ({ sign, columns, user, selected, onSelect, onUploadRequest, onD
                                 onChange={(e) => onDirectUpload(e.target.files[0], 'Installation', false)} />
                         </button>
                     )}
-                    <StageDots stages={siteStages} checks={sign.siteStageChecks} isFactory={false}
+                    {siteTs && (
+                        <span title={`Latest site photo: ${new Date(siteTs).toLocaleString()}`}
+                            className="flex items-center gap-0.5 text-[9px] text-slate-400 tabular-nums whitespace-nowrap flex-shrink-0">
+                            <Clock size={9} /> {fmtShortDate(siteTs)}
+                        </span>
+                    )}
+                    <StageDots stages={siteStages} checks={sign.siteStageChecks} isFactory={false} compact
                         onToggle={isSite ? (stage) => onToggleStage(sign, stage, false) : null} />
                 </div>
+                {siteImages.some(img => img.remarks) && (
+                    <div className="mt-1 space-y-0.5 max-w-[180px]">
+                        {siteImages.map((img, idx) => img.remarks ? (
+                            <p key={idx} className="text-[10px] text-slate-500 italic leading-tight">
+                                <span className="font-semibold not-italic text-slate-400">#{idx + 1}</span> {img.remarks}
+                            </p>
+                        ) : null)}
+                    </div>
+                )}
             </td>
             )}
 
             {/* Actions Column */}
             {user.role === ROLES.ADMIN && (
-                <td className="px-1.5 py-1 text-center align-middle">
+                <td className="px-2 py-1.5 text-center align-middle">
                     <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                             onClick={(e) => {
@@ -3083,8 +3460,36 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
                                 {activeReportCols.map(col => {
                                     const images = getImagesForCol(sign, col);
                                     const bgClass = col.type === 'artwork' ? 'bg-slate-50/30' : (col.type === 'factory' ? 'bg-orange-50/10' : 'bg-green-50/10');
+
+                                    // Determine which stages to show as a checklist
+                                    let stageChecklist = null;
+                                    if (col.type === 'factory' || col.type === 'site') {
+                                        const allStages = col.type === 'factory' ? (boq.factoryStages || []) : (boq.siteStages || []);
+                                        const checks = col.type === 'factory' ? (sign.factoryStageChecks || {}) : (sign.siteStageChecks || {});
+                                        const stagesToShow = col.mode === 'all' ? allStages : (col.stage ? [col.stage] : []);
+                                        const tickColor = col.type === 'factory' ? 'text-orange-600' : 'text-green-600';
+                                        if (stagesToShow.length > 0) {
+                                            stageChecklist = (
+                                                <div className="mb-1 space-y-0.5">
+                                                    {stagesToShow.map(stage => {
+                                                        const done = checks[stage]?.checked;
+                                                        return (
+                                                            <div key={stage} className="flex items-center gap-1 text-[10px] leading-tight">
+                                                                <span className={`flex-shrink-0 font-bold ${done ? tickColor : 'text-slate-300'}`}>
+                                                                    {done ? '✓' : '○'}
+                                                                </span>
+                                                                <span className={done ? 'font-semibold text-slate-800' : 'text-slate-400'}>{stage}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        }
+                                    }
+
                                     return (
                                         <td key={col.id} className={`border border-slate-300 p-1 align-top ${bgClass}`}>
+                                            {stageChecklist}
                                             <div className="flex flex-wrap gap-1">
                                                 {images.map((img, i) => (
                                                     <img key={i} src={img.url} className="h-16 w-auto object-contain border bg-white shadow-sm" alt="" />
@@ -3331,7 +3736,7 @@ const DPRTab = ({ boq, user }) => {
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-50 rounded-t-xl">
                     <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Daily Progress Report</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Daily Progress Report</h3>
                         {canManageTasks && (
                             <button
                                 onClick={() => { setShowTaskForm(true); setEditingTask(null); setTaskForm({ name: '', description: '', unit: 'pcs', defaultDailyTarget: '', totalTarget: '' }); }}
@@ -3486,14 +3891,14 @@ const DPRTab = ({ boq, user }) => {
                                                 {/* Actual stepper */}
                                                 <td className={`${td} text-center`}>
                                                     <div className="flex items-center border rounded overflow-hidden mx-auto" style={{ width: 100 }}>
-                                                        <button onClick={() => updRow(task.id, { actual: Math.max(0, Number(row.actual) - 1) })} className="px-1.5 py-1.5 bg-slate-50 hover:bg-slate-100 border-r text-slate-500"><Minus size={11} /></button>
+                                                        <button onClick={() => updRow(task.id, { actual: Math.max(0, Number(row.actual) - 1) })} className="px-2 py-2bg-slate-50 hover:bg-slate-100 border-r text-slate-500"><Minus size={11} /></button>
                                                         <input
                                                             type="number" min="0"
                                                             value={row.actual}
                                                             onChange={e => updRow(task.id, { actual: e.target.value })}
                                                             className="w-0 flex-1 text-center text-sm py-1 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         />
-                                                        <button onClick={() => updRow(task.id, { actual: Number(row.actual) + 1 })} className="px-1.5 py-1.5 bg-slate-50 hover:bg-slate-100 border-l text-slate-500"><Plus size={11} /></button>
+                                                        <button onClick={() => updRow(task.id, { actual: Number(row.actual) + 1 })} className="px-2 py-2bg-slate-50 hover:bg-slate-100 border-l text-slate-500"><Plus size={11} /></button>
                                                     </div>
                                                 </td>
 
