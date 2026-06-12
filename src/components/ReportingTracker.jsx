@@ -1,11 +1,33 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import ExcelJS from 'exceljs';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocFromCache, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
+import { getFirestore as getLiteFirestore, collection as liteCollection, getDocs as liteGetDocs } from 'firebase/firestore/lite';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { firebaseApp, appId } from '../lib/firebase';
 const db = getFirestore(firebaseApp);
 const storage = getStorage(firebaseApp);
+
+// REST-based Firestore (plain HTTPS, no realtime channel). The watch channel
+// is slow to start on some networks (~30-50s), so initial table data is
+// fetched through this and the live listener takes over when it connects.
+const liteDb = getLiteFirestore(firebaseApp);
+
+// Reads a doc from the local cache (instant, and includes the app's own pending
+// writes) so UI actions never block on the slow server round-trip. Falls back
+// to a server read only on a cache miss.
+const readCached = async (ref) => {
+    try {
+        const snap = await getDocFromCache(ref);
+        if (snap.exists()) return snap;
+    } catch { /* not in cache — fall through to server */ }
+    try {
+        const snap = await getDoc(ref);
+        return snap.exists() ? snap : null;
+    } catch {
+        return null;
+    }
+};
 
 import {
     Upload,
@@ -121,24 +143,25 @@ const dataUrlToThumb = (dataUrl, maxWidth = THUMB_WIDTH) => new Promise((resolve
 });
 
 // Uploads a base64 data-URL as a full image + thumbnail under the given Storage
-// path prefix. Returns { url, thumbUrl } download URLs. Throws if the full
-// upload fails; a failed thumbnail falls back to the full image URL.
+// path prefix, in parallel. Returns { url, thumbUrl } download URLs. Throws if
+// the full upload fails; a failed thumbnail falls back to the full image URL.
 const uploadImagePair = async (dataUrl, pathPrefix) => {
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const fullRef = storageRef(storage, `${pathPrefix}/${id}.jpg`);
-    await uploadString(fullRef, dataUrl, 'data_url');
-    const url = await getDownloadURL(fullRef);
+    const thumbRef = storageRef(storage, `${pathPrefix}/${id}_thumb.jpg`);
 
-    let thumbUrl = url;
-    try {
-        const thumbData = await dataUrlToThumb(dataUrl);
-        const thumbRef = storageRef(storage, `${pathPrefix}/${id}_thumb.jpg`);
-        await uploadString(thumbRef, thumbData, 'data_url');
-        thumbUrl = await getDownloadURL(thumbRef);
-    } catch (e) {
-        console.warn('Thumbnail generation failed, using full image:', e);
-    }
-    return { url, thumbUrl };
+    const fullPromise = uploadString(fullRef, dataUrl, 'data_url')
+        .then(() => getDownloadURL(fullRef));
+    const thumbPromise = dataUrlToThumb(dataUrl)
+        .then((thumbData) => uploadString(thumbRef, thumbData, 'data_url'))
+        .then(() => getDownloadURL(thumbRef))
+        .catch((e) => {
+            console.warn('Thumbnail generation failed, using full image:', e);
+            return null;
+        });
+
+    const [url, thumbUrl] = await Promise.all([fullPromise, thumbPromise]);
+    return { url, thumbUrl: thumbUrl || url };
 };
 
 const readFileAsArrayBuffer = (file) => {
@@ -174,12 +197,14 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete, field, onUpdate
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [remarkDraft, setRemarkDraft] = useState('');
     const [remarkSaving, setRemarkSaving] = useState(false);
+    const [fullLoaded, setFullLoaded] = useState(false);
 
     const next = (e) => { e.stopPropagation(); setCurrentIndex((prev) => (prev + 1) % images.length); };
     const prev = (e) => { e.stopPropagation(); setCurrentIndex((prev) => (prev - 1 + images.length) % images.length); };
 
     useEffect(() => {
         setRemarkDraft(images[currentIndex]?.remarks || '');
+        setFullLoaded(false);
     }, [currentIndex, images]);
 
     if (!images || images.length === 0) return null;
@@ -217,10 +242,19 @@ const Lightbox = ({ images, initialIndex = 0, onClose, onDelete, field, onUpdate
             )}
 
             <div className="relative w-full max-w-4xl max-h-[85vh] flex items-center justify-center">
+                {currentImg.thumbUrl && currentImg.thumbUrl !== (currentImg.url || currentImg) && !fullLoaded && (
+                    <img
+                        src={currentImg.thumbUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute max-w-full max-h-[80vh] object-contain rounded-sm blur-md scale-105"
+                    />
+                )}
                 <img
                     src={currentImg.url || currentImg}
                     alt="Full view"
-                    className="max-w-full max-h-[80vh] object-contain shadow-2xl rounded-sm"
+                    onLoad={() => setFullLoaded(true)}
+                    className={`max-w-full max-h-[80vh] object-contain shadow-2xl rounded-sm transition-opacity duration-200 ${fullLoaded ? 'opacity-100' : 'opacity-0'}`}
                     onClick={(e) => e.stopPropagation()}
                 />
 
@@ -620,12 +654,25 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
     const [newBOQName, setNewBOQName] = useState('');
 
     useEffect(() => {
+        // Fast first paint over plain HTTPS; the live listener overwrites it
+        // as soon as the realtime channel connects.
+        let liveDataArrived = false;
+        let cancelled = false;
+        liteGetDocs(liteCollection(liteDb, 'artifacts', appId, 'public', 'data', 'boqs'))
+            .then((snap) => {
+                if (!cancelled && !liveDataArrived) {
+                    setBOQs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                }
+            })
+            .catch((e) => console.warn('Initial BOQ list fetch failed, waiting for live listener:', e));
+
         const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'boqs'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            liveDataArrived = true;
             const boqList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setBOQs(boqList);
         }, (err) => console.error("Error fetching boqs", err));
-        return () => unsubscribe();
+        return () => { cancelled = true; unsubscribe(); };
     }, []);
 
     const handleUpdateBOQName = async () => {
@@ -1045,8 +1092,23 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 
     useEffect(() => {
         if (!boq) return;
+
+        // Fast first paint over plain HTTPS; the live listener overwrites it
+        // as soon as the realtime channel connects. Stats updates stay on the
+        // live path only.
+        let liveDataArrived = false;
+        let cancelled = false;
+        liteGetDocs(liteCollection(liteDb, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs'))
+            .then((snap) => {
+                if (!cancelled && !liveDataArrived) {
+                    setSigns(snap.docs.map(d => ({ _id: d.id, ...d.data() })));
+                }
+            })
+            .catch((e) => console.warn('Initial signs fetch failed, waiting for live listener:', e));
+
         const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs');
         const unsubscribe = onSnapshot(signsRef, (snapshot) => {
+            liveDataArrived = true;
             const loadedSigns = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
             setSigns(loadedSigns);
 
@@ -1063,7 +1125,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), { stats });
             }
         });
-        return () => unsubscribe();
+        return () => { cancelled = true; unsubscribe(); };
     }, [boq.id, user.role]);
 
     useEffect(() => {
@@ -1498,19 +1560,17 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         setImportConfig(null);
     };
 
-    const updateStatus = async (signIds, newStatus) => {
+    const updateStatus = (signIds, newStatus) => {
         const ids = Array.from(signIds);
-        for (const id of ids) {
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), {
-                    status: newStatus,
-                    history: serverTimestamp()
-                });
-            } catch (e) {
-                console.error("Status update error", e);
-            }
-        }
+        // Clear selection and let the optimistic local writes update the table
+        // immediately; don't await server acks (slow on this network).
         setSelectedSigns(new Set());
+        ids.forEach((id) => {
+            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), {
+                status: newStatus,
+                history: serverTimestamp()
+            }).catch((e) => console.error("Status update error", e));
+        });
     };
 
     const batchDelete = async (signIds) => {
@@ -1539,58 +1599,52 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     const handleDeleteImage = async (signId, field, imageIndex) => {
         if (!window.confirm("Are you sure you want to delete this image?")) return;
 
-        try {
-            const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
-            const signDoc = await getDoc(signRef);
+        const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
+        const signDoc = await readCached(signRef);
+        if (!signDoc) return;
 
-            if (signDoc.exists()) {
-                const data = signDoc.data();
-                const images = data[field] || [];
-                const newImages = images.filter((_, i) => i !== imageIndex);
+        const images = signDoc.data()[field] || [];
+        const newImages = images.filter((_, i) => i !== imageIndex);
 
-                await updateDoc(signRef, { [field]: newImages });
-                setLightboxImages(null); // Close lightbox after deletion to prevent errors
-            }
-        } catch (e) {
+        // Close the lightbox immediately; the optimistic local write removes the
+        // image from the table right away while the server ack syncs in the
+        // background.
+        setLightboxImages(null);
+        updateDoc(signRef, { [field]: newImages }).catch((e) => {
             console.error("Error deleting image", e);
-            alert("Failed to delete image.");
-        }
+            alert("The image may not have been deleted — please check your connection.");
+        });
     };
 
     const handleUpdateRemark = async (signId, field, imageIndex, newRemark) => {
-        try {
-            const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
-            const signDoc = await getDoc(signRef);
-            if (signDoc.exists()) {
-                const images = [...(signDoc.data()[field] || [])];
-                if (images[imageIndex]) {
-                    images[imageIndex] = { ...images[imageIndex], remarks: newRemark };
-                    await updateDoc(signRef, { [field]: images });
-                    setLightboxImages(prev => {
-                        if (!prev) return prev;
-                        const updatedImages = [...prev.images];
-                        if (updatedImages[imageIndex]) {
-                            updatedImages[imageIndex] = { ...updatedImages[imageIndex], remarks: newRemark };
-                        }
-                        return { ...prev, images: updatedImages };
-                    });
-                }
+        const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId);
+        const signDoc = await readCached(signRef);
+        if (!signDoc) return;
+        const images = [...(signDoc.data()[field] || [])];
+        if (!images[imageIndex]) return;
+
+        images[imageIndex] = { ...images[imageIndex], remarks: newRemark };
+        setLightboxImages(prev => {
+            if (!prev) return prev;
+            const updatedImages = [...prev.images];
+            if (updatedImages[imageIndex]) {
+                updatedImages[imageIndex] = { ...updatedImages[imageIndex], remarks: newRemark };
             }
-        } catch (e) {
-            console.error("Error updating remark", e);
-        }
+            return { ...prev, images: updatedImages };
+        });
+        updateDoc(signRef, { [field]: images }).catch((e) => console.error("Error updating remark", e));
     };
 
-    const handleToggleStage = async (sign, stage, isFactory) => {
+    const handleToggleStage = (sign, stage, isFactory) => {
         const checksField = isFactory ? 'factoryStageChecks' : 'siteStageChecks';
         const current = sign[checksField] || {};
         const isDone = current[stage]?.checked;
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), {
+        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), {
             [checksField]: {
                 ...current,
                 [stage]: isDone ? { checked: false } : { checked: true, by: user.username, at: new Date().toISOString() }
             }
-        });
+        }).catch((e) => console.error('Stage toggle failed:', e));
     };
 
     const handleUploadRequest = (sign, isFactory) => {
@@ -1625,33 +1679,29 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         const signRef = doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id);
         const field = isFactory ? 'factoryImages' : 'siteImages';
 
-        // Compress and fetch fresh sign state concurrently so sequential uploads see the latest image list
+        // Compress the image and read current sign state from the local cache
+        // (instant + includes our own pending writes), so sequential uploads
+        // append correctly without a slow server round-trip.
         const [compressed, freshSnap] = await Promise.all([
             compressImage(file, 1200),
-            getDoc(signRef),
+            readCached(signRef),
         ]);
-        const freshSign = freshSnap.exists() ? { _id: sign._id, ...freshSnap.data() } : sign;
+        const freshSign = freshSnap ? { _id: sign._id, ...freshSnap.data() } : sign;
 
         const artImages = freshSign.artworkImages || [];
         const hasArtworks = artImages.length > 0;
 
-        // Upload to Storage; if that fails (e.g. flaky connection on site) fall
-        // back to storing the base64 inline so the photo is never lost. The
-        // admin migration tool moves any such inline images to Storage later.
-        let url = compressed;
-        let thumbUrl = null;
-        try {
-            ({ url, thumbUrl } = await uploadImagePair(compressed, `boqs/${boq.id}/signs/${sign._id}`));
-        } catch (e) {
-            console.error('Storage upload failed, storing image inline:', e);
-        }
-
+        // Write the image inline (base64) first so it shows on screen
+        // immediately — Storage round-trips take 15-30s on slow uplinks. A
+        // background task then moves it to Storage and swaps in the URLs. If
+        // that fails, the inline image stays and the admin migration tool
+        // sweeps it up later.
+        const uploadTimestamp = new Date().toISOString();
         const newImage = {
-            url,
-            ...(thumbUrl ? { thumbUrl } : {}),
+            url: compressed,
             stages,
             uploadedBy: user.username,
-            timestamp: new Date().toISOString(),
+            timestamp: uploadTimestamp,
             ...(isFactory ? {} : { remarks }),
         };
 
@@ -1679,7 +1729,30 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             updates[checksField] = updatedChecks;
         }
 
-        await updateDoc(signRef, updates);
+        // Fire the write without awaiting the server ack — the optimistic local
+        // update already shows the image, and waiting on the slow channel would
+        // freeze the upload dialog for many seconds. Errors surface via catch.
+        updateDoc(signRef, updates).catch((e) => {
+            console.error('Saving uploaded image failed:', e);
+            alert('Your photo may not have saved — please check your connection and try again.');
+        });
+
+        // ── Background: move the inline image to Storage and swap URLs ──────
+        (async () => {
+            try {
+                const { url, thumbUrl } = await uploadImagePair(compressed, `boqs/${boq.id}/signs/${sign._id}`);
+                const curSnap = await readCached(signRef);
+                if (!curSnap) return;
+                const imgs = [...(curSnap.data()[field] || [])];
+                const idx = imgs.findIndex(img =>
+                    img?.timestamp === uploadTimestamp && img?.url?.startsWith('data:'));
+                if (idx === -1) return; // image was deleted (or already swapped)
+                imgs[idx] = { ...imgs[idx], url, thumbUrl };
+                await updateDoc(signRef, { [field]: imgs });
+            } catch (e) {
+                console.warn('Background move to Storage failed; image kept inline (admin migrate button will sweep it):', e);
+            }
+        })();
     };
 
     // ── Image migration: inline base64 → Firebase Storage ───────────────────

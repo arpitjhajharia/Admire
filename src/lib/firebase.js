@@ -32,8 +32,17 @@ const secondaryApp = !firebase.apps.find(a => a.name === 'secondary')
 export const auth = app.auth();
 export const db = app.firestore();
 
-// Fix for Firestore watch stream errors (ve:-1 / ID: ca9 / b815) caused by WebSocket multiplexer issues
-db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+// Fix for Firestore watch stream errors (ve:-1 / ID: ca9 / b815) caused by WebSocket multiplexer issues.
+// Force long polling outright: auto-detection re-runs a connection probe on every
+// fresh tab and can stall for ~30s+ before falling back on networks like this one.
+// (auto-detect defaults to true in newer SDKs and must be explicitly disabled
+// when forcing, or Firestore throws "cannot be used together" at startup)
+db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true });
+
+// NOTE: IndexedDB persistence (enablePersistence) was tried and reverted — its
+// multi-tab coordination added 0.5–1s latency to every user action. Fast first
+// paint is handled instead by a one-shot firestore/lite REST fetch in views
+// that load large collections (plain HTTPS, bypasses the slow watch channel).
 
 export { secondaryApp };            // <--- Added this (Fixes the error)
 export const firebaseApp = app;
