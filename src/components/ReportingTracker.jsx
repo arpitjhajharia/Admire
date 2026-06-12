@@ -1090,6 +1090,25 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     // Image migration progress ({ done, total, errors } while running, else null)
     const [migration, setMigration] = useState(null);
 
+    // Count of writes fired but not yet acknowledged by the server. Drives the
+    // "Saving…/All saved" header indicator and the close-tab guard, so the user
+    // always knows when it is safe to close the tab (writes are optimistic and
+    // live only in memory until the server confirms them).
+    const [savingCount, setSavingCount] = useState(0);
+    const trackWrite = (promise) => {
+        setSavingCount(c => c + 1);
+        Promise.resolve(promise).finally(() => setSavingCount(c => Math.max(0, c - 1)));
+        return promise;
+    };
+
+    // Warn before closing/reloading the tab while writes are still in flight.
+    useEffect(() => {
+        if (savingCount <= 0) return;
+        const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [savingCount]);
+
     useEffect(() => {
         if (!boq) return;
 
@@ -1566,10 +1585,10 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         // immediately; don't await server acks (slow on this network).
         setSelectedSigns(new Set());
         ids.forEach((id) => {
-            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), {
+            trackWrite(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), {
                 status: newStatus,
                 history: serverTimestamp()
-            }).catch((e) => console.error("Status update error", e));
+            }).catch((e) => console.error("Status update error", e)));
         });
     };
 
@@ -1610,10 +1629,10 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         // image from the table right away while the server ack syncs in the
         // background.
         setLightboxImages(null);
-        updateDoc(signRef, { [field]: newImages }).catch((e) => {
+        trackWrite(updateDoc(signRef, { [field]: newImages }).catch((e) => {
             console.error("Error deleting image", e);
             alert("The image may not have been deleted — please check your connection.");
-        });
+        }));
     };
 
     const handleUpdateRemark = async (signId, field, imageIndex, newRemark) => {
@@ -1632,19 +1651,19 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             }
             return { ...prev, images: updatedImages };
         });
-        updateDoc(signRef, { [field]: images }).catch((e) => console.error("Error updating remark", e));
+        trackWrite(updateDoc(signRef, { [field]: images }).catch((e) => console.error("Error updating remark", e)));
     };
 
     const handleToggleStage = (sign, stage, isFactory) => {
         const checksField = isFactory ? 'factoryStageChecks' : 'siteStageChecks';
         const current = sign[checksField] || {};
         const isDone = current[stage]?.checked;
-        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), {
+        trackWrite(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), {
             [checksField]: {
                 ...current,
                 [stage]: isDone ? { checked: false } : { checked: true, by: user.username, at: new Date().toISOString() }
             }
-        }).catch((e) => console.error('Stage toggle failed:', e));
+        }).catch((e) => console.error('Stage toggle failed:', e)));
     };
 
     const handleUploadRequest = (sign, isFactory) => {
@@ -1732,10 +1751,10 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         // Fire the write without awaiting the server ack — the optimistic local
         // update already shows the image, and waiting on the slow channel would
         // freeze the upload dialog for many seconds. Errors surface via catch.
-        updateDoc(signRef, updates).catch((e) => {
+        trackWrite(updateDoc(signRef, updates).catch((e) => {
             console.error('Saving uploaded image failed:', e);
             alert('Your photo may not have saved — please check your connection and try again.');
-        });
+        }));
 
         // ── Background: move the inline image to Storage and swap URLs ──────
         (async () => {
@@ -2081,6 +2100,25 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                     ))}
                                 </div>
                             </div>
+                        )}
+                    </div>
+                    {/* Save status — tells the user when it's safe to close the tab */}
+                    <div
+                        className="flex items-center gap-1 text-xs mr-0.5 select-none"
+                        title={savingCount > 0
+                            ? 'Saving changes to the server — keep this tab open'
+                            : 'All changes saved to the server — safe to close'}
+                    >
+                        {savingCount > 0 ? (
+                            <>
+                                <Save size={14} className="text-amber-500 animate-pulse" />
+                                <span className="hidden sm:inline text-amber-600 font-medium">Saving…</span>
+                            </>
+                        ) : (
+                            <>
+                                <CheckSquare size={14} className="text-green-500" />
+                                <span className="hidden sm:inline text-green-600 font-medium">All saved</span>
+                            </>
                         )}
                     </div>
                     {user.role === ROLES.ADMIN && (
