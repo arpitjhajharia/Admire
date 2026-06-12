@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import ExcelJS from 'exceljs';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { firebaseApp, appId } from '../lib/firebase';
 const db = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
 
 import {
     Upload,
@@ -36,7 +38,9 @@ import {
     ArrowUpDown,
     Minus,
     BookOpen,
-    TrendingUp
+    TrendingUp,
+    Download,
+    Database
 } from 'lucide-react';
 
 const ROLES = {
@@ -94,6 +98,47 @@ const compressImage = (file, maxWidth = 1200) => {
             };
         };
     });
+};
+
+// ── Firebase Storage image handling ──────────────────────────────────────────
+// Images are stored as files in Storage (full + small thumbnail) and only their
+// download URLs are kept in Firestore, so sign documents stay tiny.
+
+const THUMB_WIDTH = 200;
+
+const dataUrlToThumb = (dataUrl, maxWidth = THUMB_WIDTH) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => reject(new Error('Could not decode image for thumbnail'));
+    img.src = dataUrl;
+});
+
+// Uploads a base64 data-URL as a full image + thumbnail under the given Storage
+// path prefix. Returns { url, thumbUrl } download URLs. Throws if the full
+// upload fails; a failed thumbnail falls back to the full image URL.
+const uploadImagePair = async (dataUrl, pathPrefix) => {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const fullRef = storageRef(storage, `${pathPrefix}/${id}.jpg`);
+    await uploadString(fullRef, dataUrl, 'data_url');
+    const url = await getDownloadURL(fullRef);
+
+    let thumbUrl = url;
+    try {
+        const thumbData = await dataUrlToThumb(dataUrl);
+        const thumbRef = storageRef(storage, `${pathPrefix}/${id}_thumb.jpg`);
+        await uploadString(thumbRef, thumbData, 'data_url');
+        thumbUrl = await getDownloadURL(thumbRef);
+    } catch (e) {
+        console.warn('Thumbnail generation failed, using full image:', e);
+    }
+    return { url, thumbUrl };
 };
 
 const readFileAsArrayBuffer = (file) => {
@@ -995,6 +1040,9 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     // Tab state
     const [activeTab, setActiveTab] = useState('items');
 
+    // Image migration progress ({ done, total, errors } while running, else null)
+    const [migration, setMigration] = useState(null);
+
     useEffect(() => {
         if (!boq) return;
         const signsRef = collection(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs');
@@ -1416,6 +1464,20 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 artworkImages.push({ url: row['Artwork'], stage: 'Artwork', timestamp: new Date().toISOString() });
             }
 
+            // Move imported base64 artwork to Storage; on failure keep the
+            // inline base64 so the import never loses an image.
+            for (const img of artworkImages) {
+                if (img.url && img.url.startsWith('data:')) {
+                    try {
+                        const up = await uploadImagePair(img.url, `boqs/${boq.id}/signs/${signId}`);
+                        img.url = up.url;
+                        img.thumbUrl = up.thumbUrl;
+                    } catch (e) {
+                        console.error(`Storage upload failed for ${signId}, keeping inline image:`, e);
+                    }
+                }
+            }
+
             const cleanRow = { ...row };
             imageColumns.forEach(col => delete cleanRow[col]);
             if (cleanRow['Artwork']) delete cleanRow['Artwork'];
@@ -1573,8 +1635,20 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         const artImages = freshSign.artworkImages || [];
         const hasArtworks = artImages.length > 0;
 
+        // Upload to Storage; if that fails (e.g. flaky connection on site) fall
+        // back to storing the base64 inline so the photo is never lost. The
+        // admin migration tool moves any such inline images to Storage later.
+        let url = compressed;
+        let thumbUrl = null;
+        try {
+            ({ url, thumbUrl } = await uploadImagePair(compressed, `boqs/${boq.id}/signs/${sign._id}`));
+        } catch (e) {
+            console.error('Storage upload failed, storing image inline:', e);
+        }
+
         const newImage = {
-            url: compressed,
+            url,
+            ...(thumbUrl ? { thumbUrl } : {}),
             stages,
             uploadedBy: user.username,
             timestamp: new Date().toISOString(),
@@ -1608,6 +1682,110 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         await updateDoc(signRef, updates);
     };
 
+    // ── Image migration: inline base64 → Firebase Storage ───────────────────
+    const legacyImageCount = useMemo(() =>
+        signs.reduce((n, s) =>
+            n + ['artworkImages', 'factoryImages', 'siteImages'].reduce((m, f) =>
+                m + (s[f] || []).filter(img => img?.url?.startsWith('data:')).length, 0), 0),
+        [signs]);
+
+    // Downloads this BOQ's complete data (incl. inline base64 images) as a
+    // JSON file — the local safety copy taken before migrating.
+    const downloadBoqBackup = () => {
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            boqId: boq.id,
+            boq: { ...boq },
+            signs,
+        };
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        const a = document.createElement('a');
+        const name = String(boq.name || boq.id).replace(/[^a-zA-Z0-9-_]+/g, '_');
+        a.href = URL.createObjectURL(blob);
+        a.download = `boq-backup-${name}-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    };
+
+    // Migrates every inline base64 image in this BOQ to Storage.
+    // Designed around a slow Firestore channel: all Storage uploads run in a
+    // small worker pool, and the (tiny, URL-only) document updates are then
+    // committed in a handful of writeBatch calls instead of one write per sign.
+    // A JSON backup of the project is auto-downloaded before anything starts.
+    // Idempotent — re-running skips anything already migrated.
+    const MIGRATION_CONCURRENCY = 5;
+
+    const migrateImagesToStorage = async () => {
+        if (migration) return;
+        if (!window.confirm(
+            `Migrate ${legacyImageCount} inline image(s) in this project to Firebase Storage?\n\n` +
+            `A JSON backup of this project will download automatically before the migration starts — keep that file safe.\n\n` +
+            `Keep this tab open until it finishes.`
+        )) return;
+
+        // Local safety copy of the original data, always taken first
+        downloadBoqBackup();
+
+        const FIELDS = ['artworkImages', 'factoryImages', 'siteImages'];
+        const targets = signs.filter(s => FIELDS.some(f => (s[f] || []).some(img => img?.url?.startsWith('data:'))));
+        setMigration({ done: 0, total: targets.length, errors: 0, phase: 'upload' });
+
+        // Phase A — upload images to Storage (no Firestore writes yet)
+        const results = [];
+        let done = 0;
+        let errors = 0;
+
+        const processSign = async (sign) => {
+            try {
+                const updates = {};
+                for (const f of FIELDS) {
+                    const imgs = sign[f] || [];
+                    if (!imgs.some(img => img?.url?.startsWith('data:'))) continue;
+                    updates[f] = await Promise.all(imgs.map(async (img) => {
+                        if (!img?.url?.startsWith('data:')) return img;
+                        const up = await uploadImagePair(img.url, `boqs/${boq.id}/signs/${sign._id}`);
+                        return { ...img, url: up.url, thumbUrl: up.thumbUrl };
+                    }));
+                }
+                results.push({ id: sign._id, updates });
+            } catch (e) {
+                console.error(`Upload failed for sign ${sign._id} (sign left unchanged):`, e);
+                errors++;
+            } finally {
+                done++;
+                setMigration(m => (m ? { ...m, done, errors } : m));
+            }
+        };
+
+        const queue = [...targets];
+        await Promise.all(Array.from({ length: MIGRATION_CONCURRENCY }, async () => {
+            while (queue.length > 0) {
+                await processSign(queue.shift());
+            }
+        }));
+
+        // Phase B — commit all sign updates in batched writes
+        setMigration(m => (m ? { ...m, phase: 'save' } : m));
+        try {
+            for (let i = 0; i < results.length; i += 400) {
+                const batch = writeBatch(db);
+                results.slice(i, i + 400).forEach(({ id, updates }) => {
+                    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id), updates);
+                });
+                await batch.commit();
+            }
+        } catch (e) {
+            console.error('Saving migrated image URLs failed:', e);
+            alert('Images were uploaded to Storage, but saving to the database failed. Your data is unchanged — run the migration again to retry.');
+            setMigration(null);
+            return;
+        }
+
+        alert(errors === 0
+            ? `Migration complete — ${results.length} item(s) moved to Storage.`
+            : `Migration finished: ${results.length} item(s) migrated, ${errors} failed and were left unchanged. Run again to retry the failed ones.`);
+        setMigration(null);
+    };
 
     const toggleFilterValue = (key, value) => {
         const current = new Set(filters[key] || []);
@@ -1834,6 +2012,25 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     </div>
                     {user.role === ROLES.ADMIN && (
                         <button
+                            onClick={downloadBoqBackup}
+                            className="p-2 text-slate-500 hover:bg-slate-100 active:bg-slate-200 rounded-lg"
+                            title="Download project backup (JSON)"
+                        >
+                            <Download size={16} />
+                        </button>
+                    )}
+                    {user.role === ROLES.ADMIN && legacyImageCount > 0 && (
+                        <button
+                            onClick={migrateImagesToStorage}
+                            disabled={!!migration}
+                            className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-lg disabled:opacity-50"
+                            title={`Migrate ${legacyImageCount} inline image(s) to Firebase Storage`}
+                        >
+                            <Database size={16} />
+                        </button>
+                    )}
+                    {user.role === ROLES.ADMIN && (
+                        <button
                             onClick={() => setShowSettings(true)}
                             className="p-2 text-slate-500 hover:bg-slate-100 active:bg-slate-200 rounded-lg"
                             title="BOQ Settings"
@@ -1864,6 +2061,18 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     )}
                 </div>
             </header>
+
+            {/* ── Image migration progress ── */}
+            {migration && (
+                <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs font-medium text-amber-800 flex items-center gap-2">
+                    <span className="animate-spin"><Package size={14} /></span>
+                    {migration.phase === 'save'
+                        ? 'Saving to database…'
+                        : `Uploading images to Storage… ${migration.done} / ${migration.total} items`}
+                    {migration.errors > 0 && <span className="text-red-600 font-bold">({migration.errors} failed)</span>}
+                    <span className="text-amber-600 font-normal">— keep this tab open</span>
+                </div>
+            )}
 
             {/* ── Tabs ── */}
             <div className="bg-white border-b flex items-center px-3 gap-0">
@@ -2577,7 +2786,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                                 onClick={() => onViewImage(artImages, idx, 'artworkImages')}
                                 className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
                             >
-                                <img src={img.url} alt="" className="w-full h-full object-contain rounded" />
+                                <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
                             </div>
                         )) : (
                             <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300">
@@ -2595,7 +2804,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                             {factImages.length > 0 ? factImages.map((img, idx) => (
                                 <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in">
-                                    <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                    <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                                 </div>
                             )) : <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Package size={12} /></div>}
                             {isFactory && (
@@ -2620,7 +2829,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                                 <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
                                     title={img.remarks || undefined}>
-                                    <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                    <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                                     {img.remarks && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white" />}
                                 </div>
                             )) : <div className="w-8 h-8 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Truck size={12} /></div>}
@@ -2734,7 +2943,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                             onClick={() => onViewImage(artImages, idx, 'artworkImages')}
                             className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
                         >
-                            <img src={img.url} alt="" className="w-full h-full object-contain rounded" />
+                            <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
                         </div>
                     )) : <div className="w-7 h-7 bg-slate-100 rounded border flex items-center justify-center text-slate-300"><ImageIcon size={12} /></div>}
                 </div>
@@ -2748,7 +2957,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                         {factImages.length > 0 ? factImages.map((img, idx) => (
                             <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
                                 className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition">
-                                <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                             </div>
                         )) : <div className="w-7 h-7 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Package size={12} /></div>}
                     </div>
@@ -2782,7 +2991,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                             <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
                                 className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
                                 title={img.remarks || undefined}>
-                                <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                                <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                                 {img.remarks && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white" />}
                             </div>
                         )) : <div className="w-7 h-7 bg-slate-50 rounded border border-dashed flex items-center justify-center text-slate-300"><Truck size={12} /></div>}
@@ -2932,12 +3141,43 @@ const ImportMapper = ({ config, onClose, onConfirm }) => {
 
 const PrintView = ({ boq, signs, columns, onClose }) => {
     const [showColMenu, setShowColMenu] = useState(false);
+    const [printing, setPrinting] = useState(false);
     const [selectedColIds, setSelectedColIds] = useState(() => {
         const initial = new Set(['art']);
         if ((boq.factoryStages || []).length > 0) initial.add('fact_all');
         if ((boq.siteStages || []).length > 0) initial.add('site_all');
         return initial;
     });
+
+    // Remote (Storage-hosted) images load asynchronously, so wait for them
+    // before opening the print dialog — otherwise the printout shows blanks.
+    // Inline base64 images need no preloading; a 15s cap stops a dead URL
+    // from blocking the print forever.
+    const handlePrint = async () => {
+        if (printing) return;
+        setPrinting(true);
+        try {
+            const urls = [];
+            signs.forEach(s => {
+                ['artworkImages', 'factoryImages', 'siteImages'].forEach(f => {
+                    (s[f] || []).forEach(img => {
+                        const u = img?.url || img;
+                        if (typeof u === 'string' && !u.startsWith('data:')) urls.push(u);
+                    });
+                });
+            });
+            const loadAll = Promise.all(urls.map(u => new Promise(res => {
+                const im = new Image();
+                im.onload = res;
+                im.onerror = res;
+                im.src = u;
+            })));
+            await Promise.race([loadAll, new Promise(res => setTimeout(res, 15000))]);
+        } finally {
+            setPrinting(false);
+        }
+        window.print();
+    };
 
     // Construct available report options dynamically — factory/site only appear when stages are configured
     const reportOptions = useMemo(() => {
@@ -3094,8 +3334,8 @@ const PrintView = ({ boq, signs, columns, onClose }) => {
                         </div>
                     )}
 
-                    <button onClick={() => window.print()} className="bg-white text-slate-900 px-4 py-1 rounded font-bold flex items-center gap-2">
-                        <Printer size={14} /> Print
+                    <button onClick={handlePrint} disabled={printing} className="bg-white text-slate-900 px-4 py-1 rounded font-bold flex items-center gap-2 disabled:opacity-60">
+                        <Printer size={14} /> {printing ? 'Preparing…' : 'Print'}
                     </button>
                 </div>
             </div>
