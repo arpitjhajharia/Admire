@@ -30,24 +30,59 @@ const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getDayName = (year, month, day) => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(year, month, day).getDay()];
 const isWeekend = (year, month, day) => { const d = new Date(year, month, day).getDay(); return d === 0 || d === 6; };
 
-// Derives the effective attendance status for a day, applying Sunday and holiday defaults
-function computeEffectiveStatus(empId, day, year, month, daysInMonth, attendance, holidays) {
-  const pad = n => String(n).padStart(2, '0');
-  const key = `${empId}_${year}-${pad(month + 1)}-${pad(day)}`;
-  const rec = attendance[key];
-  if (rec?.status) return rec.status;
+const EARNED_STATUSES = new Set(['present', 'ot', 'half_day', 'late_arrival', 'left_early']);
+const IST_OFFSET_MIN = 330; // business TZ for the "next-day 6am" absence cutoff
 
-  if (new Date(year, month, day).getDay() === 0) { // Sunday
-    const satKey = `${empId}_${year}-${pad(month + 1)}-${pad(day - 1)}`;
-    const monKey = `${empId}_${year}-${pad(month + 1)}-${pad(day + 1)}`;
-    const satAbsent = day > 1 && attendance[satKey]?.status === 'absent';
-    const monAbsent = day < daysInMonth && attendance[monKey]?.status === 'absent';
-    return (satAbsent && monAbsent) ? 'absent' : 'week_off';
+// True once the marking window for `day` has closed (next day 06:00 IST passed).
+function absenceCutoffPassed(day, year, month, now) {
+  const cutoffMs = Date.UTC(year, month, day + 1, 6, 0, 0) - IST_OFFSET_MIN * 60000;
+  return now >= cutoffMs;
+}
+
+// Classifies a day WITHOUT rest-day qualification — kept scan-free so the
+// qualification scan in computeEffectiveStatus can't recurse through rest days.
+function classifyDay(empId, day, year, month, attendance, holidays, now) {
+  const pad = n => String(n).padStart(2, '0');
+  const rec = attendance[`${empId}_${year}-${pad(month + 1)}-${pad(day)}`];
+  if (rec?.status) {
+    if (EARNED_STATUSES.has(rec.status)) return 'earned';
+    if (rec.status === 'absent') return 'absent';
+    return 'rest'; // explicit week_off / holiday
+  }
+  if (new Date(year, month, day).getDay() === 0) return 'rest';                  // Sunday
+  if (holidays.includes(`${year}-${pad(month + 1)}-${pad(day)}`)) return 'rest'; // holiday
+  return absenceCutoffPassed(day, year, month, now) ? 'absent' : 'neutral';
+}
+
+// Derives the effective attendance status for a day. Explicit markings win. An
+// unmarked weekday becomes Absent once its next-day-6am cutoff passes. A weekly-off
+// or holiday is paid only when anchored by an earned day (scanning outward past
+// adjacent rest days); absence on either side with no earned anchor forfeits it.
+function computeEffectiveStatus(empId, day, year, month, daysInMonth, attendance, holidays, now = Date.now()) {
+  const pad = n => String(n).padStart(2, '0');
+  const rec = attendance[`${empId}_${year}-${pad(month + 1)}-${pad(day)}`];
+  if (rec?.status) return rec.status; // explicit marking always wins
+
+  const isSunday  = new Date(year, month, day).getDay() === 0;
+  const isHoliday = holidays.includes(`${year}-${pad(month + 1)}-${pad(day)}`);
+
+  if (isSunday || isHoliday) {
+    const base = isSunday ? 'week_off' : 'holiday';
+    const scan = (step) => {
+      for (let d = day + step; d >= 1 && d <= daysInMonth; d += step) {
+        const cls = classifyDay(empId, d, year, month, attendance, holidays, now);
+        if (cls !== 'rest') return cls; // first decisive neighbor
+      }
+      return 'edge';
+    };
+    const left = scan(-1), right = scan(1);
+    if (left === 'earned' || right === 'earned') return base;      // anchored → paid
+    if (left === 'absent' || right === 'absent') return 'absent';  // forfeited → unpaid
+    return base;                                                   // no evidence → paid
   }
 
-  if (holidays.includes(`${year}-${pad(month + 1)}-${pad(day)}`)) return 'holiday';
-
-  return null;
+  // Regular weekday, unmarked: auto-absent once the marking window has closed.
+  return absenceCutoffPassed(day, year, month, now) ? 'absent' : null;
 }
 
 const fmt = (n) => '₹' + (Math.round(n || 0)).toLocaleString('en-IN');
@@ -998,7 +1033,11 @@ function computeSalary(emp, attendance, advances, selectedMonth, settings) {
   const gross = currentSalary * (effectiveDays / totalDays);
   const otPay = perHour * otHours;
   const advanceOutstanding = getAdvanceBalance(advances, emp.id);
-  const pt = emp.ptType === 'exempt' ? 0 : (emp.ptAmount || 0);
+  // PT is a deduction on earnings: never more than earned (so PT alone can't make
+  // net negative), and nil when nothing was earned.
+  const earnings = gross + otPay;
+  const rawPt = emp.ptType === 'exempt' ? 0 : (emp.ptAmount || 0);
+  const pt = Math.round(Math.min(rawPt, Math.max(earnings, 0)) * 100) / 100;
 
   return {
     empId: emp.id,
