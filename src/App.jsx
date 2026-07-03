@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Calculator, Sun, Moon, Box, Archive, FileText, Shield, LogOut, Database, Menu, X, DollarSign, LayoutDashboard, Image as ImageIcon } from 'lucide-react';
 import { auth, db, appId } from './lib/firebase';
 import { calculateBOM, generateId } from './lib/utils';
@@ -8,35 +8,39 @@ import { CONFIG } from './lib/config';
 import { getPermissions, ROLES } from './lib/permissions';
 
 
-// Components
-import InventoryManager from './components/InventoryManager';
-import InventoryLedger from './components/InventoryLedger';
-import SavedQuotesManager from './components/SavedQuotesManager';
-import QuoteCalculator from './components/QuoteCalculator';
-import UserManager from './components/UserManager';
-import ProjectManager from './components/ProjectManager';
-import BackupManager from './components/BackupManager';
-import GlobalSettings from './components/GlobalSettings';
+// Critical-path components (login screen and landing page) stay static.
 import Login from './components/Login';
 import Home from './components/Home';
-import TaskManager from './components/TaskManager';
-import ReportingTracker from './components/ReportingTracker';
-import CRMManager from './components/CRMManager';
-import MiscStockTracker from './components/MiscStockTracker';
-import CutListCalculator from './components/CutListCalculator';
-import QuoteImageManager from './components/QuoteImageManager';
+import ChunkErrorBoundary from './components/ChunkErrorBoundary';
+
+// Feature screens are lazy-loaded: each becomes its own chunk, downloaded on
+// first visit, so heavy deps (jspdf/html2canvas/exceljs) stay out of the entry bundle.
+const InventoryManager = lazy(() => import('./components/InventoryManager'));
+const InventoryLedger = lazy(() => import('./components/InventoryLedger'));
+const SavedQuotesManager = lazy(() => import('./components/SavedQuotesManager'));
+const QuoteCalculator = lazy(() => import('./components/QuoteCalculator'));
+const UserManager = lazy(() => import('./components/UserManager'));
+const ProjectManager = lazy(() => import('./components/ProjectManager'));
+const BackupManager = lazy(() => import('./components/BackupManager'));
+const GlobalSettings = lazy(() => import('./components/GlobalSettings'));
+const TaskManager = lazy(() => import('./components/TaskManager'));
+const ReportingTracker = lazy(() => import('./components/ReportingTracker'));
+const CRMManager = lazy(() => import('./components/CRMManager'));
+const MiscStockTracker = lazy(() => import('./components/MiscStockTracker'));
+const CutListCalculator = lazy(() => import('./components/CutListCalculator'));
+const QuoteImageManager = lazy(() => import('./components/QuoteImageManager'));
 
 // Signage Components
-import SignageCalculator from './components/SignageCalculator';
-import SignageInventoryManager from './components/SignageInventoryManager';
-import SignageQuotesManager from './components/SignageQuotesManager';
-import SignageLedger from './components/SignageLedger';
+const SignageCalculator = lazy(() => import('./components/SignageCalculator'));
+const SignageInventoryManager = lazy(() => import('./components/SignageInventoryManager'));
+const SignageQuotesManager = lazy(() => import('./components/SignageQuotesManager'));
+const SignageLedger = lazy(() => import('./components/SignageLedger'));
 
 // Payroll
-import AttendancePayroll from './components/AttendancePayroll';
+const AttendancePayroll = lazy(() => import('./components/AttendancePayroll'));
 
 // Structural Planner
-import StructuralPlanner from './components/StructuralPlanner';
+const StructuralPlanner = lazy(() => import('./components/StructuralPlanner'));
 
 
 // Maps legacy and new role strings to canonical ROLES values.
@@ -604,6 +608,12 @@ const App = () => {
       )}
 
       <main className="max-w-[1600px] mx-auto p-4 md:p-6">
+        <ChunkErrorBoundary>
+        <Suspense fallback={
+          <div className="flex items-center justify-center py-24">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+          </div>
+        }>
         {activeModule === 'home' && (
           <Home
             onSelectModule={(mod) => {
@@ -750,6 +760,8 @@ const App = () => {
             </div>
           </div>
         )}
+        </Suspense>
+        </ChunkErrorBoundary>
       </main>
     </div>
   );
