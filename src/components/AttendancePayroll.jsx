@@ -5,7 +5,8 @@ import {
   Users, Calendar, DollarSign, BarChart2, Plus, Edit2, Trash2, Save, X,
   ChevronLeft, ChevronRight, Settings, RefreshCw, TrendingUp, CreditCard,
   Clock, AlertCircle, CheckCircle2, Activity, Star, Camera, Upload,
-  ChevronDown, ChevronUp, Phone, MapPin, Droplets, ShieldCheck, Download
+  ChevronDown, ChevronUp, Phone, MapPin, Droplets, ShieldCheck, Download,
+  UserMinus, UserCheck, UserX
 } from 'lucide-react';
 
 // ─── Firestore helper ──────────────────────────────────────────────────────────
@@ -102,6 +103,25 @@ const getCurrentSalary = (emp) => {
   if (!emp) return 0;
   return (emp.baseSalary || 0) + (emp.incrementHistory || []).reduce((s, i) => s + (i.amount || 0), 0);
 };
+
+// ─── Employment status ─────────────────────────────────────────────────────────
+// Deactivating is the safe alternative to deleting someone who has left: their
+// record and every month they actually worked stay untouched, but they drop off
+// the attendance roster and payroll from the month after their last working day.
+const EMP_ACTIVE = 'active';
+const EMP_INACTIVE = 'inactive';
+
+// Records predate the status field, so a missing status means active.
+const isEmployeeActive = (emp) => (emp?.status || EMP_ACTIVE) !== EMP_INACTIVE;
+
+const ymOf = (date) => (date || '').slice(0, 7); // 'YYYY-MM-DD' → 'YYYY-MM'
+const ymLabel = (ym) => { const { year, month } = parseYM(ym); return `${MONTHS_LONG[month]} ${year}`; };
+
+// Is this person on the roster for the given month? Leavers stay on it up to and
+// including the month they left, so their final payslip is still computable. An
+// inactive record with no exit date (hand-edited in Firestore) is off it entirely.
+const isOnRosterFor = (emp, ym) =>
+  isEmployeeActive(emp) || (!!emp?.exitDate && ymOf(emp.exitDate) >= ym);
 
 const getAdvanceBalance = (advances, empId) =>
   advances.filter(a => a.employeeId === empId).reduce((bal, a) => a.type === 'advance' ? bal + (a.amount || 0) : bal - (a.amount || 0), 0);
@@ -443,34 +463,139 @@ function EmployeeModal({ emp, onClose }) {
   );
 }
 
+// ─── Deactivate Employee Modal ─────────────────────────────────────────────────
+// Captures the last working day rather than just flipping a flag: payroll needs
+// to know which month is the person's final one, and HR needs the date on record.
+function DeactivateModal({ emp, actor, onClose }) {
+  const [exitDate, setExitDate] = useState(emp.exitDate || new Date().toISOString().split('T')[0]);
+  const [reason, setReason] = useState(emp.exitReason || '');
+  const [saving, setSaving] = useState(false);
+
+  const droppedFrom = exitDate ? ymLabel(nextMonth(ymOf(exitDate))) : null;
+
+  const handleSave = async () => {
+    if (!exitDate) return alert('Last working day is required');
+    if (emp.joiningDate && exitDate < emp.joiningDate)
+      return alert('Last working day cannot be before the joining date');
+    setSaving(true);
+    try {
+      await COLL('payroll_employees').doc(emp.id).update({
+        status: EMP_INACTIVE,
+        exitDate,
+        exitReason: reason.trim(),
+        deactivatedAt: new Date(),
+        deactivatedBy: actor,
+        updatedAt: new Date(),
+      });
+      onClose();
+    } catch (e) { alert('Error: ' + e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <UserX size={18} className="text-amber-600" /> Deactivate {emp.name}
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <p>
+              Attendance, advances and past payslips are kept exactly as they are.
+              {droppedFrom && <> They are removed from the attendance roster and payroll from <strong>{droppedFrom}</strong> onwards.</>}
+            </p>
+          </div>
+
+          <div>
+            <label className={lbl}>Last Working Day *</label>
+            <input type="date" value={exitDate} onChange={e => setExitDate(e.target.value)} className={inp()} />
+          </div>
+
+          <div>
+            <label className={lbl}>Reason (optional)</label>
+            <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="Resigned, contract ended…" className={inp()} />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg disabled:opacity-50">
+            {saving ? <RefreshCw size={15} className="animate-spin" /> : <UserMinus size={15} />} Deactivate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Employee Tab ──────────────────────────────────────────────────────────────
-function EmployeeTab({ employees, perms = {} }) {
+function EmployeeTab({ employees, perms = {}, actor }) {
   const [modalEmp, setModalEmp] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [deactivateEmp, setDeactivateEmp] = useState(null);
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState(null);
+  const [reactivating, setReactivating] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(EMP_ACTIVE);
 
   const canAddEdit = !!perms['employee.addEdit'];
   const canDelete = !!perms['employee.delete'];
   const showActions = canAddEdit || canDelete;
 
-  const filtered = employees.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    (e.department || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const activeCount = employees.filter(isEmployeeActive).length;
+  const inactiveCount = employees.length - activeCount;
+
+  const filtered = employees.filter(e => {
+    if (statusFilter !== 'all' && (statusFilter === EMP_ACTIVE) !== isEmployeeActive(e)) return false;
+    const q = search.toLowerCase();
+    return e.name.toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q);
+  });
 
   const handleDelete = async (emp) => {
-    if (!window.confirm(`Delete ${emp.name}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${emp.name}? This erases their attendance and payroll history and cannot be undone.\n\nTo remove someone who has left the company, use Deactivate instead — it keeps the records.`)) return;
     setDeleting(emp.id);
     try { await COLL('payroll_employees').doc(emp.id).delete(); } catch (e) { alert(e.message); }
     setDeleting(null);
   };
 
+  const handleReactivate = async (emp) => {
+    if (!window.confirm(`Reactivate ${emp.name}? They go back on the attendance roster and payroll from this month.`)) return;
+    setReactivating(emp.id);
+    try {
+      await COLL('payroll_employees').doc(emp.id).update({
+        status: EMP_ACTIVE,
+        exitDate: '',
+        exitReason: '',
+        reactivatedAt: new Date(),
+        reactivatedBy: actor,
+        updatedAt: new Date(),
+      });
+    } catch (e) { alert(e.message); }
+    setReactivating(null);
+  };
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-        <input type="text" placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)}
-          className={inp('sm:w-64')} />
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <input type="text" placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)}
+            className={inp('sm:w-64')} />
+          <div className="flex gap-1 bg-slate-100 dark:bg-slate-700/50 p-1 rounded-lg self-start">
+            {[[EMP_ACTIVE, 'Active', activeCount], [EMP_INACTIVE, 'Left', inactiveCount], ['all', 'All', employees.length]].map(([id, label, count]) => (
+              <button key={id} onClick={() => setStatusFilter(id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-all
+                  ${statusFilter === id ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+        </div>
         {canAddEdit && (
           <button onClick={() => { setModalEmp(null); setShowModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg">
@@ -484,8 +609,8 @@ function EmployeeTab({ employees, perms = {} }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                {['Name','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT',...(showActions ? ['Actions'] : [])].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide ${h === 'Actions' ? 'text-center' : ['Base Salary','Current Salary'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+                {['Name','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT','Status',...(showActions ? ['Actions'] : [])].map(h => (
+                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide ${['Actions','Status'].includes(h) ? 'text-center' : ['Base Salary','Current Salary'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -493,8 +618,9 @@ function EmployeeTab({ employees, perms = {} }) {
               {filtered.map((emp) => {
                 const current = getCurrentSalary(emp);
                 const hasInc = (emp.incrementHistory || []).length > 0;
+                const active = isEmployeeActive(emp);
                 return (
-                  <tr key={emp.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <tr key={emp.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${active ? '' : 'opacity-60'}`}>
                     <td className="px-4 py-3 font-semibold dark:text-slate-100">{emp.name}</td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{emp.department || '—'}</td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{emp.joiningDate || '—'}</td>
@@ -509,24 +635,40 @@ function EmployeeTab({ employees, perms = {} }) {
                         ? <span className="text-xs text-slate-400">Exempt</span>
                         : <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{fmt(emp.ptAmount)}/mo</span>}
                     </td>
+                    <td className="px-4 py-3 text-center">
+                      {active ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Active</span>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                          title={emp.exitReason || undefined}>
+                          Left {emp.exitDate || '—'}
+                        </span>
+                      )}
+                    </td>
                     {showActions && (
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          {canAddEdit && <button onClick={() => { setModalEmp(emp); setShowModal(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-emerald-600"><Edit2 size={14} /></button>}
-                          {canDelete && <button onClick={() => handleDelete(emp)} disabled={deleting === emp.id} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-40"><Trash2 size={14} /></button>}
+                          {canAddEdit && <button onClick={() => { setModalEmp(emp); setShowModal(true); }} title="Edit" className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-emerald-600"><Edit2 size={14} /></button>}
+                          {canAddEdit && (active
+                            ? <button onClick={() => setDeactivateEmp(emp)} title="Deactivate — keeps their records but takes them off attendance & payroll" className="p-1.5 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg text-slate-400 hover:text-amber-600"><UserMinus size={14} /></button>
+                            : <button onClick={() => handleReactivate(emp)} disabled={reactivating === emp.id} title="Reactivate" className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-slate-400 hover:text-emerald-600 disabled:opacity-40"><UserCheck size={14} /></button>)}
+                          {canDelete && <button onClick={() => handleDelete(emp)} disabled={deleting === emp.id} title="Delete permanently" className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-40"><Trash2 size={14} /></button>}
                         </div>
                       </td>
                     )}
                   </tr>
                 );
               })}
-              {!filtered.length && <tr><td colSpan={showActions ? 8 : 7} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">No employees found</td></tr>}
+              {!filtered.length && <tr><td colSpan={showActions ? 9 : 8} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">
+                {statusFilter === EMP_INACTIVE && !search ? 'Nobody has been deactivated yet' : 'No employees found'}
+              </td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
       {showModal && <EmployeeModal emp={modalEmp} onClose={() => setShowModal(false)} />}
+      {deactivateEmp && <DeactivateModal emp={deactivateEmp} actor={actor} onClose={() => setDeactivateEmp(null)} />}
     </div>
   );
 }
@@ -729,7 +871,7 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
       {!employees.length ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
           <Users size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-          <p className="text-slate-500 dark:text-slate-400">No employees. Add employees first.</p>
+          <p className="text-slate-500 dark:text-slate-400">Nobody on the roster for this month. Add an employee, or reactivate one from the Employees tab.</p>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -877,7 +1019,7 @@ function AdvanceTab({ employees, advances }) {
           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3">Select Employee</h3>
           <select className={inp()} value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)}>
             <option value="">-- Choose Employee --</option>
-            {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {employees.map(e => <option key={e.id} value={e.id}>{e.name}{isEmployeeActive(e) ? '' : ' · left'}</option>)}
           </select>
 
           {selectedEmpId && (
@@ -2210,6 +2352,24 @@ export default function AttendancePayroll({ user, perms = {} }) {
     } catch (e) { alert('Error saving settings: ' + e.message); }
   };
 
+  const actor = user?.username || user?.name || 'user';
+
+  // Who attendance, payroll and the dashboard are about for the selected month.
+  // Leavers stay on it through their final month and drop off after it, so past
+  // months keep reading exactly as they did before anyone was deactivated.
+  const roster = useMemo(
+    () => employees.filter(e => isOnRosterFor(e, selectedMonth)),
+    [employees, selectedMonth]
+  );
+  const hiddenLeavers = employees.length - roster.length;
+
+  // Advances outlive employment: someone who left still owes or is owed until
+  // the balance is squared off, so keep them selectable while it is non-zero.
+  const advanceRoster = useMemo(() => {
+    const onRoster = new Set(roster.map(e => e.id));
+    return employees.filter(e => onRoster.has(e.id) || getAdvanceBalance(advances, e.id) !== 0);
+  }, [employees, roster, advances]);
+
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
     ...(perms['employee.view'] ? [{ id: 'employees', label: 'Employees', icon: Users }] : []),
@@ -2226,6 +2386,12 @@ export default function AttendancePayroll({ user, perms = {} }) {
         <div>
           <h1 className="text-xl font-black text-slate-800 dark:text-slate-100">Attendance & Payroll</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Track attendance, advances and compute monthly salaries</p>
+          {hiddenLeavers > 0 && activeTab !== 'employees' && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
+              <UserX size={12} />
+              {hiddenLeavers} former {hiddenLeavers === 1 ? 'employee' : 'employees'} hidden — they left before {ymLabel(selectedMonth)}
+            </p>
+          )}
         </div>
         <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
       </div>
@@ -2250,25 +2416,25 @@ export default function AttendancePayroll({ user, perms = {} }) {
       ) : (
         <>
           {activeTab === 'dashboard' && (
-            <DashboardTab employees={employees} attendance={attendance} advances={advances} salaries={salaries} selectedMonth={selectedMonth} settings={settings} />
+            <DashboardTab employees={roster} attendance={attendance} advances={advances} salaries={salaries} selectedMonth={selectedMonth} settings={settings} />
           )}
           {activeTab === 'employees' && perms['employee.view'] && (
-            <EmployeeTab employees={employees} perms={perms} />
+            <EmployeeTab employees={employees} perms={perms} actor={actor} />
           )}
           {activeTab === 'attendance' && (
             <AttendanceTab
-              employees={employees}
+              employees={roster}
               attendance={attendance}
               selectedMonth={selectedMonth}
               holidays={toDateStrings(settings.holidays?.[String(parseYM(selectedMonth).year)])}
             />
           )}
           {activeTab === 'advances' && perms['employee.advances'] && (
-            <AdvanceTab employees={employees} advances={advances} />
+            <AdvanceTab employees={advanceRoster} advances={advances} />
           )}
           {activeTab === 'salary' && perms['payroll.view'] && (
             <SalaryTab
-              employees={employees}
+              employees={roster}
               attendance={attendance}
               advances={advances}
               salaries={salaries}
