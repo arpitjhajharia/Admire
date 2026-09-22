@@ -53,22 +53,24 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], perms 
         return data;
     };
 
-    const handleAddTx = async () => {
+    const handleAddTx = () => {
         if (!newTx.itemId || !newTx.qty) return alert('Select Item and Qty');
         if (isProfileSelected && !newTx.lengthPerPiece) return alert('Length per piece is required for profiles');
         if (isProfileSelected && !newTx.finish) return alert('Finish is required for profiles');
         if (isAcpSelected && (!newTx.widthFt || !newTx.heightFt)) return alert('Width and Height are required for ACP sheets');
-        try {
-            const txData = buildTxData(newTx);
-            if (editingId) {
-                await col().doc(editingId).update({ ...txData, updatedAt: new Date() });
-                setEditingId(null);
-                setShowForm(false);
-            } else {
-                await col().add({ ...txData, createdAt: new Date() });
-            }
-            setNewTx(emptyTx());
-        } catch (e) { console.error(e); }
+        const txData = buildTxData(newTx);
+
+        // Fire the write and clear the form straight away — see InventoryLedger.
+        const write = editingId
+            ? col().doc(editingId).update({ ...txData, updatedAt: new Date() })
+            : col().add({ ...txData, createdAt: new Date() });
+        write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
+
+        if (editingId) {
+            setEditingId(null);
+            setShowForm(false);
+        }
+        setNewTx(emptyTx());
     };
 
     const handleEdit = (tx) => {

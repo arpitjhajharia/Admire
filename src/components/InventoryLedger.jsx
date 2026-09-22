@@ -10,21 +10,25 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all'); // 'all', 'in', 'out'
 
-    const handleAddTx = async () => {
+    const handleAddTx = () => {
         if (!newTx.itemId || !newTx.qty) return alert("Select Item and Qty");
-        try {
-            const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions');
+        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions');
 
-            if (editingId) {
-                await ref.doc(editingId).update({ ...newTx, qty: Number(newTx.qty), updatedAt: new Date() });
-                setEditingId(null);
-                setShowForm(false);
-            } else {
-                await ref.add({ ...newTx, qty: Number(newTx.qty), createdAt: new Date() });
-            }
-            // Reset form including batch
-            setNewTx({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '', batch: '' });
-        } catch (e) { console.error(e); }
+        // Fire the write and clear the form straight away. Firestore applies the
+        // write to its local cache immediately, so the row shows up at once and
+        // the next entry can be typed without waiting on the server. A rejected
+        // write rolls the row back on its own, so surface it rather than hiding it.
+        const write = editingId
+            ? ref.doc(editingId).update({ ...newTx, qty: Number(newTx.qty), updatedAt: new Date() })
+            : ref.add({ ...newTx, qty: Number(newTx.qty), createdAt: new Date() });
+        write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
+
+        if (editingId) {
+            setEditingId(null);
+            setShowForm(false);
+        }
+        // Reset form including batch
+        setNewTx({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '', batch: '' });
     };
 
     const handleEdit = (tx) => {

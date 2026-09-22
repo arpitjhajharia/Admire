@@ -200,25 +200,25 @@ const MiscStockTracker = ({ user, perms = {} }) => {
         } catch (e) { console.error(e); }
     };
 
-    const handleSaveTx = async () => {
+    const handleSaveTx = () => {
         if (!txForm.itemId || !txForm.qty) return alert("Select Item and Specify Quantity");
-        
-        try {
-            const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_transactions');
-            const data = { 
-                ...txForm, 
-                qty: Number(txForm.qty), 
-                updatedAt: new Date() 
-            };
-            if (editingTx) {
-                await ref.doc(editingTx.id).update(data);
-                setEditingTx(null);
-            } else {
-                await ref.add({ ...data, createdAt: new Date() });
-            }
-            setShowTxForm(false);
-            setTxForm({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '' });
-        } catch (e) { console.error(e); }
+
+        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_transactions');
+        const data = {
+            ...txForm,
+            qty: Number(txForm.qty),
+            updatedAt: new Date()
+        };
+
+        // Fire the write and close the form straight away — see InventoryLedger.
+        const write = editingTx
+            ? ref.doc(editingTx.id).update(data)
+            : ref.add({ ...data, createdAt: new Date() });
+        write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
+
+        if (editingTx) setEditingTx(null);
+        setShowTxForm(false);
+        setTxForm({ date: new Date().toISOString().split('T')[0], type: 'in', itemId: '', qty: '', remarks: '' });
     };
 
     const addSpec = () => {

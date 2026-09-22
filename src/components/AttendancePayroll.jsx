@@ -674,7 +674,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
 }
 
 // ─── Attendance Status Picker (fixed-position, never clipped) ─────────────────
-function StatusPicker({ picker, onSelect, onClear, onClose, currentStatus, otInput, setOtInput, onSaveOT, saving }) {
+function StatusPicker({ picker, onSelect, onClear, onClose, currentStatus, otInput, setOtInput, onSaveOT, saving = false }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -781,7 +781,20 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
 
   const [picker, setPicker] = useState(null);
   const [otInput, setOtInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
+  const saving = pendingWrites > 0;
+
+  // Fire the write and let the snapshot listener paint it. Firestore applies a
+  // write to its local cache straight away, so the cell shows the new status
+  // immediately; every attendance mark used to block on a server round trip
+  // before the picker would even close. A rejected write (permissions, bad data)
+  // rolls the cell back on its own, so surface it rather than swallowing it.
+  const trackWrite = (promise) => {
+    setPendingWrites(n => n + 1);
+    promise
+      .catch(e => { console.error(e); alert('Attendance not saved: ' + e.message); })
+      .finally(() => setPendingWrites(n => n - 1));
+  };
 
   const attKey = (empId, day) => `${empId}_${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const dateStr = (day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -792,23 +805,17 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
     computeEffectiveStatus(empId, day, year, month, daysInMonth, attendance, holidays);
   const isHoliday = (day) => holidays.includes(dateStr(day));
 
-  const writeStatus = async (empId, day, status, otHours = 0) => {
+  const writeStatus = (empId, day, status, otHours = 0) => {
     const key = attKey(empId, day);
-    setSaving(true);
-    try {
-      if (!status) {
-        await COLL('payroll_attendance').doc(key).delete();
-      } else {
-        await COLL('payroll_attendance').doc(key).set({
+    trackWrite(!status
+      ? COLL('payroll_attendance').doc(key).delete()
+      : COLL('payroll_attendance').doc(key).set({
           employeeId: empId,
           date: dateStr(day),
           status,
           otHours: status === 'ot' ? Number(otHours) : 0,
           updatedAt: new Date(),
-        });
-      }
-    } catch (e) { console.error(e); }
-    setSaving(false);
+        }));
   };
 
   const handleCellClick = (e, emp, day) => {
@@ -822,23 +829,23 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
     setOtInput(String(getOtH(emp.id, day) || ''));
   };
 
-  const handleSelect = async (status) => {
+  const handleSelect = (status) => {
     if (!picker) return;
     const { empId, day } = picker;
     const curOt = status === 'ot' ? (Number(otInput) || 0) : 0;
-    await writeStatus(empId, day, status, curOt);
+    writeStatus(empId, day, status, curOt);
     if (status !== 'ot') setPicker(null);
   };
 
-  const handleClear = async () => {
+  const handleClear = () => {
     if (!picker) return;
-    await writeStatus(picker.empId, picker.day, null);
+    writeStatus(picker.empId, picker.day, null);
     setPicker(null);
   };
 
-  const handleSaveOT = async () => {
+  const handleSaveOT = () => {
     if (!picker) return;
-    await writeStatus(picker.empId, picker.day, 'ot', Number(otInput) || 0);
+    writeStatus(picker.empId, picker.day, 'ot', Number(otInput) || 0);
     setPicker(null);
   };
 
@@ -864,9 +871,16 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
           </span>
         ))}
       </div>
-      <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-4 italic">
-        Sundays auto-apply Week Off. Dimmed cells are auto-derived (click to override). Paid holidays shown in amber.
-      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+          Sundays auto-apply Week Off. Dimmed cells are auto-derived (click to override). Paid holidays shown in amber.
+        </p>
+        {saving && (
+          <span className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+            <RefreshCw size={10} className="animate-spin" /> Saving…
+          </span>
+        )}
+      </div>
 
       {!employees.length ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
@@ -959,7 +973,6 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
           onClear={handleClear}
           onSaveOT={handleSaveOT}
           onClose={() => setPicker(null)}
-          saving={saving}
         />
       )}
     </div>
