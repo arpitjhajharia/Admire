@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Edit, Plus, Trash2, X, Search, Package, ChevronDown, ChevronRight } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { dataCol, dataDoc } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 
 const toMeters = (length, unit) => {
@@ -46,7 +47,7 @@ const SignageInventoryManager = ({ signageInventory = [], loading = false, trans
         if (!newItem.model) return alert("Model/Name is required.");
 
         try {
-            const collectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory');
+            const collectionRef = dataCol('signage_inventory');
 
             const itemData = {
                 ...newItem,
@@ -62,11 +63,11 @@ const SignageInventoryManager = ({ signageInventory = [], loading = false, trans
             };
 
             if (editingId) {
-                await collectionRef.doc(editingId).update(itemData);
+                await updateDoc(doc(collectionRef, editingId), itemData);
                 setEditingId(null);
                 setShowForm(false);
             } else {
-                await collectionRef.add({ ...itemData, createdAt: new Date() });
+                await addDoc(collectionRef, { ...itemData, createdAt: new Date() });
                 setNewItem(initialItemState);
                 alert("Signage Item Added!");
             }
@@ -85,7 +86,7 @@ const SignageInventoryManager = ({ signageInventory = [], loading = false, trans
 
     const handleDelete = async (id) => {
         if (confirm("Delete this item?")) {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory').doc(id).delete();
+            await deleteDoc(dataDoc('signage_inventory', id));
         }
     };
 

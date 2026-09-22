@@ -24,6 +24,7 @@ import {
 import { optimizeLinear, optimizeSheet } from '../utils/cutOptimizer';
 import { importFromExcel, downloadTemplate } from '../utils/excelImport';
 import { db } from '../lib/firebase';
+import { addDoc, collection } from 'firebase/firestore';
 
 const CutListCalculator = () => {
     const [mode, setMode] = useState('2D');
@@ -103,7 +104,7 @@ const CutListCalculator = () => {
         if (!results) return alert('No results to save. Calculate first.');
         setSaving(true);
         try {
-            await db.collection('cut_lists').add({
+            await addDoc(collection(db, 'cut_lists'), {
                 projectName,
                 mode,
                 stock,

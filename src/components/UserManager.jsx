@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db, appId, secondaryApp } from '../lib/firebase';
+import { secondaryAuth, dataDoc, dataCol } from '../lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { deleteDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { Trash2, UserPlus, Shield, Edit2, Save, X, Check, Users, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { RULES } from '../lib/permissions';
 
@@ -33,8 +35,7 @@ const UserManager = () => {
 
     // Load Users
     useEffect(() => {
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(dataCol('user_roles'), snap => {
                 const userList = snap.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
@@ -55,19 +56,19 @@ const UserManager = () => {
             let uid;
 
             try {
-                userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(email, newUser.password);
+                userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUser.password);
                 uid = userCredential.user.uid;
             } catch (authError) {
                 if (authError.code === 'auth/email-already-in-use') {
                     email = `${newUser.username.trim().toLowerCase()}_${Date.now()}@admire.internal`;
-                    userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(email, newUser.password);
+                    userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUser.password);
                     uid = userCredential.user.uid;
                 } else {
                     throw authError;
                 }
             }
 
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(uid).set({
+            await setDoc(dataDoc('user_roles', uid), {
                 username: newUser.username.trim(),
                 email: email,
                 role: newUser.role,
@@ -88,7 +89,7 @@ const UserManager = () => {
     const handleDeleteUser = async (userId, username) => {
         if (!confirm(`Are you sure you want to remove access for "${username}"?`)) return;
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userId).delete();
+            await deleteDoc(dataDoc('user_roles', userId));
         } catch (error) {
             console.error(error);
             alert("Error deleting user role: " + error.message);
@@ -110,10 +111,10 @@ const UserManager = () => {
         try {
             if (editPassword) {
                 let newEmail = `${editUsername.trim().toLowerCase()}_${Date.now()}@admire.internal`;
-                const userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(newEmail, editPassword);
+                const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, editPassword);
                 const newUid = userCredential.user.uid;
 
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(newUid).set({
+                await setDoc(dataDoc('user_roles', newUid), {
                     username: editUsername.trim(),
                     email: newEmail,
                     role: editRole,
@@ -121,9 +122,9 @@ const UserManager = () => {
                     createdAt: userObj.createdAt || new Date().toISOString()
                 });
 
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userObj.id).delete();
+                await deleteDoc(dataDoc('user_roles', userObj.id));
             } else {
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userObj.id).update({
+                await updateDoc(dataDoc('user_roles', userObj.id), {
                     username: editUsername.trim(),
                     role: editRole
                 });
@@ -139,7 +140,7 @@ const UserManager = () => {
         if (!pendingKey) return;
         setSavingOverride(true);
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userId).update({
+            await updateDoc(dataDoc('user_roles', userId), {
                 [`overrides.${pendingKey}`]: pendingVal
             });
             setPendingKey('');
@@ -157,7 +158,7 @@ const UserManager = () => {
         const newOverrides = { ...(userObj.overrides || {}) };
         delete newOverrides[key];
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(userId).update({
+            await updateDoc(dataDoc('user_roles', userId), {
                 overrides: newOverrides
             });
         } catch (err) {

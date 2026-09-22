@@ -1,5 +1,6 @@
 import React from 'react';
-import { db, appId } from '../lib/firebase';
+import { db, dataCol } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { ImagePlus, Trash2, X, CheckCircle2, Circle, Upload, Image as ImageIcon } from 'lucide-react';
 
 /**
@@ -39,14 +40,12 @@ const QuoteImageManager = ({
     const isPicker  = mode === 'picker';
 
     const COLLECTION = () =>
-        db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quote_images');
+        dataCol('quote_images');
 
     // ── Fetch ────────────────────────────────────────────────────────────────
     React.useEffect(() => {
         if (!user || !db) return;
-        const unsub = COLLECTION()
-            .orderBy('createdAt', 'desc')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(COLLECTION(), orderBy('createdAt', 'desc')), snap => {
                 setImages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setLoading(false);
             }, err => {
@@ -86,7 +85,7 @@ const QuoteImageManager = ({
                 if (!file.type.startsWith('image/')) continue;
                 const base64 = await toBase64(file);
                 const resized = await resizeImage(base64, 1200);
-                await COLLECTION().add({
+                await addDoc(COLLECTION(), {
                     name: file.name,
                     dataUrl: resized,
                     createdAt: new Date(),
@@ -105,7 +104,7 @@ const QuoteImageManager = ({
         if (!canDelete) return;
         if (!window.confirm('Delete this image from the library?')) return;
         try {
-            await COLLECTION().doc(id).delete();
+            await deleteDoc(doc(COLLECTION(), id));
             if (selectedIds.includes(id)) onSelectionChange?.(selectedIds.filter(x => x !== id));
         } catch (e) { console.error('Delete error:', e); }
     };

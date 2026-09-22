@@ -1,6 +1,7 @@
 // src/components/AttendancePayroll.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db, appId } from '../lib/firebase';
+import { dataCol } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import {
   Users, Calendar, DollarSign, BarChart2, Plus, Edit2, Trash2, Save, X,
   ChevronLeft, ChevronRight, Settings, RefreshCw, TrendingUp, CreditCard,
@@ -11,7 +12,7 @@ import {
 
 // ─── Firestore helper ──────────────────────────────────────────────────────────
 const COLL = (name) =>
-  db.collection('artifacts').doc(appId).collection('public').doc('data').collection(name);
+  dataCol(name);
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 const STATUS = {
@@ -226,8 +227,8 @@ function EmployeeModal({ emp, onClose }) {
     setSaving(true);
     try {
       const data = { ...form, baseSalary: Number(form.baseSalary), shiftHours: Number(form.shiftHours), ptAmount: Number(form.ptAmount), updatedAt: new Date() };
-      if (isNew) { data.createdAt = new Date(); await COLL('payroll_employees').add(data); }
-      else await COLL('payroll_employees').doc(emp.id).update(data);
+      if (isNew) { data.createdAt = new Date(); await addDoc(COLL('payroll_employees'), data); }
+      else await updateDoc(doc(COLL('payroll_employees'), emp.id), data);
       onClose();
     } catch (e) { alert('Error: ' + e.message); }
     setSaving(false);
@@ -479,7 +480,7 @@ function DeactivateModal({ emp, actor, onClose }) {
       return alert('Last working day cannot be before the joining date');
     setSaving(true);
     try {
-      await COLL('payroll_employees').doc(emp.id).update({
+      await updateDoc(doc(COLL('payroll_employees'), emp.id), {
         status: EMP_INACTIVE,
         exitDate,
         exitReason: reason.trim(),
@@ -560,7 +561,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
   const handleDelete = async (emp) => {
     if (!window.confirm(`Delete ${emp.name}? This erases their attendance and payroll history and cannot be undone.\n\nTo remove someone who has left the company, use Deactivate instead — it keeps the records.`)) return;
     setDeleting(emp.id);
-    try { await COLL('payroll_employees').doc(emp.id).delete(); } catch (e) { alert(e.message); }
+    try { await deleteDoc(doc(COLL('payroll_employees'), emp.id)); } catch (e) { alert(e.message); }
     setDeleting(null);
   };
 
@@ -568,7 +569,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
     if (!window.confirm(`Reactivate ${emp.name}? They go back on the attendance roster and payroll from this month.`)) return;
     setReactivating(emp.id);
     try {
-      await COLL('payroll_employees').doc(emp.id).update({
+      await updateDoc(doc(COLL('payroll_employees'), emp.id), {
         status: EMP_ACTIVE,
         exitDate: '',
         exitReason: '',
@@ -808,8 +809,8 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
   const writeStatus = (empId, day, status, otHours = 0) => {
     const key = attKey(empId, day);
     trackWrite(!status
-      ? COLL('payroll_attendance').doc(key).delete()
-      : COLL('payroll_attendance').doc(key).set({
+      ? deleteDoc(doc(COLL('payroll_attendance'), key))
+      : setDoc(doc(COLL('payroll_attendance'), key), {
           employeeId: empId,
           date: dateStr(day),
           status,
@@ -1003,7 +1004,7 @@ function AdvanceTab({ employees, advances }) {
     if (!form.amount || Number(form.amount) <= 0) return alert('Enter a valid amount');
     setSaving(true);
     try {
-      await COLL('payroll_advances').add({
+      await addDoc(COLL('payroll_advances'), {
         employeeId: selectedEmpId,
         employeeName: selectedEmp?.name || '',
         type: form.type,
@@ -1020,7 +1021,7 @@ function AdvanceTab({ employees, advances }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this entry?')) return;
     setDeleting(id);
-    try { await COLL('payroll_advances').doc(id).delete(); } catch (e) { alert(e.message); }
+    try { await deleteDoc(doc(COLL('payroll_advances'), id)); } catch (e) { alert(e.message); }
     setDeleting(null);
   };
 
@@ -1259,9 +1260,9 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       };
       const existing = savedIds[emp.id];
       if (existing) {
-        await COLL('payroll_salaries').doc(existing).update(data);
+        await updateDoc(doc(COLL('payroll_salaries'), existing), data);
       } else {
-        const ref = await COLL('payroll_salaries').add(data);
+        const ref = await addDoc(COLL('payroll_salaries'), data);
         setSavedIds(s => ({ ...s, [emp.id]: ref.id }));
       }
       setSaving(s => { const n = { ...s }; delete n[emp.id]; return n; });
@@ -1291,7 +1292,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       // ── Previous month net pays for MoM column ─────────────────────
       const prevNetMap = {};
       try {
-        const snap = await COLL('payroll_salaries').where('month','==',prevMonth(selectedMonth)).get();
+        const snap = await getDocs(query(COLL('payroll_salaries'), where('month', '==', prevMonth(selectedMonth))));
         snap.docs.forEach(d => { const v = d.data(); prevNetMap[v.employeeId] = v.net ?? null; });
       } catch { /* skip silently */ }
 
@@ -2320,16 +2321,16 @@ export default function AttendancePayroll({ user, perms = {} }) {
 
   // Employees & settings listener (persistent)
   useEffect(() => {
-    const unsubEmp = COLL('payroll_employees').orderBy('name').onSnapshot(snap => {
+    const unsubEmp = onSnapshot(query(COLL('payroll_employees'), orderBy('name')), snap => {
       setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoadingEmp(false);
     }, () => setLoadingEmp(false));
 
-    const unsubSettings = COLL('payroll_settings').doc('global').onSnapshot(doc => {
-      if (doc.exists) setSettings(doc.data());
+    const unsubSettings = onSnapshot(doc(COLL('payroll_settings'), 'global'), doc => {
+      if (doc.exists()) setSettings(doc.data());
     });
 
-    const unsubAdv = COLL('payroll_advances').orderBy('date').onSnapshot(snap => {
+    const unsubAdv = onSnapshot(query(COLL('payroll_advances'), orderBy('date')), snap => {
       setAdvances(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
@@ -2344,15 +2345,13 @@ export default function AttendancePayroll({ user, perms = {} }) {
     const start = `${year}-${mm}-01`;
     const end = `${year}-${mm}-${String(totalDays).padStart(2, '0')}`;
 
-    const unsubAtt = COLL('payroll_attendance')
-      .where('date', '>=', start).where('date', '<=', end)
-      .onSnapshot(snap => {
+    const unsubAtt = onSnapshot(query(COLL('payroll_attendance'), where('date', '>=', start), where('date', '<=', end)), snap => {
         const map = {};
         snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
         setAttendance(map);
       });
 
-    const unsubSal = COLL('payroll_salaries').where('month', '==', selectedMonth).onSnapshot(snap => {
+    const unsubSal = onSnapshot(query(COLL('payroll_salaries'), where('month', '==', selectedMonth)), snap => {
       setSalaries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
@@ -2361,7 +2360,7 @@ export default function AttendancePayroll({ user, perms = {} }) {
 
   const handleSaveSettings = async (newSettings) => {
     try {
-      await COLL('payroll_settings').doc('global').set(newSettings, { merge: true });
+      await setDoc(doc(COLL('payroll_settings'), 'global'), newSettings, { merge: true });
     } catch (e) { alert('Error saving settings: ' + e.message); }
   };
 

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Calculator, Sun, Moon, Box, Archive, FileText, Shield, LogOut, Database, Menu, X, DollarSign, LayoutDashboard, Image as ImageIcon } from 'lucide-react';
-import { auth, db, appId } from './lib/firebase';
+import { auth, db, dataCol, dataDoc } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { calculateBOM, generateId } from './lib/utils';
 import { getNextQuoteRef } from './lib/quotes';
 
@@ -132,14 +134,14 @@ const App = () => {
 
   // 1. Auth & Role Init
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
         const username = u.email ? u.email.split('@')[0].toLowerCase() : 'user';
         let role = 'labour';
 
         try {
-          const roleDoc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles').doc(u.uid).get();
-          if (roleDoc.exists) {
+          const roleDoc = await getDoc(dataDoc('user_roles', u.uid));
+          if (roleDoc.exists()) {
             role = roleDoc.data().role;
             setUserOverrides(roleDoc.data().overrides || {});
           } else if (username === 'admin') {
@@ -163,10 +165,10 @@ const App = () => {
   // 2. Data Loading
   useEffect(() => {
     if (!user || !db) return;
-    const unsubInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory').onSnapshot(snap => { setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setInventoryLoaded(true); });
-    const unsubTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions').onSnapshot(snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubSigInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory').onSnapshot(snap => { setSignageInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setSignageInventoryLoaded(true); });
-    const unsubSigTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_transactions').onSnapshot(snap => setSignageTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubInv = onSnapshot(dataCol('inventory'), snap => { setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setInventoryLoaded(true); });
+    const unsubTx = onSnapshot(dataCol('transactions'), snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubSigInv = onSnapshot(dataCol('signage_inventory'), snap => { setSignageInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setSignageInventoryLoaded(true); });
+    const unsubSigTx = onSnapshot(dataCol('signage_transactions'), snap => setSignageTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { unsubInv(); unsubTx(); unsubSigInv(); unsubSigTx(); };
   }, [user]);
 
@@ -176,9 +178,8 @@ const App = () => {
   // 4. Global Settings (Exchange Rate)
   useEffect(() => {
     if (!db || !user) return;
-    const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('settings').doc('global')
-      .onSnapshot(doc => {
-        if (doc.exists && doc.data().exchangeRate) {
+    const unsub = onSnapshot(dataDoc('settings', 'global'), doc => {
+        if (doc.exists() && doc.data().exchangeRate) {
           setExchangeRate(doc.data().exchangeRate);
         }
       });
@@ -194,7 +195,7 @@ const App = () => {
   }, [userRole, view]);
 
   const handleLogout = () => {
-    auth.signOut();
+    signOut(auth);
     setView('quote');
     setActiveModule('home');
     setUser(null);
@@ -276,12 +277,11 @@ const App = () => {
     }
 
     try {
-      const globalQuoteRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc();
+      const globalQuoteRef = doc(dataCol('quotes'));
       let crmQuoteRef = null;
 
       if (linkedClientId) {
-        crmQuoteRef = db.collection('artifacts').doc(appId).collection('public').doc('data')
-          .collection('crm_leads').doc(linkedClientId).collection('quotes').doc();
+        crmQuoteRef = doc(dataCol('crm_leads', linkedClientId, 'quotes'));
       }
 
       const quoteData = sanitizeForFirestore({
@@ -303,7 +303,7 @@ const App = () => {
       });
 
       // 1. Always save to the global quotes collection
-      await globalQuoteRef.set(quoteData);
+      await setDoc(globalQuoteRef, quoteData);
 
       // Update last saved state after success
       setLastSavedState(JSON.stringify(calcState));
@@ -340,7 +340,7 @@ const App = () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
-        await crmQuoteRef.set(crmQuoteData);
+        await setDoc(crmQuoteRef, crmQuoteData);
       }
 
       alert("Quote Saved Successfully!" + (linkedClientId ? "\nAlso linked to CRM Client." : ""));
@@ -395,8 +395,8 @@ const App = () => {
     // If not in CRM quote directly, try fetching via globalQuoteId
     if (!fullState && crmQuote.globalQuoteId) {
       try {
-        const globalDoc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc(crmQuote.globalQuoteId).get();
-        if (globalDoc.exists) {
+        const globalDoc = await getDoc(dataDoc('quotes', crmQuote.globalQuoteId));
+        if (globalDoc.exists()) {
           fullState = globalDoc.data().calculatorState;
         }
       } catch (e) {

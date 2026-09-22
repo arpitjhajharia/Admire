@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db, appId } from '../lib/firebase';
+import { dataDoc } from '../lib/firebase';
+import { onSnapshot, setDoc } from 'firebase/firestore';
 import { DollarSign, Save, Loader } from 'lucide-react';
 import { CONFIG } from '../lib/config';
 
@@ -11,9 +12,8 @@ const GlobalSettings = () => {
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('settings').doc('global')
-            .onSnapshot(doc => {
-                if (doc.exists) {
+        const unsub = onSnapshot(dataDoc('settings', 'global'), doc => {
+                if (doc.exists()) {
                     setExchangeRate(doc.data().exchangeRate || CONFIG.DEFAULTS.EXCHANGE_RATE);
                 }
             });
@@ -26,7 +26,7 @@ const GlobalSettings = () => {
         setLoading(true);
         setMessage('');
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('settings').doc('global').set({
+            await setDoc(dataDoc('settings', 'global'), {
                 exchangeRate: Number(exchangeRate),
                 updatedAt: new Date().toISOString()
             }, { merge: true });

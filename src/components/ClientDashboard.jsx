@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { db, appId } from '../lib/firebase';
+import { db, dataDoc } from '../lib/firebase';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import {
     ArrowLeft, Globe, MapPin, Phone, Mail,
     Plus, Edit2, CheckCircle2, MoreVertical, Trash2, X, Save,
@@ -35,12 +36,12 @@ const milestoneStatusStyle = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const baseRef = () => db.collection('artifacts').doc(appId).collection('public').doc('data');
-const leadRef = (leadId) => baseRef().collection('crm_leads').doc(leadId);
-const contactsRef = (leadId) => leadRef(leadId).collection('contacts');
-const quotesRef = (leadId) => leadRef(leadId).collection('quotes');
-const posRef = (leadId) => leadRef(leadId).collection('purchase_orders');
-const tasksRef = () => baseRef().collection('tasks');
+const baseRef = () => dataDoc();
+const leadRef = (leadId) => doc(baseRef(), 'crm_leads', leadId);
+const contactsRef = (leadId) => collection(leadRef(leadId), 'contacts');
+const quotesRef = (leadId) => collection(leadRef(leadId), 'quotes');
+const posRef = (leadId) => collection(leadRef(leadId), 'purchase_orders');
+const tasksRef = () => collection(baseRef(), 'tasks');
 
 const fmtDate = (val) => {
     if (!val) return '';
@@ -111,9 +112,9 @@ function ContactModal({ leadId, contact, onClose }) {
         try {
             const data = { name: form.name.trim(), role: form.role, phone: form.phone?.trim() || '', email: form.email?.trim() || '', updatedAt: new Date() };
             if (contact?.id) {
-                await contactsRef(leadId).doc(contact.id).update(data);
+                await updateDoc(doc(contactsRef(leadId), contact.id), data);
             } else {
-                await contactsRef(leadId).add({ ...data, createdAt: new Date() });
+                await addDoc(contactsRef(leadId), { ...data, createdAt: new Date() });
             }
             onClose();
         } catch (e) { console.error(e); }
@@ -211,10 +212,10 @@ function QuoteModal({ leadId, quote, onClose }) {
 
             if (quote?.id && !asNewVersion) {
                 // Edit original in place
-                await quotesRef(leadId).doc(quote.id).update(data);
+                await updateDoc(doc(quotesRef(leadId), quote.id), data);
             } else {
                 // New quote OR "Save as Version" — always creates a new doc (same ref = new version)
-                await quotesRef(leadId).add({ ...data, date: todayStr(), createdAt: new Date() });
+                await addDoc(quotesRef(leadId), { ...data, date: todayStr(), createdAt: new Date() });
             }
 
             onClose();
@@ -423,9 +424,9 @@ function POModal({ leadId, po, onClose }) {
                 updatedAt: new Date(),
             };
             if (po?.id) {
-                await posRef(leadId).doc(po.id).update(data);
+                await updateDoc(doc(posRef(leadId), po.id), data);
             } else {
-                await posRef(leadId).add({ ...data, createdAt: new Date() });
+                await addDoc(posRef(leadId), { ...data, createdAt: new Date() });
             }
             onClose();
         } catch (e) { console.error(e); }
@@ -612,7 +613,7 @@ function CompanyModal({ lead, onClose }) {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await leadRef(lead.id).update({
+            await updateDoc(leadRef(lead.id), {
                 companyName: form.companyName.trim(),
                 registeredName: form.registeredName.trim(),
                 website: form.website.trim(),
@@ -677,7 +678,7 @@ function TaskModal({ leadId, companyName, user, usersList, onClose }) {
         if (!form.title?.trim()) return;
         setSaving(true);
         try {
-            await tasksRef().add({
+            await addDoc(tasksRef(), {
                 title: form.title.trim(),
                 description: form.description?.trim() || '',
                 assignedTo: form.assignedTo,
@@ -764,28 +765,28 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
         let unsubs = [];
 
         // Live lead doc (for company edits)
-        unsubs.push(leadRef(leadId).onSnapshot(snap => {
-            if (snap.exists) setLead({ id: snap.id, ...snap.data() });
+        unsubs.push(onSnapshot(leadRef(leadId), snap => {
+            if (snap.exists()) setLead({ id: snap.id, ...snap.data() });
         }));
 
         // Contacts
-        unsubs.push(contactsRef(leadId).orderBy('createdAt', 'asc').onSnapshot(snap => {
+        unsubs.push(onSnapshot(query(contactsRef(leadId), orderBy('createdAt', 'asc')), snap => {
             setContacts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         }, () => setContacts([])));
 
         // Quotes (sorted newest first)
-        unsubs.push(quotesRef(leadId).orderBy('createdAt', 'desc').onSnapshot(snap => {
+        unsubs.push(onSnapshot(query(quotesRef(leadId), orderBy('createdAt', 'desc')), snap => {
             setQuotes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         }, () => { setQuotes([]); setLoading(false); }));
 
         // Purchase orders
-        unsubs.push(posRef(leadId).orderBy('createdAt', 'asc').onSnapshot(snap => {
+        unsubs.push(onSnapshot(query(posRef(leadId), orderBy('createdAt', 'asc')), snap => {
             setPos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         }, () => setPos([])));
 
         // Tasks filtered by clientId
-        unsubs.push(tasksRef().where('clientId', '==', leadId).onSnapshot(snap => {
+        unsubs.push(onSnapshot(query(tasksRef(), where('clientId', '==', leadId)), snap => {
             setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
                 if (a.status === 'done' && b.status !== 'done') return 1;
                 if (a.status !== 'done' && b.status === 'done') return -1;
@@ -794,7 +795,7 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
         }, () => setTasks([])));
 
         // Users list (for task assignment)
-        const unsubUsers = baseRef().collection('user_roles').onSnapshot(snap => {
+        const unsubUsers = onSnapshot(collection(baseRef(), 'user_roles'), snap => {
             setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.username || '').localeCompare(b.username || '')));
         }, () => setUsersList([]));
         unsubs.push(unsubUsers);
@@ -815,13 +816,13 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
 
     const toggleTask = useCallback(async (task) => {
         const newStatus = task.status === 'done' ? 'open' : 'done';
-        try { await tasksRef().doc(task.id).update({ status: newStatus, updatedAt: new Date() }); }
+        try { await updateDoc(doc(tasksRef(), task.id), { status: newStatus, updatedAt: new Date() }); }
         catch (e) { console.error(e); }
     }, []);
 
     const deleteContact = async (cid) => {
         if (!window.confirm('Delete this contact?')) return;
-        await contactsRef(leadId).doc(cid).delete();
+        await deleteDoc(doc(contactsRef(leadId), cid));
     };
 
     const deleteQuote = async (qid) => {
@@ -829,16 +830,15 @@ export default function ClientDashboard({ lead: initialLead, onBack, user, userR
         const qToDel = quotes.find(q => q.id === qid);
         if (qToDel && qToDel.globalQuoteId) {
             try {
-                await db.collection('artifacts').doc(appId).collection('public').doc('data')
-                    .collection('quotes').doc(qToDel.globalQuoteId).delete();
+                await deleteDoc(dataDoc('quotes', qToDel.globalQuoteId));
             } catch (err) { console.error("Error deleting global quote:", err); }
         }
-        await quotesRef(leadId).doc(qid).delete();
+        await deleteDoc(doc(quotesRef(leadId), qid));
     };
 
     const deletePO = async (pid) => {
         if (!window.confirm('Delete this purchase order?')) return;
-        await posRef(leadId).doc(pid).delete();
+        await deleteDoc(doc(posRef(leadId), pid));
     };
 
     // ── Group quotes by ref, auto-version by createdAt ──

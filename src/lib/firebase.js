@@ -1,7 +1,7 @@
 // src/lib/firebase.js
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
-import 'firebase/compat/firestore';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { initializeFirestore, collection, doc } from 'firebase/firestore';
 
 // Firebase config from environment variables
 const firebaseConfig = {
@@ -15,36 +15,42 @@ const firebaseConfig = {
 };
 
 // 1. Initialize the MAIN App
-let app;
-if (!firebase.apps.length) {
-    app = firebase.initializeApp(firebaseConfig);
-} else {
-    app = firebase.app();
-}
+const app = getApps().some(a => a.name === '[DEFAULT]') ? getApp() : initializeApp(firebaseConfig);
 
 // 2. Initialize the SECONDARY App (Required for User Manager)
 // This allows the Admin to create users without getting logged out themselves.
-const secondaryApp = !firebase.apps.find(a => a.name === 'secondary')
-    ? firebase.initializeApp(firebaseConfig, 'secondary')
-    : firebase.app('secondary');
+const secondaryApp = getApps().some(a => a.name === 'secondary')
+    ? getApp('secondary')
+    : initializeApp(firebaseConfig, 'secondary');
 
 // Exports
-export const auth = app.auth();
-export const db = app.firestore();
+export const auth = getAuth(app);
+export const secondaryAuth = getAuth(secondaryApp);
 
 // Fix for Firestore watch stream errors (ve:-1 / ID: ca9 / b815) caused by WebSocket multiplexer issues.
 // Force long polling outright: auto-detection re-runs a connection probe on every
 // fresh tab and can stall for ~30s+ before falling back on networks like this one.
 // (auto-detect defaults to true in newer SDKs and must be explicitly disabled
 // when forcing, or Firestore throws "cannot be used together" at startup)
-db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true });
+// This must be the first Firestore call for the app: ReportingTracker's
+// getStorage / firestore-lite instances hang off the same app.
+export const db = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: false,
+});
 
 // NOTE: IndexedDB persistence (enablePersistence) was tried and reverted — its
 // multi-tab coordination added 0.5–1s latency to every user action. Fast first
 // paint is handled instead by a one-shot firestore/lite REST fetch in views
 // that load large collections (plain HTTPS, bypasses the slow watch channel).
 
-export { secondaryApp };            // <--- Added this (Fixes the error)
 export const firebaseApp = app;
 export const appId = 'admire-signage-external'; // Preserved your ID
+
+// Every business collection lives under artifacts/{appId}/public/data.
+// dataCol('quotes') and dataDoc('settings', 'global') stand in for the old
+// db.collection('artifacts').doc(appId).collection('public').doc('data')... chains.
+export const dataCol = (...segments) => collection(db, 'artifacts', appId, 'public', 'data', ...segments);
+export const dataDoc = (...segments) => doc(db, 'artifacts', appId, 'public', 'data', ...segments);
+
 export default app;

@@ -15,7 +15,12 @@ export default defineConfig({
         // don't invalidate the user's cached copy of firebase/react.
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('firebase') || id.includes('@firebase')) return 'vendor-firebase';
+            if (id.includes('firebase') || id.includes('@firebase')) {
+              // Storage and firestore/lite are only used by the lazily-loaded
+              // Reporting Tracker; left out so they don't load on every page.
+              if (id.includes('/storage') || id.includes('/lite')) return;
+              return 'vendor-firebase';
+            }
             if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react';
           }
         },

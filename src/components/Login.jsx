@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { auth, db, appId } from '../lib/firebase';
+import { auth, dataCol } from '../lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { getDocs, query, where } from 'firebase/firestore';
 import { Lock, User } from 'lucide-react';
 
 const Login = () => {
@@ -15,9 +17,7 @@ const Login = () => {
 
             // Try to lookup the actual email from Firestore in case it has a unique suffix
             try {
-                const snapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles')
-                    .where('username', '==', formData.username.trim())
-                    .get();
+                const snapshot = await getDocs(query(dataCol('user_roles'), where('username', '==', formData.username.trim())));
                 if (!snapshot.empty && snapshot.docs[0].data().email) {
                     email = snapshot.docs[0].data().email;
                 }
@@ -25,7 +25,7 @@ const Login = () => {
                 console.warn("Could not lookup user email, falling back to default:", lookupErr);
             }
 
-            await auth.signInWithEmailAndPassword(email, formData.password);
+            await signInWithEmailAndPassword(auth, email, formData.password);
         } catch (err) {
             console.error(err);
             setError('Invalid credentials');

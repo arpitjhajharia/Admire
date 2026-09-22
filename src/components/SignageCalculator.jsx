@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, Save, Plus, Trash2, Cog, Zap, Copy, FileText, X, Printer } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { db, dataCol } from '../lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { formatCurrency, generateId } from '../lib/utils';
 import { getNextQuoteRef } from '../lib/quotes';
 import SignageBOMLayout from './SignageBOMLayout';
@@ -439,10 +440,8 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
     // --- FETCH DATA ---
     useEffect(() => {
         if (!db) return;
-        const unsubInv = db.collection('artifacts').doc(appId).collection('public').doc('data')
-            .collection('signage_inventory').onSnapshot(snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        const unsubCrm = db.collection('artifacts').doc(appId).collection('public').doc('data')
-            .collection('crm_leads').onSnapshot(snap => setCrmClients(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.companyName || '').localeCompare(b.companyName || ''))));
+        const unsubInv = onSnapshot(dataCol('signage_inventory'), snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubCrm = onSnapshot(dataCol('crm_leads'), snap => setCrmClients(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.companyName || '').localeCompare(b.companyName || ''))));
         return () => { unsubInv(); unsubCrm(); };
     }, []);
 
@@ -623,7 +622,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
         }
         const totalAmount = allScreensTotal?.totalProjectSell ?? calculation?.finalSellPrice ?? 0;
         try {
-            const globalRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_quotes').doc();
+            const globalRef = doc(dataCol('signage_quotes'));
             const payload = {
                 client: state.client, clientId: state.clientId,
                 project: state.project, ref: currentRef,
@@ -633,11 +632,10 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                 createdBy: user?.email || user?.uid || 'Unknown User',
                 totalAmount
             };
-            await globalRef.set(payload);
+            await setDoc(globalRef, payload);
             if (state.clientId) {
-                const crmRef = db.collection('artifacts').doc(appId).collection('public').doc('data')
-                    .collection('crm_leads').doc(state.clientId).collection('quotes').doc();
-                await crmRef.set({ ...payload, globalQuoteId: globalRef.id, status: 'Sent', date: new Date().toISOString().split('T')[0], amount: totalAmount, subtotal: totalAmount, calculatorRef: 'signage' });
+                const crmRef = doc(dataCol('crm_leads', state.clientId, 'quotes'));
+                await setDoc(crmRef, { ...payload, globalQuoteId: globalRef.id, status: 'Sent', date: new Date().toISOString().split('T')[0], amount: totalAmount, subtotal: totalAmount, calculatorRef: 'signage' });
             }
             alert(`Signage Quote ${currentRef} saved successfully!`);
         } catch (e) {

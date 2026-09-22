@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, appId } from '../lib/firebase';
+import { db, dataCol, dataDoc } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import {
     Plus,
     Trash2,
@@ -88,12 +89,12 @@ const TaskManager = ({ user, perms = {} }) => {
     useEffect(() => {
         if (!user || !db) return;
 
-        const tasksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('tasks');
-        const usersRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('user_roles');
-        const projectsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects');
-        const clientsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('crm_leads');
+        const tasksRef = dataCol('tasks');
+        const usersRef = dataCol('user_roles');
+        const projectsRef = dataCol('projects');
+        const clientsRef = dataCol('crm_leads');
 
-        const unsubTasks = tasksRef.orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        const unsubTasks = onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snapshot) => {
             const tasksData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -105,7 +106,7 @@ const TaskManager = ({ user, perms = {} }) => {
             setLoading(false);
         });
 
-        const unsubUsers = usersRef.onSnapshot((snapshot) => {
+        const unsubUsers = onSnapshot(usersRef, (snapshot) => {
             const usersData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -115,7 +116,7 @@ const TaskManager = ({ user, perms = {} }) => {
             console.error("Error fetching users:", error);
         });
 
-        const unsubProjects = projectsRef.onSnapshot((snapshot) => {
+        const unsubProjects = onSnapshot(projectsRef, (snapshot) => {
             const projectsData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -125,7 +126,7 @@ const TaskManager = ({ user, perms = {} }) => {
             console.error("Error fetching projects:", error);
         });
 
-        const unsubClients = clientsRef.onSnapshot((snapshot) => {
+        const unsubClients = onSnapshot(clientsRef, (snapshot) => {
             const clientsData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -207,14 +208,14 @@ const TaskManager = ({ user, perms = {} }) => {
         };
 
         try {
-            const tasksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('tasks');
+            const tasksRef = dataCol('tasks');
 
             if (editingTask && editingTask.id !== 'new') {
-                await tasksRef.doc(editingTask.id).update(taskData);
+                await updateDoc(doc(tasksRef, editingTask.id), taskData);
             } else {
                 taskData.createdAt = new Date();
                 taskData.createdBy = (user && user.email) ? user.email : 'unknown';
-                await tasksRef.add(taskData);
+                await addDoc(tasksRef, taskData);
             }
             cancelEdit();
         } catch (error) {
@@ -226,7 +227,7 @@ const TaskManager = ({ user, perms = {} }) => {
     const handleDeleteTask = async (id) => {
         if (!window.confirm("Are you sure you want to delete this task?")) return;
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('tasks').doc(id).delete();
+            await deleteDoc(dataDoc('tasks', id));
         } catch (error) {
             console.error("Error deleting task:", error);
         }
@@ -234,7 +235,7 @@ const TaskManager = ({ user, perms = {} }) => {
 
     const updateTaskStatus = async (id, newStatus) => {
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('tasks').doc(id).update({
+            await updateDoc(dataDoc('tasks', id), {
                 status: newStatus,
                 updatedAt: new Date()
             });

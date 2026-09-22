@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Edit, Plus, Trash2, X, Layers, Search, Package, ChevronDown, ChevronUp } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { dataCol, dataDoc } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { formatCurrency, formatComponentSpecs } from '../lib/utils';
 
 const InventoryManager = ({ inventory = [], loading = false, transactions = [], exchangeRate = 1, perms = {} }) => {
@@ -94,7 +95,7 @@ const InventoryManager = ({ inventory = [], loading = false, transactions = [], 
         }
 
         try {
-            const collectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory');
+            const collectionRef = dataCol('inventory');
 
             const itemData = {
                 ...newItem,
@@ -128,11 +129,11 @@ const InventoryManager = ({ inventory = [], loading = false, transactions = [], 
             };
 
             if (editingId) {
-                await collectionRef.doc(editingId).update(itemData);
+                await updateDoc(doc(collectionRef, editingId), itemData);
                 setEditingId(null);
                 setShowForm(false);
             } else {
-                await collectionRef.add({ ...itemData, createdAt: new Date() });
+                await addDoc(collectionRef, { ...itemData, createdAt: new Date() });
                 setNewItem({
                     type: newItem.type,
                     brand: '', series: '', model: '', vendor: '', pitch: '',
@@ -181,7 +182,7 @@ const InventoryManager = ({ inventory = [], loading = false, transactions = [], 
 
     const handleDelete = async (id) => {
         if (confirm("Delete this item?")) {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory').doc(id).delete();
+            await deleteDoc(dataDoc('inventory', id));
         }
     };
 

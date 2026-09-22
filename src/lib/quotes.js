@@ -1,4 +1,5 @@
-import { db, appId } from './firebase';
+import { db, dataDoc } from './firebase';
+import { runTransaction } from 'firebase/firestore';
 import { getFinancialYear, formatQuoteRef } from './utils';
 
 /**
@@ -7,14 +8,13 @@ import { getFinancialYear, formatQuoteRef } from './utils';
  */
 export const getNextQuoteRef = async () => {
     const fy = getFinancialYear();
-    const countersRef = db.collection('artifacts').doc(appId).collection('public')
-        .doc('data').collection('settings').doc('counters');
+    const countersRef = dataDoc('settings', 'counters');
 
-    return await db.runTransaction(async (transaction) => {
+    return await runTransaction(db, async (transaction) => {
         const doc = await transaction.get(countersRef);
         let nextSeq = 51; // Start at 051 as requested
 
-        if (doc.exists) {
+        if (doc.exists()) {
             const data = doc.data();
             const quotes = data.quotes || {};
             // If sequence exists for CURRENT financial year, increment it.

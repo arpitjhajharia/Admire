@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { dataCol, dataDoc } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
 const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
     // 1. Updated State to include 'batch'
@@ -12,15 +13,15 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
 
     const handleAddTx = () => {
         if (!newTx.itemId || !newTx.qty) return alert("Select Item and Qty");
-        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions');
+        const ref = dataCol('transactions');
 
         // Fire the write and clear the form straight away. Firestore applies the
         // write to its local cache immediately, so the row shows up at once and
         // the next entry can be typed without waiting on the server. A rejected
         // write rolls the row back on its own, so surface it rather than hiding it.
         const write = editingId
-            ? ref.doc(editingId).update({ ...newTx, qty: Number(newTx.qty), updatedAt: new Date() })
-            : ref.add({ ...newTx, qty: Number(newTx.qty), createdAt: new Date() });
+            ? updateDoc(doc(ref, editingId), { ...newTx, qty: Number(newTx.qty), updatedAt: new Date() })
+            : addDoc(ref, { ...newTx, qty: Number(newTx.qty), createdAt: new Date() });
         write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
 
         if (editingId) {
@@ -47,7 +48,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
 
     const handleDelete = async (id) => {
         if (confirm('Delete record?')) {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions').doc(id).delete();
+            await deleteDoc(dataDoc('transactions', id));
         }
     };
 

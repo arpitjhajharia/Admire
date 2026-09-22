@@ -1,6 +1,7 @@
 import React from 'react';
 import { Eye, Printer, Trash2, FileText, Download, Copy, Edit, Box, Monitor, Sun, Search, ChevronDown, ChevronRight, Layers } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { db, dataDoc, dataCol } from '../lib/firebase';
+import { deleteDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { formatCurrency, calculateBOM, generateId } from '../lib/utils';
 import PrintLayout from './PrintLayout';
 import BOMLayout from './BOMLayout';
@@ -256,9 +257,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
 
     React.useEffect(() => {
         if (!user || !db) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quote_images')
-            .orderBy('createdAt', 'desc')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(dataCol('quote_images'), orderBy('createdAt', 'desc')), snap => {
                 setAllQuoteImages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }, err => console.error('quote_images fetch error:', err));
         return () => unsub();
@@ -310,9 +309,7 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
 
     React.useEffect(() => {
         if (!user) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes')
-            .orderBy('updatedAt', 'desc')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(dataCol('quotes'), orderBy('updatedAt', 'desc')), snap => {
                 setQuotes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
         return () => unsub();
@@ -325,11 +322,10 @@ const SavedQuotesManager = ({ user, inventory, transactions, exchangeRate, onLoa
             const qToDel = quotes.find(q => q.id === id);
             if (qToDel && qToDel.crmQuoteId && qToDel.clientId) {
                 try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data')
-                        .collection('crm_leads').doc(qToDel.clientId).collection('quotes').doc(qToDel.crmQuoteId).delete();
+                    await deleteDoc(dataDoc('crm_leads', qToDel.clientId, 'quotes', qToDel.crmQuoteId));
                 } catch (err) { console.error("Error deleting CRM quote version:", err); }
             }
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quotes').doc(id).delete();
+            await deleteDoc(dataDoc('quotes', id));
         }
     };
 

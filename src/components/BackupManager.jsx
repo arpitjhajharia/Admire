@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db, appId } from '../lib/firebase';
+import { db, appId, dataDoc } from '../lib/firebase';
+import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import { Save, RotateCcw, AlertTriangle, Check, Loader, Clock, ShieldCheck, Database } from 'lucide-react';
 
 const BackupManager = () => {
@@ -10,10 +11,7 @@ const BackupManager = () => {
     // 1. Load Backups & Check Freshness
     useEffect(() => {
         // Load last 20 backups to give good visibility
-        const unsub = db.collection('artifacts').doc(appId).collection('private').doc('system').collection('backups')
-            .orderBy('timestamp', 'desc')
-            .limit(20)
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(collection(db, 'artifacts', appId, 'private', 'system', 'backups'), orderBy('timestamp', 'desc'), limit(20)), snap => {
                 const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setBackups(data);
 
@@ -30,12 +28,12 @@ const BackupManager = () => {
 
     // Helper: Fetch Full Database
     const fetchFullDatabase = async () => {
-        const baseRef = db.collection('artifacts').doc(appId).collection('public').doc('data');
+        const baseRef = dataDoc();
         const [inventory, quotes, transactions, roles] = await Promise.all([
-            baseRef.collection('inventory').get(),
-            baseRef.collection('quotes').get(),
-            baseRef.collection('transactions').get(),
-            baseRef.collection('user_roles').get()
+            getDocs(collection(baseRef, 'inventory')),
+            getDocs(collection(baseRef, 'quotes')),
+            getDocs(collection(baseRef, 'transactions')),
+            getDocs(collection(baseRef, 'user_roles'))
         ]);
 
         return {
@@ -60,8 +58,8 @@ const BackupManager = () => {
         const timestampId = payload.timestamp.replace(/[:.]/g, '-');
         const docId = isSafety ? `SAFETY-${timestampId}` : timestampId;
 
-        const baseRef = db.collection('artifacts').doc(appId).collection('private').doc('system').collection('backups');
-        const backupRef = baseRef.doc(docId);
+        const baseRef = collection(db, 'artifacts', appId, 'private', 'system', 'backups');
+        const backupRef = doc(baseRef, docId);
 
         const dataStr = JSON.stringify(payload.data);
         
@@ -73,7 +71,7 @@ const BackupManager = () => {
         }
 
         // 1. Save Main Doc (Metadata Only)
-        await backupRef.set({
+        await setDoc(backupRef, {
             timestamp: payload.timestamp,
             stats: payload.stats,
             isSafetySnapshot: isSafety,
@@ -84,10 +82,10 @@ const BackupManager = () => {
         // 2. Save Chunks to sub-collection
         const batchSize = 20; // Small batches for chunks
         for (let i = 0; i < chunks.length; i += batchSize) {
-            const batch = db.batch();
+            const batch = writeBatch(db);
             const slice = chunks.slice(i, i + batchSize);
             slice.forEach((chunkData, index) => {
-                const chunkRef = backupRef.collection('chunks').doc((i + index).toString().padStart(3, '0'));
+                const chunkRef = doc(backupRef, 'chunks', (i + index).toString().padStart(3, '0'));
                 batch.set(chunkRef, { data: chunkData, index: i + index });
             });
             await batch.commit();
@@ -135,35 +133,35 @@ const BackupManager = () => {
             
             if (!payloadString) {
                 console.log("Fetching backup chunks...");
-                const backupRef = db.collection('artifacts').doc(appId).collection('private').doc('system').collection('backups').doc(backup.id);
-                const chunksSnap = await backupRef.collection('chunks').orderBy('index').get();
+                const backupRef = doc(db, 'artifacts', appId, 'private', 'system', 'backups', backup.id);
+                const chunksSnap = await getDocs(query(collection(backupRef, 'chunks'), orderBy('index')));
                 payloadString = chunksSnap.docs.map(d => d.data().data).join('');
             }
 
             if (!payloadString) throw new Error("Backup data is empty or missing.");
 
             const data = JSON.parse(payloadString);
-            const baseRef = db.collection('artifacts').doc(appId).collection('public').doc('data');
+            const baseRef = dataDoc();
 
             // Helper to batch write chunks (500 limit)
-            const writeBatch = async (collectionName, items) => {
+            const restoreCollection = async (collectionName, items) => {
                 if (!items) return;
                 const chunks = [];
                 for (let i = 0; i < items.length; i += 400) chunks.push(items.slice(i, i + 400));
                 for (const chunk of chunks) {
-                    const batch = db.batch();
+                    const batch = writeBatch(db);
                     chunk.forEach(item => {
-                        const ref = baseRef.collection(collectionName).doc(item.id);
+                        const ref = doc(baseRef, collectionName, item.id);
                         batch.set(ref, item);
                     });
                     await batch.commit();
                 }
             };
 
-            await writeBatch('inventory', data.inventory);
-            await writeBatch('transactions', data.transactions);
-            await writeBatch('quotes', data.quotes);
-            await writeBatch('user_roles', data.user_roles);
+            await restoreCollection('inventory', data.inventory);
+            await restoreCollection('transactions', data.transactions);
+            await restoreCollection('quotes', data.quotes);
+            await restoreCollection('user_roles', data.user_roles);
 
             alert("System Restored. A 'Safety Snapshot' of your previous data was created just in case.");
             window.location.reload();
@@ -180,25 +178,23 @@ const BackupManager = () => {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const oldBackupsSnap = await db.collection('artifacts').doc(appId).collection('private').doc('system').collection('backups')
-            .where('timestamp', '<', thirtyDaysAgo.toISOString())
-            .get();
+        const oldBackupsSnap = await getDocs(query(collection(db, 'artifacts', appId, 'private', 'system', 'backups'), where('timestamp', '<', thirtyDaysAgo.toISOString())));
 
         if (oldBackupsSnap.empty) return;
 
-        for (const doc of oldBackupsSnap.docs) {
+        for (const backupSnap of oldBackupsSnap.docs) {
             try {
                 // 1. Delete chunks sub-collection
-                const chunksSnap = await doc.ref.collection('chunks').get();
+                const chunksSnap = await getDocs(collection(backupSnap.ref, 'chunks'));
                 if (!chunksSnap.empty) {
-                    const chunkBatch = db.batch();
+                    const chunkBatch = writeBatch(db);
                     chunksSnap.forEach(c => chunkBatch.delete(c.ref));
                     await chunkBatch.commit();
                 }
                 // 2. Delete main doc
-                await doc.ref.delete();
+                await deleteDoc(backupSnap.ref);
             } catch (err) {
-                console.warn(`Failed to delete backup ${doc.id}:`, err);
+                console.warn(`Failed to delete backup ${backupSnap.id}:`, err);
             }
         }
         console.log(`Cleaned up ${oldBackupsSnap.size} old backups.`);

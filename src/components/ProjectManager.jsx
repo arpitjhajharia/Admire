@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db, appId } from '../lib/firebase';
+import { dataDoc, dataCol } from '../lib/firebase';
+import { addDoc, deleteDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Trash2, Plus, Briefcase, X, Edit2, Save } from 'lucide-react';
 
 const ProjectManager = ({ user }) => {
@@ -16,8 +17,7 @@ const ProjectManager = ({ user }) => {
 
     // Load Projects
     useEffect(() => {
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(dataCol('projects'), snap => {
                 const projectList = snap.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
@@ -32,7 +32,7 @@ const ProjectManager = ({ user }) => {
 
         setLoading(true);
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects').add({
+            await addDoc(dataCol('projects'), {
                 name: newProject.trim().toUpperCase(),
                 createdAt: new Date().toISOString()
             });
@@ -52,7 +52,7 @@ const ProjectManager = ({ user }) => {
         if (!confirm(`Are you sure you want to delete project "${projectName}"?`)) return;
 
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects').doc(projectId).delete();
+            await deleteDoc(dataDoc('projects', projectId));
         } catch (error) {
             console.error(error);
             alert("Error deleting project: " + error.message);
@@ -67,7 +67,7 @@ const ProjectManager = ({ user }) => {
     const saveEdit = async (projectId) => {
         if (!editName || !editName.trim()) return alert("Project name cannot be empty.");
         try {
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects').doc(projectId).update({
+            await updateDoc(dataDoc('projects', projectId), {
                 name: editName.trim().toUpperCase()
             });
             setEditingId(null);

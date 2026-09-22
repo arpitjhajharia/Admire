@@ -2,7 +2,8 @@ import React from 'react';
 import { Calculator, Settings, Printer, Plus, Trash2, Monitor, DollarSign, Box, Wrench, Percent, Edit, Copy, Save, FileText, Eye, RefreshCw, X, Users, Image as ImageIcon } from 'lucide-react';
 import { formatCurrency, generateId, calculateBOM, formatComponentSpecs } from '../lib/utils';
 import { CONFIG } from '../lib/config';
-import { db, appId } from '../lib/firebase';
+import { db, appId, dataCol } from '../lib/firebase';
+import { onSnapshot, orderBy, query } from 'firebase/firestore';
 import ScreenVisualizer from './ScreenVisualizer';
 import BOMLayout from './BOMLayout';
 import PrintLayout from './PrintLayout';
@@ -743,9 +744,7 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
     // Fetch the image library so we can resolve IDs → full objects for PrintLayout
     React.useEffect(() => {
         if (!db) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('quote_images')
-            .orderBy('createdAt', 'desc')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(dataCol('quote_images'), orderBy('createdAt', 'desc')), snap => {
                 setAllQuoteImages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }, err => console.error('quote_images fetch error:', err));
         return () => unsub();
@@ -760,8 +759,8 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
     // Fetch CRM leads for the Client dropdown
     React.useEffect(() => {
         if (!db) return;
-        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('crm_leads');
-        const unsub = ref.onSnapshot(snap => {
+        const ref = dataCol('crm_leads');
+        const unsub = onSnapshot(ref, snap => {
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                 .sort((a, b) => (a.companyName || '').localeCompare(b.companyName || ''));
             setCrmClients(data);

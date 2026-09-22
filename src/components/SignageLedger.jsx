@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { dataCol } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 
 const finishLabel = (f) => ({ raw: 'Raw', powder_coated: 'Powder Coated', anodised: 'Anodised' }[f] || f || '');
@@ -26,7 +27,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], perms 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
 
-    const col = () => db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_transactions');
+    const col = () => dataCol('signage_transactions');
 
     const selectedItem = signageInventory.find(i => i.id === newTx.itemId);
     const isProfileSelected = selectedItem?.type === 'profile';
@@ -62,8 +63,8 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], perms 
 
         // Fire the write and clear the form straight away — see InventoryLedger.
         const write = editingId
-            ? col().doc(editingId).update({ ...txData, updatedAt: new Date() })
-            : col().add({ ...txData, createdAt: new Date() });
+            ? updateDoc(doc(col(), editingId), { ...txData, updatedAt: new Date() })
+            : addDoc(col(), { ...txData, createdAt: new Date() });
         write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
 
         if (editingId) {
@@ -99,7 +100,7 @@ const SignageLedger = ({ signageInventory = [], signageTransactions = [], perms 
 
     const handleDelete = async (id) => {
         if (confirm('Delete record?')) {
-            await col().doc(id).delete();
+            await deleteDoc(doc(col(), id));
         }
     };
 

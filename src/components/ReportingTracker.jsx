@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { getFirestore, collection, doc, getDoc, getDocFromCache, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocFromCache, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
 import { getFirestore as getLiteFirestore, collection as liteCollection, getDocs as liteGetDocs } from 'firebase/firestore/lite';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { firebaseApp, appId } from '../lib/firebase';
-const db = getFirestore(firebaseApp);
+import { db, firebaseApp, appId } from '../lib/firebase';
 const storage = getStorage(firebaseApp);
 
 // REST-based Firestore (plain HTTPS, no realtime channel). The watch channel

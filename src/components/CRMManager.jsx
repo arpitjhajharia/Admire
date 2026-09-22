@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, appId } from '../lib/firebase';
+import { db, dataDoc } from '../lib/firebase';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import {
     Plus, Trash2, X, Save, Search,
     ChevronDown, ChevronUp, ArrowUpDown, MapPin, 
@@ -242,18 +243,16 @@ const CRMManager = ({ user, onOpenLEDCalculator, perms = {} }) => {
     const canEdit = perms['crm.editMove'];
     const canCreate = perms['crm.create'];
     const canDelete = perms['crm.delete'];
-    const baseRef = () => db.collection('artifacts').doc(appId).collection('public').doc('data');
+    const baseRef = () => dataDoc();
 
     useEffect(() => {
         if (!user || !db) return;
-        const unsubLeads = baseRef().collection('crm_leads')
-            .onSnapshot(snap => {
+        const unsubLeads = onSnapshot(collection(baseRef(), 'crm_leads'), snap => {
                 setLeads(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setLoading(false);
             }, err => { console.error(err); setLoading(false); });
 
-        const unsubUsers = baseRef().collection('user_roles')
-            .onSnapshot(snap => {
+        const unsubUsers = onSnapshot(collection(baseRef(), 'user_roles'), snap => {
                 setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.username || '').localeCompare(b.username || '')));
             });
         return () => { unsubLeads(); unsubUsers(); };
@@ -271,13 +270,13 @@ const CRMManager = ({ user, onOpenLEDCalculator, perms = {} }) => {
             assignedTo: form.assignedTo || '',
             updatedAt: new Date(),
         };
-        const ref = baseRef().collection('crm_leads');
+        const ref = collection(baseRef(), 'crm_leads');
         if (editingLead?.id) {
-            await ref.doc(editingLead.id).update(data);
+            await updateDoc(doc(ref, editingLead.id), data);
         } else {
             data.createdAt = new Date();
             data.createdBy = user.username || user.email;
-            await ref.add(data);
+            await addDoc(ref, data);
         }
         setShowForm(false);
         setEditingLead(null);
@@ -285,11 +284,11 @@ const CRMManager = ({ user, onOpenLEDCalculator, perms = {} }) => {
 
     const handleDeleteLead = async (id) => {
         if (!window.confirm('Delete this lead?')) return;
-        await baseRef().collection('crm_leads').doc(id).delete();
+        await deleteDoc(doc(baseRef(), 'crm_leads', id));
     };
 
     const handleStageChange = async (leadId, newStage) => {
-        await baseRef().collection('crm_leads').doc(leadId).update({ stage: newStage, updatedAt: new Date() });
+        await updateDoc(doc(baseRef(), 'crm_leads', leadId), { stage: newStage, updatedAt: new Date() });
     };
 
     const handleSort = (key) => {

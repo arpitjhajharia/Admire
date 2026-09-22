@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Package, Archive, Plus, Trash2, Edit, X, Search, Layers, ClipboardList, Info, AlertCircle, TrendingUp, TrendingDown, History, BarChart2, Copy, Wand2 } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { db, dataCol, dataDoc } from '../lib/firebase';
+import { addDoc, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 
 const formatDate = (dateStr) => {
@@ -67,15 +68,11 @@ const MiscStockTracker = ({ user, perms = {} }) => {
     // --- FIREBASE SUBSCRIPTIONS ---
     useEffect(() => {
         if (!db) return;
-        const unsubItems = db.collection('artifacts').doc(appId).collection('public')
-            .doc('data').collection('misc_inventory')
-            .onSnapshot(snap => {
+        const unsubItems = onSnapshot(dataCol('misc_inventory'), snap => {
                 setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
 
-        const unsubTx = db.collection('artifacts').doc(appId).collection('public')
-            .doc('data').collection('misc_transactions')
-            .onSnapshot(snap => {
+        const unsubTx = onSnapshot(dataCol('misc_transactions'), snap => {
                 setTransactions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
 
@@ -174,7 +171,7 @@ const MiscStockTracker = ({ user, perms = {} }) => {
         }
 
         try {
-            const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_inventory');
+            const ref = dataCol('misc_inventory');
             
             let finalRate = Number(itemForm.rate) || 0;
             if (itemForm.type === 'profile') {
@@ -189,9 +186,9 @@ const MiscStockTracker = ({ user, perms = {} }) => {
                 updatedAt: new Date() 
             };
             if (editingItem) {
-                await ref.doc(editingItem.id).update(data);
+                await updateDoc(doc(ref, editingItem.id), data);
             } else {
-                await ref.add({ ...data, createdAt: new Date() });
+                await addDoc(ref, { ...data, createdAt: new Date() });
             }
             setShowItemForm(false);
             setEditingItem(null);
@@ -203,7 +200,7 @@ const MiscStockTracker = ({ user, perms = {} }) => {
     const handleSaveTx = () => {
         if (!txForm.itemId || !txForm.qty) return alert("Select Item and Specify Quantity");
 
-        const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_transactions');
+        const ref = dataCol('misc_transactions');
         const data = {
             ...txForm,
             qty: Number(txForm.qty),
@@ -212,8 +209,8 @@ const MiscStockTracker = ({ user, perms = {} }) => {
 
         // Fire the write and close the form straight away — see InventoryLedger.
         const write = editingTx
-            ? ref.doc(editingTx.id).update(data)
-            : ref.add({ ...data, createdAt: new Date() });
+            ? updateDoc(doc(ref, editingTx.id), data)
+            : addDoc(ref, { ...data, createdAt: new Date() });
         write.catch(e => { console.error(e); alert('Transaction not saved: ' + e.message); });
 
         if (editingTx) setEditingTx(null);
@@ -948,7 +945,7 @@ const MiscStockTracker = ({ user, perms = {} }) => {
                                         <div className="flex justify-end gap-0.5">
                                             {canDuplicate && <button onClick={() => handleDuplicateItem(item)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded transition-all" title="Duplicate"><Copy size={13}/></button>}
                                             {canAddEdit && <button onClick={() => handleEditItem(item)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all"><Edit size={13}/></button>}
-                                            {canDelete && <button onClick={async () => { if(confirm('Delete product?')) await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_inventory').doc(item.id).delete(); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 rounded transition-all"><Trash2 size={13}/></button>}
+                                            {canDelete && <button onClick={async () => { if(confirm('Delete product?')) await deleteDoc(dataDoc('misc_inventory', item.id)); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/40 rounded transition-all"><Trash2 size={13}/></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -991,7 +988,7 @@ const MiscStockTracker = ({ user, perms = {} }) => {
                                             {canEditDeleteTx && (
                                                 <>
                                                     <button onClick={() => handleEditTx(tx)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"><Edit size={13}/></button>
-                                                    <button onClick={async () => { if(confirm('Delete record?')) await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('misc_transactions').doc(tx.id).delete(); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all"><Trash2 size={13}/></button>
+                                                    <button onClick={async () => { if(confirm('Delete record?')) await deleteDoc(dataDoc('misc_transactions', tx.id)); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all"><Trash2 size={13}/></button>
                                                 </>
                                             )}
                                         </div>

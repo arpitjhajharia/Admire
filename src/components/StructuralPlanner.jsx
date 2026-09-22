@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, appId } from '../lib/firebase';
+import { dataDoc, dataCol } from '../lib/firebase';
+import { addDoc, deleteDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { Package, Trash2, Edit2, Plus, Save, X, Ruler } from 'lucide-react';
 import ShapeVisualizer from './ShapeVisualizer';
 
@@ -142,19 +143,11 @@ const StructuralPlanner = ({ user, perms = {} }) => {
 
   // Firebase: load saved projects
   useEffect(() => {
-    const unsub = db
-      .collection('artifacts').doc(appId)
-      .collection('public').doc('data')
-      .collection('structural_projects')
-      .orderBy('updatedAt', 'desc')
-      .onSnapshot(snap => {
+    const unsub = onSnapshot(query(dataCol('structural_projects'), orderBy('updatedAt', 'desc')), snap => {
         setSavedProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, () => {
         // Fallback if index not ready: load without ordering
-        db.collection('artifacts').doc(appId)
-          .collection('public').doc('data')
-          .collection('structural_projects')
-          .onSnapshot(snap => {
+        onSnapshot(dataCol('structural_projects'), snap => {
             setSavedProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           });
       });
@@ -198,10 +191,7 @@ const StructuralPlanner = ({ user, perms = {} }) => {
   const saveProject = async () => {
     if (!projectName.trim()) { alert('Please enter a project name.'); return; }
     try {
-      await db.collection('artifacts').doc(appId)
-        .collection('public').doc('data')
-        .collection('structural_projects')
-        .add({ name: projectName.trim(), items, createdBy: user?.uid || '', createdAt: new Date(), updatedAt: new Date() });
+      await addDoc(dataCol('structural_projects'), { name: projectName.trim(), items, createdBy: user?.uid || '', createdAt: new Date(), updatedAt: new Date() });
     } catch (e) {
       alert('Save failed: ' + e.message);
     }
@@ -216,9 +206,7 @@ const StructuralPlanner = ({ user, perms = {} }) => {
 
   const deleteProject = async (id) => {
     if (!window.confirm('Delete this saved project?')) return;
-    await db.collection('artifacts').doc(appId)
-      .collection('public').doc('data')
-      .collection('structural_projects').doc(id).delete();
+    await deleteDoc(dataDoc('structural_projects', id));
   };
 
   const clearBOM = () => {

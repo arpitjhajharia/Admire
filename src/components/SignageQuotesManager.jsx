@@ -1,6 +1,7 @@
 import React from 'react';
 import { Eye, Printer, Trash2, FileText, Download, Copy, Edit, Box, Monitor, Sun, Search, ChevronDown, ChevronRight } from 'lucide-react';
-import { db, appId } from '../lib/firebase';
+import { db, dataDoc, dataCol } from '../lib/firebase';
+import { deleteDoc, getDocs, onSnapshot, orderBy, query, where, writeBatch } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import SignageQuoteLayout from './SignageQuoteLayout';
 import SignageBOMLayout from './SignageBOMLayout';
@@ -24,9 +25,7 @@ const SignageQuotesManager = ({ user, onLoadQuote, perms = {} }) => {
 
     React.useEffect(() => {
         if (!user) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_quotes')
-            .orderBy('createdAt', 'desc')
-            .onSnapshot(snap => {
+        const unsub = onSnapshot(query(dataCol('signage_quotes'), orderBy('createdAt', 'desc')), snap => {
                 setQuotes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
         return () => unsub();
@@ -149,16 +148,14 @@ const SignageQuotesManager = ({ user, onLoadQuote, perms = {} }) => {
             if (qToDel && qToDel.clientId) {
                 try {
                     // find document in CRM by globalQuoteId and delete it
-                    const crmQuotesSnap = await db.collection('artifacts').doc(appId).collection('public').doc('data')
-                        .collection('crm_leads').doc(qToDel.clientId).collection('quotes')
-                        .where('globalQuoteId', '==', id).get();
+                    const crmQuotesSnap = await getDocs(query(dataCol('crm_leads', qToDel.clientId, 'quotes'), where('globalQuoteId', '==', id)));
                     
-                    const batch = db.batch();
+                    const batch = writeBatch(db);
                     crmQuotesSnap.forEach(doc => batch.delete(doc.ref));
                     await batch.commit();
                 } catch (err) { console.error("Error deleting CRM quote link:", err); }
             }
-            await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_quotes').doc(id).delete();
+            await deleteDoc(dataDoc('signage_quotes', id));
         }
     };
 
