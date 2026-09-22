@@ -1611,6 +1611,25 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         });
     };
 
+    // Bulk-set one site stage on every selected sign. If all of them already
+    // have it checked, this un-checks it instead (mirrors the single toggle).
+    // Selection is kept so several stages can be applied in a row.
+    const bulkToggleSiteStage = (signIds, stage) => {
+        const selected = signs.filter(s => signIds.has(s._id));
+        const allDone = selected.length > 0 && selected.every(s => s.siteStageChecks?.[stage]?.checked);
+        const at = new Date().toISOString();
+        selected.forEach((sign) => {
+            const current = sign.siteStageChecks || {};
+            if (!allDone && current[stage]?.checked) return; // already done, keep original by/at
+            trackWrite(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), {
+                siteStageChecks: {
+                    ...current,
+                    [stage]: allDone ? { checked: false } : { checked: true, by: user.username, at }
+                }
+            }).catch((e) => console.error('Bulk site stage update failed:', e)));
+        });
+    };
+
     const batchDelete = async (signIds) => {
         if (!window.confirm(`Are you sure you want to delete ${signIds.size} signs?`)) return;
         const ids = Array.from(signIds);
@@ -2624,6 +2643,35 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                 {btn.label}
                             </button>
                         ))}
+                        {siteStagesList.length > 0 && (() => {
+                            const selectedList = signs.filter(s => selectedSigns.has(s._id));
+                            return (
+                                <>
+                                    <div className="w-px bg-indigo-200 mx-1 hidden md:block"></div>
+                                    <span className="text-xs text-green-800 font-medium self-center">Site:</span>
+                                    {siteStagesList.map(stage => {
+                                        const doneCount = selectedList.filter(s => s.siteStageChecks?.[stage]?.checked).length;
+                                        const allDone = selectedList.length > 0 && doneCount === selectedList.length;
+                                        return (
+                                            <button
+                                                key={stage}
+                                                onClick={() => bulkToggleSiteStage(selectedSigns, stage)}
+                                                title={allDone ? `Un-mark "${stage}" on all selected` : `Mark "${stage}" done on all selected (${doneCount}/${selectedList.length} done)`}
+                                                className={`text-xs border px-3 py-1 rounded flex items-center gap-1 ${
+                                                    allDone
+                                                        ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200'
+                                                        : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                                                }`}
+                                            >
+                                                {allDone && <CheckSquare size={12} />}
+                                                {stage}
+                                                {!allDone && doneCount > 0 && <span className="text-[10px] opacity-70">{doneCount}/{selectedList.length}</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </>
+                            );
+                        })()}
                         <div className="w-px bg-indigo-200 mx-2 hidden md:block"></div>
                         <button onClick={() => batchDelete(selectedSigns)} className="text-xs bg-white border border-red-200 text-red-700 px-3 py-1 rounded hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Delete</button>
                     </div>
