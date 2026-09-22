@@ -78,6 +78,10 @@ const App = () => {
   const [transactions, setTransactions] = useState([]);
   const [signageInventory, setSignageInventory] = useState([]);
   const [signageTransactions, setSignageTransactions] = useState([]);
+  // First-snapshot flags: the inventory screens used to run their own duplicate
+  // listeners purely to know when to stop showing a loading state.
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
+  const [signageInventoryLoaded, setSignageInventoryLoaded] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(CONFIG.DEFAULTS.EXCHANGE_RATE);
 
@@ -159,9 +163,9 @@ const App = () => {
   // 2. Data Loading
   useEffect(() => {
     if (!user || !db) return;
-    const unsubInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory').onSnapshot(snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory').onSnapshot(snap => { setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setInventoryLoaded(true); });
     const unsubTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('transactions').onSnapshot(snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubSigInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory').onSnapshot(snap => setSignageInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubSigInv = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory').onSnapshot(snap => { setSignageInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setSignageInventoryLoaded(true); });
     const unsubSigTx = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_transactions').onSnapshot(snap => setSignageTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { unsubInv(); unsubTx(); unsubSigInv(); unsubSigTx(); };
   }, [user]);
@@ -630,6 +634,8 @@ const App = () => {
             {view === 'inventory' && (
               <InventoryManager
                 user={user}
+                inventory={inventory}
+                loading={!inventoryLoaded}
                 transactions={transactions}
                 exchangeRate={exchangeRate}
                 perms={perms}
@@ -687,6 +693,8 @@ const App = () => {
             {view === 'inventory' && (
               <SignageInventoryManager
                 user={user}
+                signageInventory={signageInventory}
+                loading={!signageInventoryLoaded}
                 transactions={signageTransactions}
                 perms={perms}
               />

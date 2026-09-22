@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, Save, Plus, Trash2, Cog, Zap, Copy, FileText, X, Printer } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 import { formatCurrency, generateId } from '../lib/utils';
@@ -9,6 +9,9 @@ import SignageQuoteLayout from './SignageQuoteLayout';
 // --- Pure BOM calculation (per single screen config) ---
 const calculateSignageBOM = (screen, inventory) => {
     if (!screen.width || !screen.height || Number(screen.width) <= 0 || Number(screen.height) <= 0) return null;
+
+    // Index once; this function does a lookup per profile, per SMPS and per hardware row.
+    const invById = new Map(inventory.map(i => [i.id, i]));
 
     const conv = screen.unit === 'ft' ? 304.8 : screen.unit === 'm' ? 1000 : 1;
     const visualWidthMm = Number(screen.width) * conv;
@@ -36,7 +39,7 @@ const calculateSignageBOM = (screen, inventory) => {
         return `${Math.round(mm)} mm`;
     };
     (Array.isArray(screen.profiles) ? screen.profiles : []).forEach(p => {
-        const profItem = inventory.find(i => i.id === p.profileId);
+        const profItem = invById.get(p.profileId);
         if (!profItem) return;
         const ratePerKg = getRate(`profile-${p.id}`, Number(profItem.ratePerKg));
         const wt = Number(profItem.weightPerMeter);
@@ -103,7 +106,7 @@ const calculateSignageBOM = (screen, inventory) => {
     });
 
     // B. ACP Backing
-    const acpSheet = inventory.find(i => i.id === screen.acpId);
+    const acpSheet = invById.get(screen.acpId);
     if (acpSheet) {
         const rate = getRate('backing', Number(acpSheet.ratePerSqft));
         const qty = getQty('backing', visualAreaSqFt);
@@ -125,7 +128,7 @@ const calculateSignageBOM = (screen, inventory) => {
 
     // C. LED
     let ledWattage = 0;
-    const ledItem = inventory.find(i => i.id === screen.led.id);
+    const ledItem = invById.get(screen.led.id);
     if (ledItem) {
         let calcQty = 0;
         if (screen.led.type === 'Module') {
@@ -160,7 +163,7 @@ const calculateSignageBOM = (screen, inventory) => {
         : (screen.smpsId ? [screen.smpsId] : []);
 
     const smpsOptions = activeSmpsIds
-        .map(id => inventory.find(i => i.id === id))
+        .map(id => invById.get(id))
         .filter(Boolean)
         .filter(i => Number(i.capacity) > 0)
         .map(i => ({ id: i.id, brand: i.brand, model: i.model, environment: i.environment || '', capacity: Number(i.capacity), price: Number(i.price) }));
@@ -222,7 +225,7 @@ const calculateSignageBOM = (screen, inventory) => {
 
     // E. Hardware
     (screen.hardware || []).forEach(hw => {
-        const item = inventory.find(i => i.id === hw.hardwareId);
+        const item = invById.get(hw.hardwareId);
         if (item) {
             const rate = getRate(`hw-${hw.id}`, Number(item.price));
             const qty = getQty(`hw-${hw.id}`, Number(hw.qty));
@@ -649,6 +652,37 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
     const sectionCls = "bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-4";
 
     const activeScreen = state.screens[state.activeScreenIndex];
+
+    // Indexed views of the inventory. Every picker below previously re-scanned the
+    // whole inventory array on each render (and this component had no memoization
+    // at all), so typing in any field re-filtered it a dozen times over.
+    const inventoryById = useMemo(() => new Map(inventory.map(i => [i.id, i])), [inventory]);
+    const inventoryByType = useMemo(() => {
+        const map = new Map();
+        for (const i of inventory) {
+            if (!map.has(i.type)) map.set(i.type, []);
+            map.get(i.type).push(i);
+        }
+        return map;
+    }, [inventory]);
+    const profileOptions = useMemo(() => inventoryByType.get('profile') || [], [inventoryByType]);
+    const acpOptions = useMemo(() => inventoryByType.get('acp') || [], [inventoryByType]);
+    const hardwareOptions = useMemo(() => inventoryByType.get('hardware') || [], [inventoryByType]);
+    const smpsOptions = useMemo(() => inventoryByType.get('smps') || [], [inventoryByType]);
+    const profilesByProfileType = useMemo(() => {
+        const map = new Map();
+        for (const i of profileOptions) {
+            if (!map.has(i.profileType)) map.set(i.profileType, []);
+            map.get(i.profileType).push(i);
+        }
+        return map;
+    }, [profileOptions]);
+    const ledOptions = useMemo(
+        () => (inventoryByType.get('led') || []).filter(i => i.ledType === activeScreen?.led?.type),
+        [inventoryByType, activeScreen?.led?.type]);
+    const smpsEnvOptions = useMemo(
+        () => smpsOptions.filter(s => activeScreen?.environment === 'Indoor' || s.environment !== 'Indoor'),
+        [smpsOptions, activeScreen?.environment]);
     const isMultiScreen = state.screens.length > 1;
 
     if (!activeScreen) return null;
@@ -989,7 +1023,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                                 >
                                                                     <option value="">Select profile...</option>
                                                                     {['Base', 'Flip', 'Hinged', 'Shutter'].map(type => {
-                                                                        const items = inventory.filter(i => i.type === 'profile' && i.profileType === type);
+                                                                        const items = profilesByProfileType.get(type) || [];
                                                                         return items.length ? (
                                                                             <optgroup key={type} label={type}>
                                                                                 {items.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}{i.thickness ? ` (${i.thickness}mm)` : ''}</option>)}
@@ -1050,7 +1084,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                 onChange={e => updateScreenProp(state.activeScreenIndex, 'acpId', e.target.value)}
                                             >
                                                 <option value="">No Backing / Select ACP...</option>
-                                                {inventory.filter(i => i.type === 'acp').map(i => (
+                                                {acpOptions.map(i => (
                                                     <option key={i.id} value={i.id}>{i.model} ({i.acpThickness}) — ₹{i.ratePerSqft}/sqft</option>
                                                 ))}
                                             </select>
@@ -1066,13 +1100,13 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                         <option value="Strip">Strip</option>
                                                     </select>
                                                     <select className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={activeScreen.led.id} onChange={e => {
-                                                        const sel = inventory.find(i => i.id === e.target.value);
+                                                        const sel = inventoryById.get(e.target.value);
                                                         const newLed = { ...activeScreen.led, id: e.target.value };
                                                         if (activeScreen.led.type === 'Module' && sel?.density) newLed.density = sel.density;
                                                         updateScreenProp(state.activeScreenIndex, 'led', newLed);
                                                     }}>
                                                         <option value="">Select LED...</option>
-                                                        {inventory.filter(i => i.type === 'led' && i.ledType === activeScreen.led.type).map(i => (
+                                                        {ledOptions.map(i => (
                                                             <option key={i.id} value={i.id}>{i.model} ({i.wattagePerUnit}W){i.density ? ` — ${i.density}/sqft` : ''}</option>
                                                         ))}
                                                     </select>
@@ -1081,7 +1115,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="text-[10px] text-slate-400 whitespace-nowrap">Density (qty/sqft)</span>
                                                         <input type="number" className="w-16 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={activeScreen.led.density} onChange={e => updateScreenNested(state.activeScreenIndex, 'led', 'density', e.target.value)} />
-                                                        {activeScreen.led.id && inventory.find(i => i.id === activeScreen.led.id)?.density && <span className="text-[9px] text-pink-400">from inventory</span>}
+                                                        {activeScreen.led.id && inventoryById.get(activeScreen.led.id)?.density && <span className="text-[9px] text-pink-400">from inventory</span>}
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center gap-1.5">
@@ -1099,7 +1133,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                             </td>
                                         </tr>
                                         {/* SMPS — one row per inventory option */}
-                                        {inventory.filter(i => i.type === 'smps' && (activeScreen.environment === 'Indoor' || i.environment !== 'Indoor')).map(s => {
+                                        {smpsEnvOptions.map(s => {
                                             const isChecked = (activeScreen.smpsIds || []).includes(s.id);
                                             const toggle = () => {
                                                 const cur = activeScreen.smpsIds || [];
@@ -1151,14 +1185,14 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                             <select
                                                                 value={oc.hardwareId || ''}
                                                                 onChange={e => {
-                                                                    const hw = inventory.find(i => i.id === e.target.value);
+                                                                    const hw = inventoryById.get(e.target.value);
                                                                     if (hw) updateOtherCostFields(ocIdx, { hardwareId: hw.id, name: `${hw.brand} ${hw.model}`, rate: Number(hw.price) });
                                                                     else updateOtherCostFields(ocIdx, { hardwareId: '', name: '' });
                                                                 }}
                                                                 className="w-36 shrink-0 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                                                             >
                                                                 <option value="">— Custom —</option>
-                                                                {inventory.filter(i => i.type === 'hardware').map(i => (
+                                                                {hardwareOptions.map(i => (
                                                                     <option key={i.id} value={i.id}>{i.brand} {i.model} ({i.uom})</option>
                                                                 ))}
                                                             </select>
@@ -1289,7 +1323,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                 <div className="flex gap-1">
                                                     <select className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={p.profileId} onChange={e => updateP('profileId', e.target.value)}>
                                                         <option value="">Select profile...</option>
-                                                        {inventory.filter(i => i.type === 'profile').map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}</option>)}
+                                                        {profileOptions.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}</option>)}
                                                     </select>
                                                     <button onClick={() => updateScreenProp(state.activeScreenIndex, 'profiles', activeScreen.profiles.filter((_, i) => i !== pIdx))} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
                                                 </div>
@@ -1314,7 +1348,7 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                     <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-700/30 rounded p-2">
                                         <select className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={activeScreen.acpId} onChange={e => updateScreenProp(state.activeScreenIndex, 'acpId', e.target.value)}>
                                             <option value="">No ACP Backing</option>
-                                            {inventory.filter(i => i.type === 'acp').map(i => <option key={i.id} value={i.id}>{i.model} — ₹{i.ratePerSqft}/sqft</option>)}
+                                            {acpOptions.map(i => <option key={i.id} value={i.id}>{i.model} — ₹{i.ratePerSqft}/sqft</option>)}
                                         </select>
                                         {backingBom && <span className="ml-2 font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">{formatCurrency(backingBom.cost, 'INR', false, true)}</span>}
                                     </div>
@@ -1328,16 +1362,16 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                 <option value="Module">Module</option>
                                                 <option value="Strip">Strip</option>
                                             </select>
-                                            <select className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={activeScreen.led.id} onChange={e => { const sel = inventory.find(i => i.id === e.target.value); const nl = { ...activeScreen.led, id: e.target.value }; if (activeScreen.led.type === 'Module' && sel?.density) nl.density = sel.density; updateScreenProp(state.activeScreenIndex, 'led', nl); }}>
+                                            <select className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={activeScreen.led.id} onChange={e => { const sel = inventoryById.get(e.target.value); const nl = { ...activeScreen.led, id: e.target.value }; if (activeScreen.led.type === 'Module' && sel?.density) nl.density = sel.density; updateScreenProp(state.activeScreenIndex, 'led', nl); }}>
                                                 <option value="">Select LED...</option>
-                                                {inventory.filter(i => i.type === 'led' && i.ledType === activeScreen.led.type).map(i => <option key={i.id} value={i.id}>{i.model}</option>)}
+                                                {ledOptions.map(i => <option key={i.id} value={i.id}>{i.model}</option>)}
                                             </select>
                                         </div>
                                         {activeScreen.led.type === 'Module'
                                             ? <div className="flex items-center gap-1.5"><span className="text-[10px] text-slate-400">Density</span><input type="number" className="w-16 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={activeScreen.led.density} onChange={e => updateScreenNested(state.activeScreenIndex, 'led', 'density', e.target.value)} /></div>
                                             : <div className="flex items-center gap-1.5"><span className="text-[10px] text-slate-400">Spacing mm</span><input type="number" className="w-16 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-center" value={activeScreen.led.spacing} onChange={e => updateScreenNested(state.activeScreenIndex, 'led', 'spacing', e.target.value)} /></div>
                                         }
-                                        {inventory.filter(i => i.type === 'smps').map(s => {
+                                        {smpsOptions.map(s => {
                                             const isChecked = (activeScreen.smpsIds || []).includes(s.id);
                                             const toggle = () => { const cur = activeScreen.smpsIds || []; updateScreenProp(state.activeScreenIndex, 'smpsIds', cur.includes(s.id) ? cur.filter(x => x !== s.id) : [...cur, s.id]); };
                                             return <label key={s.id} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[11px] cursor-pointer ${isChecked ? 'bg-pink-50 text-pink-700 font-semibold' : 'text-slate-600'}`}><input type="checkbox" className="accent-pink-600" checked={isChecked} onChange={toggle} />{s.brand} {s.model} {s.capacity}W</label>;
@@ -1360,14 +1394,14 @@ const SignageCalculator = ({ user, loadedState, perms = {} }) => {
                                                     <select
                                                         value={oc.hardwareId || ''}
                                                         onChange={e => {
-                                                            const hw = inventory.find(i => i.id === e.target.value);
+                                                            const hw = inventoryById.get(e.target.value);
                                                             if (hw) updateOtherCostFields(ocIdx, { hardwareId: hw.id, name: `${hw.brand} ${hw.model}`, rate: Number(hw.price) });
                                                             else updateOtherCostFields(ocIdx, { hardwareId: '', name: '' });
                                                         }}
                                                         className="flex-1 p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                                                     >
                                                         <option value="">— Custom —</option>
-                                                        {inventory.filter(i => i.type === 'hardware').map(i => (
+                                                        {hardwareOptions.map(i => (
                                                             <option key={i.id} value={i.id}>{i.brand} {i.model} ({i.uom})</option>
                                                         ))}
                                                     </select>

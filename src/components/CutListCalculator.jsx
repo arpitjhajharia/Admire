@@ -23,8 +23,6 @@ import {
 } from 'lucide-react';
 import { optimizeLinear, optimizeSheet } from '../utils/cutOptimizer';
 import { importFromExcel, downloadTemplate } from '../utils/excelImport';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { db } from '../lib/firebase';
 
 const CutListCalculator = () => {
@@ -128,6 +126,11 @@ const CutListCalculator = () => {
         if (!results) return;
 
         try {
+            // Pulled in on demand — jsPDF + html2canvas are ~180KB gzip together.
+            const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+                import('jspdf'),
+                import('html2canvas'),
+            ]);
             const margin = 10;
 
             // A4 dimensions

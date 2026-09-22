@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Edit, Plus, Trash2, X, Search, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 import { formatCurrency } from '../lib/utils';
@@ -10,13 +10,13 @@ const toMeters = (length, unit) => {
     return length;
 };
 
-const SignageInventoryManager = ({ user, transactions = [], perms = {} }) => {
-    const [items, setItems] = useState([]);
+const SignageInventoryManager = ({ signageInventory = [], loading = false, transactions = [], perms = {} }) => {
+    // Streamed once in App.jsx; this screen used to open a second identical listener.
+    const items = signageInventory;
     const [editingId, setEditingId] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
-    const [loading, setLoading] = useState(true);
     const [expandedItems, setExpandedItems] = useState(new Set());
 
     const toggleExpand = (id) => setExpandedItems(prev => {
@@ -41,17 +41,6 @@ const SignageInventoryManager = ({ user, transactions = [], perms = {} }) => {
     };
 
     const [newItem, setNewItem] = useState(initialItemState);
-
-    useEffect(() => {
-        if (!user || !db) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('signage_inventory')
-            .onSnapshot(snap => {
-                const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setItems(data);
-                setLoading(false);
-            }, err => console.error(err));
-        return () => unsub();
-    }, [user]);
 
     const handleSaveItem = async () => {
         if (!newItem.model) return alert("Model/Name is required.");

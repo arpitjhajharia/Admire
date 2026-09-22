@@ -27,16 +27,42 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
 
     // Filter Logic
     const isIndoor = selectedIndoor === 'true';
-    const availableModules = inventory.filter(i => i.type === 'module' && i.indoor === isIndoor);
-    const uniquePitches = [...new Set(availableModules.map(m => m.pitch))].sort((a, b) => a - b);
-    const filteredModules = selectedPitch ? availableModules.filter(m => m.pitch == selectedPitch) : [];
-    const selectedModule = inventory.find(i => i.id === selectedModuleId);
-    const cabinets = inventory.filter(i => {
+    const availableModules = React.useMemo(
+        () => inventory.filter(i => i.type === 'module' && i.indoor === isIndoor),
+        [inventory, isIndoor]);
+    const uniquePitches = React.useMemo(
+        () => [...new Set(availableModules.map(m => m.pitch))].sort((a, b) => a - b),
+        [availableModules]);
+    const filteredModules = React.useMemo(
+        () => selectedPitch ? availableModules.filter(m => m.pitch == selectedPitch) : [],
+        [availableModules, selectedPitch]);
+    const selectedModule = React.useMemo(
+        () => inventory.find(i => i.id === selectedModuleId),
+        [inventory, selectedModuleId]);
+    const cabinets = React.useMemo(() => inventory.filter(i => {
         if (i.type !== 'cabinet') return false;
         if (!selectedModule) return true;
         return (i.width % selectedModule.width === 0) && (i.height % selectedModule.height === 0);
-    });
-    const readyUnits = inventory.filter(i => i.type === 'ready' && i.indoor === isIndoor);
+    }), [inventory, selectedModule]);
+    const readyUnits = React.useMemo(
+        () => inventory.filter(i => i.type === 'ready' && i.indoor === isIndoor),
+        [inventory, isIndoor]);
+    const cardOptions = React.useMemo(() => inventory.filter(i => i.type === 'card'), [inventory]);
+    const processorOptions = React.useMemo(() => inventory.filter(i => i.type === 'processor'), [inventory]);
+    const smpsInventory = React.useMemo(() => inventory.filter(i => i.type === 'smps'), [inventory]);
+    // Inventory grouped by type, pre-sorted. The extra-component picker below otherwise
+    // re-filtered and re-sorted the entire inventory 11 times per row, on every render.
+    const inventoryByType = React.useMemo(() => {
+        const map = new Map();
+        for (const i of inventory) {
+            if (!map.has(i.type)) map.set(i.type, []);
+            map.get(i.type).push(i);
+        }
+        for (const list of map.values()) {
+            list.sort((a, b) => (a.brand + ' ' + a.model).localeCompare(b.brand + ' ' + b.model));
+        }
+        return map;
+    }, [inventory]);
 
     // Component Cell Helper
     const renderComponentCell = (item) => {
@@ -79,7 +105,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
             );
         }
         if (item.id === 'cabinets') return <div className="flex flex-col gap-1"><select value={selectedCabinetId} onChange={e => updateScreenState('selectedCabinetId', e.target.value)} disabled={!canEditSpecs || !selectedModule} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Cabinet...</option>{cabinets.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({c.width}x{c.height}) - Stock: {getStock(c.id)}</option>)}</select>{specDisplay}</div>;
-        if (item.id === 'cards') return <div className="flex flex-col gap-1"><select value={selectedCardId} onChange={e => updateScreenState('selectedCardId', e.target.value)} disabled={!canEditSpecs} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Card...</option>{inventory.filter(i => i.type === 'card').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
+        if (item.id === 'cards') return <div className="flex flex-col gap-1"><select value={selectedCardId} onChange={e => updateScreenState('selectedCardId', e.target.value)} disabled={!canEditSpecs} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50"><option value="">Select Card...</option>{cardOptions.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}</select>{specDisplay}</div>;
         if (item.id === 'smps' || item.id?.startsWith('smps_')) {
             // Secondary mix rows (smps_1, smps_2...) are read-only spec lines
             if (item.id !== 'smps') {
@@ -96,7 +122,6 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                 const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
                 updateScreenState('selectedSMPSIds', next);
             };
-            const smpsInventory = inventory.filter(i => i.type === 'smps');
 
             // Show the optimised mix inline (taken from calculation)
             const activeMixItems = calculation?.detailedItems?.filter(di => di.id === 'smps' || di.id?.startsWith('smps_')) || [];
@@ -145,7 +170,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                     <div className="flex flex-col gap-2 md:gap-1">
                         <select value={selectedProcId} onChange={e => updateScreenState('selectedProcId', e.target.value)} disabled={!canEditSpecs} className="w-full p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white disabled:opacity-50">
                             <option value="">Select Processor...</option>
-                            {inventory.filter(i => i.type === 'processor').map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}
+                            {processorOptions.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} ({getStock(c.id)})</option>)}
                         </select>
                         {/* HIDE PROCESSOR SELL PRICE FOR SUPERVISOR */}
                         {!isSupervisor && (
@@ -169,7 +194,7 @@ const InteractiveCostSheet = ({ calculation, state, updateState, updateExtra, up
                         <select value={extraComponents[extraIdx].componentId} onChange={e => { const n = [...extraComponents]; n[extraIdx].componentId = e.target.value; updateScreenState('extraComponents', n); }} className="flex-1 p-2 md:p-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
                             <option value="">Select...</option>
                             {['module', 'cabinet', 'card', 'smps', 'processor', 'frc_cable', 'power_cable', 'screw', 'bolt', 'gasket', 'tool'].map(type => {
-                                const items = inventory.filter(i => i.type === type).sort((a, b) => (a.brand + ' ' + a.model).localeCompare(b.brand + ' ' + b.model));
+                                const items = inventoryByType.get(type) || [];
                                 if (items.length === 0) return null;
                                 return (
                                     <optgroup key={type} label={type.replace('_', ' ').toUpperCase()}>
@@ -754,7 +779,17 @@ const QuoteCalculator = ({ user, inventory, transactions, state, setState, excha
     // Using Debounce
     const debouncedState = useDebounce(state, 300);
 
-    const getStock = (id) => transactions ? transactions.filter(t => t.itemId === id).reduce((acc, t) => acc + (t.type === 'in' ? Number(t.qty) : -Number(t.qty)), 0) : 0;
+    // Stock per item in a single pass over the ledger. Previously this filtered and
+    // reduced the entire transactions array once per dropdown option, per render.
+    const stockByItem = React.useMemo(() => {
+        const map = new Map();
+        for (const t of transactions || []) {
+            const delta = t.type === 'in' ? Number(t.qty) : -Number(t.qty);
+            map.set(t.itemId, (map.get(t.itemId) || 0) + delta);
+        }
+        return map;
+    }, [transactions]);
+    const getStock = React.useCallback((id) => stockByItem.get(id) || 0, [stockByItem]);
     const updateState = (key, value) => setState(prev => ({ ...prev, [key]: value }));
     const updateExtra = (key, field, val) => {
         const activeIndex = state.activeScreenIndex;

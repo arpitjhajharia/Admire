@@ -1,9 +1,9 @@
-import ExcelJS from 'exceljs';
 
 /**
  * Common Import: Read Excel with both Material List and Cutting List
  */
 export const importFromExcel = async (file) => {
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const arrayBuffer = await file.arrayBuffer();
 
@@ -52,6 +52,7 @@ export const importFromExcel = async (file) => {
  * Generate a standard Excel template with the "Two Block" structure
  */
 export const downloadTemplate = async (mode = '2D') => {
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Cut List Template');
 

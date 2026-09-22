@@ -3,8 +3,10 @@ import { Box, Edit, Plus, Trash2, X, Layers, Search, Package, ChevronDown, Chevr
 import { db, appId } from '../lib/firebase';
 import { formatCurrency, formatComponentSpecs } from '../lib/utils';
 
-const InventoryManager = ({ user, transactions = [], exchangeRate = 1, perms = {} }) => {
-    const [items, setItems] = React.useState([]);
+const InventoryManager = ({ inventory = [], loading = false, transactions = [], exchangeRate = 1, perms = {} }) => {
+    // Inventory is streamed once in App.jsx; this screen used to open a second,
+    // identical listener on the same collection.
+    const items = inventory;
     const [editingId, setEditingId] = React.useState(null);
     const [showForm, setShowForm] = React.useState(false);
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -21,20 +23,8 @@ const InventoryManager = ({ user, transactions = [], exchangeRate = 1, perms = {
         warrantyPeriod: '', maintenance: ''
     });
 
-    const [loading, setLoading] = React.useState(true);
     const [showBatchModal, setShowBatchModal] = React.useState(false);
     const [selectedItemForBatches, setSelectedItemForBatches] = React.useState(null);
-
-    React.useEffect(() => {
-        if (!user || !db) return;
-        const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory')
-            .onSnapshot(snap => {
-                const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setItems(data);
-                setLoading(false);
-            }, err => console.error(err));
-        return () => unsub();
-    }, [user]);
 
     // Helper to determine if Brand is mandatory
     const isBrandMandatory = (type) => {

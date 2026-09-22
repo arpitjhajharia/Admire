@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Archive, Trash2, Edit, X, Search, ClipboardList, Plus } from 'lucide-react';
 import { db, appId } from '../lib/firebase';
 
@@ -47,17 +47,22 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
         }
     };
 
+    // Look up items by id instead of scanning the inventory once per transaction.
+    const inventoryById = useMemo(() => new Map(inventory.map(i => [i.id, i])), [inventory]);
+
     // Sort: Latest first
-    const sortedTx = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sortedTx = useMemo(
+        () => [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)),
+        [transactions]);
 
     // Filter transactions
-    const filteredTx = sortedTx.filter(tx => {
-        const item = inventory.find(i => i.id === tx.itemId) || {};
+    const filteredTx = useMemo(() => sortedTx.filter(tx => {
+        const item = inventoryById.get(tx.itemId) || {};
         const matchesSearch = !searchTerm.trim() ||
             `${item.brand || ''} ${item.model || ''} ${tx.remarks || ''} ${tx.batch || ''}`.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesType = filterType === 'all' || tx.type === filterType;
         return matchesSearch && matchesType;
-    });
+    }), [sortedTx, inventoryById, searchTerm, filterType]);
 
     // --- GROUPING & SORTING LOGIC FOR DROPDOWN ---
     const getGroupedOptions = () => {
@@ -190,7 +195,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
                             </select>
 
                             {/* Conditional Batch Input for Modules */}
-                            {inventory.find(i => i.id === newTx.itemId)?.type === 'module' && (
+                            {inventoryById.get(newTx.itemId)?.type === 'module' && (
                                 <input
                                     type="text"
                                     placeholder="Batch No. (e.g. BATCH-A)"
@@ -224,7 +229,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
                 {/* Mobile Cards */}
                 <div className="md:hidden space-y-2">
                     {filteredTx.map(tx => {
-                        const item = inventory.find(i => i.id === tx.itemId) || {};
+                        const item = inventoryById.get(tx.itemId) || {};
                         return (
                             <div key={tx.id} className={`bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between ${editingId === tx.id ? 'ring-2 ring-amber-300' : ''}`}>
                                 <div className="flex-1 min-w-0">
@@ -281,7 +286,7 @@ const InventoryLedger = ({ inventory = [], transactions = [], perms = {} }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                                 {filteredTx.map((tx, rowIdx) => {
-                                    const item = inventory.find(i => i.id === tx.itemId) || {};
+                                    const item = inventoryById.get(tx.itemId) || {};
                                     return (
                                         <tr key={tx.id} className={`group transition-colors duration-100 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/50'} hover:bg-blue-50/50 dark:hover:bg-slate-700/60 ${editingId === tx.id ? 'bg-amber-50/60 dark:bg-amber-900/20' : ''}`}>
                                             {/* Date */}

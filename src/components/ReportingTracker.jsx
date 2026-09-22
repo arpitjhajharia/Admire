@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import ExcelJS from 'exceljs';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocFromCache, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocFromCache, getDocs, addDoc, updateDoc, deleteDoc, query, serverTimestamp, onSnapshot, writeBatch } from 'firebase/firestore';
 import { getFirestore as getLiteFirestore, collection as liteCollection, getDocs as liteGetDocs } from 'firebase/firestore/lite';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { firebaseApp, appId } from '../lib/firebase';
@@ -1297,6 +1296,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 
     const processImportWithExcelJS = async (file) => {
         try {
+            const ExcelJS = (await import('exceljs')).default;
             const buffer = await readFileAsArrayBuffer(file);
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.load(buffer);
@@ -1529,12 +1529,19 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             importConfig.data.some(row => row[h + '_isImage'])
         );
 
+        // Same two-phase shape as migrateImagesToStorage below: uploads through a
+        // small worker pool, then batched document writes. This previously awaited
+        // one upload and one setDoc per row, so a 200-row import with artwork was
+        // ~600 fully serialised round trips.
+        const IMPORT_CONCURRENCY = 5;
+
+        const pending = [];
         for (const row of importConfig.data) {
             if (!row[uniqueIdCol]) continue;
 
             const signId = row[uniqueIdCol].toString().replace(/[^a-zA-Z0-9]/g, '_');
 
-            let artworkImages = [];
+            const artworkImages = [];
             imageColumns.forEach(col => {
                 if (row[col + '_isImage'] && row[col]) {
                     artworkImages.push({ url: row[col], stage: 'Artwork', timestamp: new Date().toISOString() });
@@ -1545,35 +1552,48 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 artworkImages.push({ url: row['Artwork'], stage: 'Artwork', timestamp: new Date().toISOString() });
             }
 
-            // Move imported base64 artwork to Storage; on failure keep the
-            // inline base64 so the import never loses an image.
-            for (const img of artworkImages) {
-                if (img.url && img.url.startsWith('data:')) {
-                    try {
-                        const up = await uploadImagePair(img.url, `boqs/${boq.id}/signs/${signId}`);
-                        img.url = up.url;
-                        img.thumbUrl = up.thumbUrl;
-                    } catch (e) {
-                        console.error(`Storage upload failed for ${signId}, keeping inline image:`, e);
+            pending.push({ signId, row, artworkImages });
+        }
+
+        // Phase A — move imported base64 artwork to Storage; on failure keep the
+        // inline base64 so the import never loses an image.
+        const uploadQueue = [...pending];
+        await Promise.all(Array.from({ length: IMPORT_CONCURRENCY }, async () => {
+            while (uploadQueue.length > 0) {
+                const { signId, artworkImages } = uploadQueue.shift();
+                for (const img of artworkImages) {
+                    if (img.url && img.url.startsWith('data:')) {
+                        try {
+                            const up = await uploadImagePair(img.url, `boqs/${boq.id}/signs/${signId}`);
+                            img.url = up.url;
+                            img.thumbUrl = up.thumbUrl;
+                        } catch (e) {
+                            console.error(`Storage upload failed for ${signId}, keeping inline image:`, e);
+                        }
                     }
                 }
             }
+        }));
 
-            const cleanRow = { ...row };
-            imageColumns.forEach(col => delete cleanRow[col]);
-            if (cleanRow['Artwork']) delete cleanRow['Artwork'];
+        // Phase B — commit the sign documents in batched writes
+        for (let i = 0; i < pending.length; i += 400) {
+            const batch = writeBatch(db);
+            for (const { signId, row, artworkImages } of pending.slice(i, i + 400)) {
+                const cleanRow = { ...row };
+                imageColumns.forEach(col => delete cleanRow[col]);
+                if (cleanRow['Artwork']) delete cleanRow['Artwork'];
 
-            const signData = {
-                ...cleanRow,
-                status: STATUS.DRAFT,
-                createdAt: serverTimestamp(),
-                history: [],
-                artworkImages: artworkImages,
-                factoryImages: [],
-                siteImages: []
-            };
-
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId), signData);
+                batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', signId), {
+                    ...cleanRow,
+                    status: STATUS.DRAFT,
+                    createdAt: serverTimestamp(),
+                    history: [],
+                    artworkImages: artworkImages,
+                    factoryImages: [],
+                    siteImages: []
+                });
+            }
+            await batch.commit();
         }
 
         setImportConfig(null);
@@ -1595,13 +1615,19 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     const batchDelete = async (signIds) => {
         if (!window.confirm(`Are you sure you want to delete ${signIds.size} signs?`)) return;
         const ids = Array.from(signIds);
-        for (const id of ids) {
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id));
-            } catch (e) {
-                console.error(e);
-                alert("Error deleting sign: " + id);
+        // Commit in batches instead of one awaited round trip per sign — deleting
+        // 50 rows was 50 serial requests. Firestore caps a batch at 500 writes.
+        try {
+            for (let i = 0; i < ids.length; i += 400) {
+                const batch = writeBatch(db);
+                for (const id of ids.slice(i, i + 400)) {
+                    batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', id));
+                }
+                await batch.commit();
             }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting signs: " + e.message);
         }
         setSelectedSigns(new Set());
     };
@@ -1966,13 +1992,56 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     };
 
     // Render columns based on visibility settings (but always include ID)
-    const activeColumns = columns.filter(c => (c.isId || visibleColumnKeys.has(c.key)) && c.visible);
+    const activeColumns = useMemo(
+        () => columns.filter(c => (c.isId || visibleColumnKeys.has(c.key)) && c.visible),
+        [columns, visibleColumnKeys]);
+
+    // Stable props/handlers for the memoized SignRow / SignCard below.
+    // These row components re-rendered for every row on every keystroke because each
+    // row got freshly-built closures. The ref forwards to the latest handler without
+    // changing identity, so React.memo can actually skip untouched rows.
+    const rowHandlersRef = useRef(null);
+    rowHandlersRef.current = { executeUpload, handleToggleStage, handleUploadRequest, boqId: boq.id };
+
+    const factoryStagesList = useMemo(() => boq.factoryStages || [], [boq.factoryStages]);
+    const siteStagesList = useMemo(() => boq.siteStages || [], [boq.siteStages]);
+
+    const onRowSelect = useCallback((id) => {
+        setSelectedSigns(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
+    const onRowUploadRequest = useCallback((sign, isFactory) =>
+        rowHandlersRef.current.handleUploadRequest(sign, isFactory), []);
+    const onRowDirectUpload = useCallback((sign, file, stage, isFactory) =>
+        rowHandlersRef.current.executeUpload(sign, file, stage, isFactory), []);
+    const onRowToggleStage = useCallback((sign, stage, isFactory) =>
+        rowHandlersRef.current.handleToggleStage(sign, stage, isFactory), []);
+    const onRowEdit = useCallback((sign) => setEditingSign(sign), []);
+    const onRowViewImage = useCallback((sign, images, idx, field) =>
+        setLightboxImages({ images, index: idx, signId: sign._id, field }), []);
+    const onRowDelete = useCallback(async (sign) => {
+        if (!window.confirm('Delete sign?')) return;
+        try {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', rowHandlersRef.current.boqId, 'signs', sign._id));
+        } catch (err) {
+            console.error(err);
+            alert("Delete failed: " + err.message);
+        }
+    }, []);
 
     // Optimised per-column widths: size each data column to fit its uploaded data on one line,
     // while letting multi-word headers wrap. Columns with short data (e.g. "2.0 DIA") stay narrow
     // even when the header label is long ("PIER SIZE IN METER"), freeing space for other columns.
+    // Sized from the full sign list, not the filtered one: keying this off
+    // filteredSigns rebuilt the object on every keystroke, which changed a prop on
+    // every SignRow and defeated their React.memo exactly when it matters most.
+    // It also stops column widths jumping about while you type in a filter.
     const colWidths = useMemo(() => {
-        const sample = filteredSigns.length > 400 ? filteredSigns.slice(0, 400) : filteredSigns;
+        const sample = signs.length > 400 ? signs.slice(0, 400) : signs;
         const map = {};
         activeColumns.forEach(col => {
             let dataChars = 0;
@@ -1987,7 +2056,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             map[col.key] = Math.round(Math.min(Math.max(chars * 7.5 + 22, 56), 170));
         });
         return map;
-    }, [filteredSigns, activeColumns]);
+    }, [signs, activeColumns]);
 
     // Shared column template for the mobile "table-like" view: a single fixed header row up top,
     // and every card aligns its values under the same columns. Images/stages span full width.
@@ -2588,29 +2657,15 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             gridTemplate={mobileGridTemplate}
                             user={user}
                             selected={selectedSigns.has(sign._id)}
-                            onSelect={(id) => {
-                                const newSet = new Set(selectedSigns);
-                                if (newSet.has(id)) newSet.delete(id);
-                                else newSet.add(id);
-                                setSelectedSigns(newSet);
-                            }}
-                            onUploadRequest={handleUploadRequest}
-                            onDirectUpload={(file, stage, isFactory) => executeUpload(sign, file, stage, isFactory)}
-                            factoryStages={boq.factoryStages || []}
-                            siteStages={boq.siteStages || []}
-                            onToggleStage={handleToggleStage}
-                            onDelete={async () => {
-                                if (window.confirm('Delete sign?')) {
-                                    try {
-                                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id));
-                                    } catch (err) {
-                                        console.error(err);
-                                        alert("Delete failed: " + err.message);
-                                    }
-                                }
-                            }}
-                            onEdit={() => setEditingSign(sign)}
-                            onViewImage={(images, idx, field) => setLightboxImages({ images, index: idx, signId: sign._id, field })}
+                            onSelect={onRowSelect}
+                            onUploadRequest={onRowUploadRequest}
+                            onDirectUpload={onRowDirectUpload}
+                            factoryStages={factoryStagesList}
+                            siteStages={siteStagesList}
+                            onToggleStage={onRowToggleStage}
+                            onDelete={onRowDelete}
+                            onEdit={onRowEdit}
+                            onViewImage={onRowViewImage}
                         />
                     ))}
                     {filteredSigns.length === 0 && (
@@ -2683,29 +2738,15 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                 colWidths={colWidths}
                                 user={user}
                                 selected={selectedSigns.has(sign._id)}
-                                onSelect={(id) => {
-                                    const newSet = new Set(selectedSigns);
-                                    if (newSet.has(id)) newSet.delete(id);
-                                    else newSet.add(id);
-                                    setSelectedSigns(newSet);
-                                }}
-                                onUploadRequest={handleUploadRequest}
-                                onDirectUpload={(file, stage, isFactory) => executeUpload(sign, file, stage, isFactory)}
-                                factoryStages={boq.factoryStages || []}
-                                siteStages={boq.siteStages || []}
-                                onToggleStage={handleToggleStage}
-                                onDelete={async () => {
-                                    if (window.confirm('Delete sign?')) {
-                                        try {
-                                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id));
-                                        } catch (err) {
-                                            console.error(err);
-                                            alert("Delete failed: " + err.message);
-                                        }
-                                    }
-                                }}
-                                onEdit={() => setEditingSign(sign)}
-                                onViewImage={(images, idx, field) => setLightboxImages({ images, index: idx, signId: sign._id, field })}
+                                onSelect={onRowSelect}
+                                onUploadRequest={onRowUploadRequest}
+                                onDirectUpload={onRowDirectUpload}
+                                factoryStages={factoryStagesList}
+                                siteStages={siteStagesList}
+                                onToggleStage={onRowToggleStage}
+                                onDelete={onRowDelete}
+                                onEdit={onRowEdit}
+                                onViewImage={onRowViewImage}
                             />
                         ))}
                     </tbody>
@@ -2815,7 +2856,7 @@ const StageDots = ({ stages, checks, onToggle, isFactory, compact = false }) => 
     );
 };
 
-const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
@@ -2870,13 +2911,13 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                 {user.role === ROLES.ADMIN && (
                     <div className="flex items-start justify-end">
                         <button
-                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                            onClick={(e) => { e.stopPropagation(); onEdit(sign); }}
                             className="p-1 rounded text-slate-400 active:bg-blue-50 active:text-blue-600"
                         >
                             <Edit size={13} />
                         </button>
                         <button
-                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            onClick={(e) => { e.stopPropagation(); onDelete(sign); }}
                             className="p-1 rounded text-slate-300 active:bg-red-50 active:text-red-500"
                         >
                             <Trash2 size={13} />
@@ -2894,7 +2935,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                         {artImages.length > 0 ? artImages.map((img, idx) => (
                             <div
                                 key={idx}
-                                onClick={() => onViewImage(artImages, idx, 'artworkImages')}
+                                onClick={() => onViewImage(sign, artImages, idx, 'artworkImages')}
                                 className="w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
                             >
                                 <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
@@ -2913,7 +2954,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                         <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Fab</span>
                         <div className="flex flex-wrap gap-0.5">
                             {factImages.length > 0 ? factImages.map((img, idx) => (
-                                <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
+                                <div key={idx} onClick={() => onViewImage(sign, factImages, idx, 'factoryImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in">
                                     <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                                 </div>
@@ -2924,7 +2965,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                                     title="Add photo">
                                     <Camera size={11} />
                                     <input id={`file-fact-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
-                                        onChange={(e) => onDirectUpload(e.target.files[0], 'General Production', true)} />
+                                        onChange={(e) => onDirectUpload(sign, e.target.files[0], 'General Production', true)} />
                                 </button>
                             )}
                         </div>
@@ -2937,7 +2978,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                         <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Site</span>
                         <div className="flex flex-wrap gap-0.5">
                             {siteImages.length > 0 ? siteImages.map((img, idx) => (
-                                <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
+                                <div key={idx} onClick={() => onViewImage(sign, siteImages, idx, 'siteImages')}
                                     className="relative w-8 h-8 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in"
                                     title={img.remarks || undefined}>
                                     <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
@@ -2950,7 +2991,7 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
                                     title="Add photo">
                                     <Camera size={11} />
                                     <input id={`file-site-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
-                                        onChange={(e) => onDirectUpload(e.target.files[0], 'Installation', false)} />
+                                        onChange={(e) => onDirectUpload(sign, e.target.files[0], 'Installation', false)} />
                                 </button>
                             )}
                         </div>
@@ -3003,10 +3044,10 @@ const SignCard = ({ sign, columns, gridTemplate = '', user, selected, onSelect, 
 
         </div>
     );
-};
+});
 
 // ── Desktop table row ─────────────────────────────────────────────────────────
-const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignRow = React.memo(({ sign, columns, colWidths = {}, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
@@ -3051,7 +3092,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                     {artImages.length > 0 ? artImages.map((img, idx) => (
                         <div
                             key={idx}
-                            onClick={() => onViewImage(artImages, idx, 'artworkImages')}
+                            onClick={() => onViewImage(sign, artImages, idx, 'artworkImages')}
                             className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
                         >
                             <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
@@ -3066,7 +3107,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
                         {factImages.length > 0 ? factImages.map((img, idx) => (
-                            <div key={idx} onClick={() => onViewImage(factImages, idx, 'factoryImages')}
+                            <div key={idx} onClick={() => onViewImage(sign, factImages, idx, 'factoryImages')}
                                 className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition">
                                 <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
                             </div>
@@ -3078,7 +3119,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                             title="Add photo">
                             <Camera size={10} />
                             <input id={`file-fact-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
-                                onChange={(e) => onDirectUpload(e.target.files[0], 'General Production', true)} />
+                                onChange={(e) => onDirectUpload(sign, e.target.files[0], 'General Production', true)} />
                         </button>
                     )}
                     {factoryTs && (
@@ -3099,7 +3140,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                 <div className="flex items-center gap-1">
                     <div className="flex -space-x-1 hover:space-x-1 transition-all">
                         {siteImages.length > 0 ? siteImages.map((img, idx) => (
-                            <div key={idx} onClick={() => onViewImage(siteImages, idx, 'siteImages')}
+                            <div key={idx} onClick={() => onViewImage(sign, siteImages, idx, 'siteImages')}
                                 className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
                                 title={img.remarks || undefined}>
                                 <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-cover rounded" />
@@ -3113,7 +3154,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                             title="Add photo">
                             <Camera size={10} />
                             <input id={`file-site-${sign._id}`} type="file" className="hidden" accept="image/*" capture="environment"
-                                onChange={(e) => onDirectUpload(e.target.files[0], 'Installation', false)} />
+                                onChange={(e) => onDirectUpload(sign, e.target.files[0], 'Installation', false)} />
                         </button>
                     )}
                     {siteTs && (
@@ -3144,7 +3185,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onEdit();
+                                onEdit(sign);
                             }}
                             className="p-1 hover:bg-blue-50 text-blue-400 hover:text-blue-600 rounded transition"
                             title="Edit Sign"
@@ -3154,7 +3195,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onDelete();
+                                onDelete(sign);
                             }}
                             className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded transition"
                             title="Delete Sign"
@@ -3166,7 +3207,7 @@ const SignRow = ({ sign, columns, colWidths = {}, user, selected, onSelect, onUp
             )}
         </tr>
     );
-};
+});
 
 const ImportMapper = ({ config, onClose, onConfirm }) => {
     const [uniqueId, setUniqueId] = useState(config.headers[0]);
