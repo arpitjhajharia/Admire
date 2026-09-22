@@ -711,7 +711,7 @@ const Dashboard = ({ user, onViewBOQ, onManageUsers, onLogout }) => {
             <main className="max-w-7xl mx-auto px-3 py-4 sm:p-6">
                 {/* ── Page header ── */}
                 <div className="flex justify-between items-center mb-4 sm:mb-8">
-                    <h2 className="text-lg sm:text-2xl font-bold text-slate-800">BOQ Dashboard</h2>
+                    <h2 className="text-lg sm:text-2xl font-bold text-slate-800">Project Tracker</h2>
                     {user.role === ROLES.ADMIN && (
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -2286,6 +2286,12 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 >
                     DPR
                 </button>
+                <button
+                    onClick={() => setActiveTab('checklist')}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'checklist' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                >
+                    Checklist
+                </button>
             </div>
 
             {/* ── Filter Bar — horizontally scrollable pills on mobile ── */}
@@ -2801,6 +2807,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
             </div>}
 
             {activeTab === 'dpr' && <DPRTab boq={boq} user={user} />}
+            {activeTab === 'checklist' && <ChecklistTab boq={boq} user={user} />}
 
             {importConfig && (
                 <ImportMapper
@@ -3767,6 +3774,398 @@ const UserManagement = ({ onClose }) => {
 
 // ── DPR Tab ───────────────────────────────────────────────────────────────────
 
+// ── Checklist tab ─────────────────────────────────────────────────────────────
+// Templates are standardised and shared by every project (one global library);
+// filled checklists are stored per project as permanent records. Each record
+// keeps its own copy of the items, so later template edits don't alter history.
+const checklistTemplatesRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'checklist_templates');
+const checklistEntriesRef = (boqId) => collection(db, 'artifacts', appId, 'public', 'data', 'boqs', boqId, 'checklist_entries');
+
+const newItemId = () => Math.random().toString(36).slice(2, 10);
+
+const fmtChecklistDate = (dateStr) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const ChecklistTemplateEditor = ({ template, user, onClose }) => {
+    const [name, setName] = useState(template?.name || '');
+    const [description, setDescription] = useState(template?.description || '');
+    const [items, setItems] = useState(template?.items?.length ? template.items : [{ id: newItemId(), text: '' }]);
+    const [saving, setSaving] = useState(false);
+
+    const updItem = (id, text) => setItems(prev => prev.map(it => it.id === id ? { ...it, text } : it));
+    const removeItem = (id) => setItems(prev => prev.filter(it => it.id !== id));
+    const moveItem = (idx, dir) => setItems(prev => {
+        const next = [...prev];
+        const j = idx + dir;
+        if (j < 0 || j >= next.length) return prev;
+        [next[idx], next[j]] = [next[j], next[idx]];
+        return next;
+    });
+    const addItem = () => setItems(prev => [...prev, { id: newItemId(), text: '' }]);
+
+    const cleanItems = items.map(it => ({ id: it.id, text: it.text.trim() })).filter(it => it.text);
+
+    const handleSave = async () => {
+        if (!name.trim() || cleanItems.length === 0) return;
+        setSaving(true);
+        try {
+            const data = {
+                name: name.trim(),
+                description: description.trim(),
+                items: cleanItems,
+                updatedBy: user.username,
+                updatedAt: serverTimestamp(),
+            };
+            if (template?.id) {
+                await updateDoc(doc(checklistTemplatesRef(), template.id), data);
+            } else {
+                await addDoc(checklistTemplatesRef(), { ...data, createdBy: user.username, createdAt: serverTimestamp() });
+            }
+            onClose();
+        } catch (e) {
+            alert('Error saving checklist: ' + e.message);
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b">
+                    <h3 className="font-bold text-slate-800">{template?.id ? 'Edit Checklist' : 'New Checklist'}</h3>
+                    <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Name</label>
+                        <input autoFocus value={name} onChange={e => setName(e.target.value)}
+                            placeholder="e.g. Tools to carry for installation"
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">When to use (optional)</label>
+                        <input value={description} onChange={e => setDescription(e.target.value)}
+                            placeholder="e.g. Before leaving for site each day"
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Items ({cleanItems.length})</label>
+                        <div className="space-y-1.5">
+                            {items.map((it, idx) => (
+                                <div key={it.id} className="flex items-center gap-1">
+                                    <span className="text-xs text-slate-400 w-5 text-right tabular-nums">{idx + 1}.</span>
+                                    <input value={it.text} onChange={e => updItem(it.id, e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
+                                        placeholder="Item"
+                                        className="flex-1 border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                                    <button onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-30" title="Move up"><ChevronUp size={14} /></button>
+                                    <button onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1} className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-30" title="Move down"><ChevronDown size={14} /></button>
+                                    <button onClick={() => removeItem(it.id)} className="p-1 text-slate-300 hover:text-red-600" title="Remove"><X size={14} /></button>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={addItem} className="mt-2 flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                            <Plus size={14} /> Add item
+                        </button>
+                    </div>
+                </div>
+                <div className="flex gap-2 px-4 py-3 border-t">
+                    <button onClick={onClose} className="flex-1 py-2.5 text-slate-600 font-semibold bg-slate-100 rounded-xl hover:bg-slate-200">Cancel</button>
+                    <button onClick={handleSave} disabled={saving || !name.trim() || cleanItems.length === 0}
+                        className="flex-1 py-2.5 text-white font-semibold bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50">
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ChecklistFillForm = ({ template, boq, user, onClose }) => {
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [checks, setChecks] = useState({});   // itemId → bool
+    const [notes, setNotes] = useState({});     // itemId → string
+    const [remarks, setRemarks] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const items = template.items || [];
+    const doneCount = items.filter(it => checks[it.id]).length;
+
+    const handleSubmit = async () => {
+        if (doneCount < items.length &&
+            !window.confirm(`${items.length - doneCount} item(s) are not ticked. Submit anyway?`)) return;
+        setSaving(true);
+        try {
+            await addDoc(checklistEntriesRef(boq.id), {
+                templateId: template.id,
+                templateName: template.name,
+                date,
+                items: items.map(it => ({
+                    id: it.id,
+                    text: it.text,
+                    checked: !!checks[it.id],
+                    note: (notes[it.id] || '').trim(),
+                })),
+                doneCount,
+                totalCount: items.length,
+                remarks: remarks.trim(),
+                filledBy: user.username,
+                createdAt: serverTimestamp(),
+            });
+            onClose();
+        } catch (e) {
+            alert('Error saving checklist: ' + e.message);
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="px-4 py-3 border-b">
+                    <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-bold text-slate-800 truncate">{template.name}</h3>
+                        <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0"><X size={18} /></button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                        <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold tabular-nums ${doneCount === items.length ? 'text-green-600' : 'text-slate-500'}`}>{doneCount}/{items.length}</span>
+                            <button onClick={() => setChecks(doneCount === items.length ? {} : Object.fromEntries(items.map(it => [it.id, true])))}
+                                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                {doneCount === items.length ? 'Clear all' : 'Tick all'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                    {items.map(it => {
+                        const on = !!checks[it.id];
+                        return (
+                            <div key={it.id} className={`px-4 py-2.5 ${on ? 'bg-green-50/60' : ''}`}>
+                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                    <input type="checkbox" checked={on}
+                                        onChange={() => setChecks(prev => ({ ...prev, [it.id]: !prev[it.id] }))}
+                                        className="mt-0.5 w-5 h-5 accent-green-600 flex-shrink-0" />
+                                    <span className={`text-sm ${on ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{it.text}</span>
+                                </label>
+                                <input value={notes[it.id] || ''} onChange={e => setNotes(prev => ({ ...prev, [it.id]: e.target.value }))}
+                                    placeholder="Note (optional)"
+                                    className="mt-1.5 ml-8 w-[calc(100%-2rem)] text-xs border-0 border-b border-transparent focus:border-slate-300 bg-transparent px-0 py-0.5 text-slate-600 placeholder:text-slate-300 focus:outline-none" />
+                            </div>
+                        );
+                    })}
+                    <div className="px-4 py-3">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Remarks</label>
+                        <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2}
+                            placeholder="Anything missing or worth noting…"
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    </div>
+                </div>
+                <div className="flex gap-2 px-4 py-3 border-t">
+                    <button onClick={onClose} className="flex-1 py-2.5 text-slate-600 font-semibold bg-slate-100 rounded-xl hover:bg-slate-200">Cancel</button>
+                    <button onClick={handleSubmit} disabled={saving || !date}
+                        className="flex-1 py-2.5 text-white font-semibold bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50">
+                        {saving ? 'Saving…' : 'Submit'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ChecklistTab = ({ boq, user }) => {
+    const canManage = !!user.canManageChecklists;
+    const canFill = !!user.canFillChecklists;
+
+    const [templates, setTemplates] = useState([]);
+    const [entries, setEntries] = useState([]);
+    const [view, setView] = useState('checklists'); // 'checklists' | 'records'
+    const [editing, setEditing] = useState(null);   // template being edited, {} for new
+    const [filling, setFilling] = useState(null);   // template being filled
+    const [recordFilter, setRecordFilter] = useState('');
+    const [expanded, setExpanded] = useState(null); // expanded record id
+
+    useEffect(() => onSnapshot(checklistTemplatesRef(), snap =>
+        setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+    ), []);
+
+    useEffect(() => onSnapshot(checklistEntriesRef(boq.id), snap => {
+        const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Newest date first; same-day entries by submission time
+        loaded.sort((a, b) => (b.date || '').localeCompare(a.date || '') ||
+            ((b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)));
+        setEntries(loaded);
+    }), [boq.id]);
+
+    const lastByTemplate = useMemo(() => {
+        const map = {};
+        entries.forEach(e => { if (!map[e.templateId]) map[e.templateId] = e; });
+        return map;
+    }, [entries]);
+
+    const countByTemplate = useMemo(() => {
+        const map = {};
+        entries.forEach(e => { map[e.templateId] = (map[e.templateId] || 0) + 1; });
+        return map;
+    }, [entries]);
+
+    const shownEntries = recordFilter ? entries.filter(e => e.templateId === recordFilter) : entries;
+
+    const deleteTemplate = async (t) => {
+        if (!window.confirm(`Delete the "${t.name}" checklist? It is shared by all projects. Filled records are kept.`)) return;
+        try { await deleteDoc(doc(checklistTemplatesRef(), t.id)); }
+        catch (e) { alert('Error: ' + e.message); }
+    };
+
+    const deleteEntry = async (e) => {
+        if (!window.confirm(`Delete this "${e.templateName}" record from ${fmtChecklistDate(e.date)}?`)) return;
+        try { await deleteDoc(doc(checklistEntriesRef(boq.id), e.id)); }
+        catch (err) { alert('Error: ' + err.message); }
+    };
+
+    const subTab = (key, label) => (
+        <button onClick={() => setView(key)}
+            className={`px-3 py-1 text-sm font-semibold rounded-lg transition ${view === key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            {label}
+        </button>
+    );
+
+    return (
+        <div className="flex-1 overflow-auto bg-slate-50 p-3">
+            <div className="max-w-3xl mx-auto">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="inline-flex bg-slate-200/70 rounded-xl p-1">
+                        {subTab('checklists', 'Checklists')}
+                        {subTab('records', `Records${entries.length ? ` (${entries.length})` : ''}`)}
+                    </div>
+                    {view === 'checklists' && canManage && (
+                        <button onClick={() => setEditing({})}
+                            className="flex items-center gap-1 text-sm font-semibold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700">
+                            <Plus size={14} /> New Checklist
+                        </button>
+                    )}
+                </div>
+
+                {view === 'checklists' && (
+                    templates.length === 0 ? (
+                        <div className="bg-white rounded-xl border border-slate-200 px-4 py-10 text-center text-slate-400 text-sm">
+                            {canManage
+                                ? 'No checklists yet. Click "New Checklist" to create one, e.g. tools to carry to site.'
+                                : 'No checklists have been set up yet.'}
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {templates.map(t => {
+                                const last = lastByTemplate[t.id];
+                                const count = countByTemplate[t.id] || 0;
+                                return (
+                                    <div key={t.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-semibold text-slate-800">{t.name}</div>
+                                            {t.description && <div className="text-xs text-slate-500 mt-0.5">{t.description}</div>}
+                                            <div className="text-xs text-slate-400 mt-1">
+                                                {t.items?.length || 0} items
+                                                {' · '}
+                                                {last
+                                                    ? <>Last filled {fmtChecklistDate(last.date)} by {last.filledBy}{count > 1 ? ` · ${count} records` : ''}</>
+                                                    : 'Not filled for this project yet'}
+                                            </div>
+                                        </div>
+                                        {canManage && (
+                                            <div className="flex gap-0.5 flex-shrink-0">
+                                                <button onClick={() => setEditing(t)} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Edit checklist"><Edit size={14} /></button>
+                                                <button onClick={() => deleteTemplate(t)} className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded" title="Delete checklist"><Trash2 size={14} /></button>
+                                            </div>
+                                        )}
+                                        {canFill && (
+                                            <button onClick={() => setFilling(t)} disabled={!t.items?.length}
+                                                className="flex-shrink-0 flex items-center gap-1 text-sm font-semibold bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                                                <CheckSquare size={14} /> Fill
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )
+                )}
+
+                {view === 'records' && (
+                    <>
+                        {templates.length > 0 && entries.length > 0 && (
+                            <select value={recordFilter} onChange={e => setRecordFilter(e.target.value)}
+                                className="mb-2 border rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
+                                <option value="">All checklists</option>
+                                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        )}
+                        {shownEntries.length === 0 ? (
+                            <div className="bg-white rounded-xl border border-slate-200 px-4 py-10 text-center text-slate-400 text-sm">
+                                No filled checklists for this project yet.
+                            </div>
+                        ) : (
+                            <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                                {shownEntries.map(e => {
+                                    const complete = e.doneCount === e.totalCount;
+                                    const open = expanded === e.id;
+                                    return (
+                                        <div key={e.id}>
+                                            <button onClick={() => setExpanded(open ? null : e.id)}
+                                                className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-medium text-slate-800 truncate">{e.templateName}</div>
+                                                    <div className="text-xs text-slate-400">{fmtChecklistDate(e.date)} · {e.filledBy}</div>
+                                                </div>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full tabular-nums ${complete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {e.doneCount}/{e.totalCount}
+                                                </span>
+                                                <span className={`text-slate-300 transition-transform ${open ? 'rotate-180' : ''}`}><ChevronDown size={14} /></span>
+                                            </button>
+                                            {open && (
+                                                <div className="px-4 pb-3 bg-slate-50/60">
+                                                    <ul className="space-y-1 pt-1">
+                                                        {(e.items || []).map(it => (
+                                                            <li key={it.id} className="flex items-start gap-2 text-sm">
+                                                                <span className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${it.checked ? 'bg-green-600' : 'bg-red-100 border border-red-300'}`}>
+                                                                    {it.checked ? <CheckSquare size={10} className="text-white" /> : <X size={10} className="text-red-500" />}
+                                                                </span>
+                                                                <span className={it.checked ? 'text-slate-700' : 'text-red-700'}>
+                                                                    {it.text}
+                                                                    {it.note && <span className="block text-xs text-slate-500 italic">{it.note}</span>}
+                                                                </span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                    {e.remarks && (
+                                                        <p className="mt-2 text-sm text-slate-600 bg-white border rounded-lg px-3 py-2"><span className="font-semibold">Remarks:</span> {e.remarks}</p>
+                                                    )}
+                                                    {canManage && (
+                                                        <button onClick={() => deleteEntry(e)} className="mt-2 flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
+                                                            <Trash2 size={12} /> Delete record
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {editing && <ChecklistTemplateEditor template={editing.id ? editing : null} user={user} onClose={() => setEditing(null)} />}
+            {filling && <ChecklistFillForm template={filling} boq={boq} user={user} onClose={() => setFilling(null)} />}
+        </div>
+    );
+};
+
 const DPRTab = ({ boq, user }) => {
     const canManageTasks = user.role === ROLES.ADMIN;
     const todayStr = () => new Date().toISOString().split('T')[0];
@@ -4217,7 +4616,9 @@ const ReportingTracker = ({ user: globalUser, perms = {} }) => {
 
     const user = {
         username: globalUser?.username || globalUser?.email?.split('@')[0] || 'user',
-        role: getTrackerRole()
+        role: getTrackerRole(),
+        canManageChecklists: !!perms['boq.manageChecklists'],
+        canFillChecklists: !!perms['boq.fillChecklists'],
     };
 
     if (loading) return <Loading />;

@@ -75,6 +75,8 @@ Project Tracker — Upload images (site / handover),Y,Y,No,Y,Y,No,Y
 Project Tracker — Batch status update,Y,Y,No,Y,Y,No,Y
 Project Tracker — Batch delete items,Y,Y,No,No,No,No,No
 Project Tracker — Delete BOQ,Y,Y,No,No,No,No,No
+Project Tracker — Create / edit checklists & delete records,Y,Y,No,Y,Y,No,No
+Project Tracker — Fill checklists,Y,Y,No,Y,Y,No,Y
 Cut List Calculator — Full use,Y,Y,No,Y,Y,Y,Y
 CRM — View leads (all),Y,Y,Y,No,No,No,No
 CRM — Create lead,Y,Y,No,No,No,No,No

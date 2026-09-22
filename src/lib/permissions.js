@@ -146,6 +146,8 @@ export const RULES = {
   'boq.batchStatusUpdate': [SA, OW, AS, FL, ST],
   'boq.batchDelete': ADMIN_OWNER,
   'boq.delete': ADMIN_OWNER,
+  'boq.manageChecklists': [SA, OW, AS, FL], // create / edit / delete checklist templates & records
+  'boq.fillChecklists': [SA, OW, AS, FL, ST],
 
   // ── Structural Planner ──────────────────────────────────────────────────
   'structural.addEdit': ADMIN_OWNER,
