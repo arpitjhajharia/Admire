@@ -60,7 +60,11 @@ import {
     BookOpen,
     TrendingUp,
     Download,
-    Database
+    Database,
+    ArrowUp,
+    ArrowDown,
+    PencilLine,
+    MessageSquare
 } from 'lucide-react';
 
 const ROLES = {
@@ -1028,9 +1032,13 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     const [editingSign, setEditingSign] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
 
-    // New state for Column Visibility
+    // Column visibility/order + Edit Mode — persisted per user per BOQ in localStorage
     const [showColumnSelector, setShowColumnSelector] = useState(false);
-    const [visibleColumnKeys, setVisibleColumnKeys] = useState(new Set());
+    const [hiddenColumnKeys, setHiddenColumnKeys] = useState(new Set());
+    const [columnOrder, setColumnOrder] = useState([]);
+    const [editMode, setEditMode] = useState(false);
+    const [viewLoaded, setViewLoaded] = useState(false);
+    const viewKey = `boq_view_${boq.id}_${user.username}`;
 
     // Upload Modal State
     const [uploadModal, setUploadModal] = useState({ isOpen: false, sign: null, isFactory: false });
@@ -1146,21 +1154,49 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     }, [boq.id, user.role]);
 
     useEffect(() => {
-        if (boq.columns) {
-            setColumns(boq.columns);
-            // Initialize visible columns to all currently visible columns from config
-            if (visibleColumnKeys.size === 0) {
-                const initialKeys = new Set(boq.columns.filter(c => c.visible).map(c => c.key));
-                setVisibleColumnKeys(initialKeys);
-            }
-        }
-    }, [boq, visibleColumnKeys.size]);
+        if (boq.columns) setColumns(boq.columns);
+    }, [boq.columns]);
+
+    // Load this user's saved view (hidden/order/sort/filters) for this BOQ once on
+    // mount, then keep it mirrored to localStorage. `viewLoaded` gates the save
+    // effect's first run (before the load below applies) so it can't clobber a
+    // previously saved view with these fresh-mount defaults.
+    useEffect(() => {
+        let saved = null;
+        try {
+            const raw = localStorage.getItem(viewKey);
+            if (raw) saved = JSON.parse(raw);
+        } catch { /* private browsing / corrupt data — fall back to defaults */ }
+        setHiddenColumnKeys(new Set(saved?.hidden || []));
+        setColumnOrder(saved?.order || []);
+        setSortConfig(saved?.sort || null);
+        setFilters(Object.fromEntries(Object.entries(saved?.filters || {}).map(([k, v]) => [k, new Set(v)])));
+        setIdFilter(new Set(saved?.idFilter || []));
+        setDateFilters(saved?.dateFilters || { siteFrom: '', siteTo: '', factoryFrom: '', factoryTo: '' });
+        setViewLoaded(true);
+    }, [viewKey]);
+
+    useEffect(() => {
+        if (!viewLoaded) return;
+        try {
+            localStorage.setItem(viewKey, JSON.stringify({
+                hidden: [...hiddenColumnKeys],
+                order: columnOrder,
+                sort: sortConfig,
+                filters: Object.fromEntries(Object.entries(filters).map(([k, v]) => [k, [...v]])),
+                idFilter: [...idFilter],
+                dateFilters,
+            }));
+        } catch { /* private browsing — view just won't stick this session */ }
+    }, [viewLoaded, viewKey, hiddenColumnKeys, columnOrder, sortConfig, filters, idFilter, dateFilters]);
 
     const toggleColumnVisibility = (key) => {
-        const newSet = new Set(visibleColumnKeys);
-        if (newSet.has(key)) newSet.delete(key);
-        else newSet.add(key);
-        setVisibleColumnKeys(newSet);
+        setHiddenColumnKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
     };
 
     // ... Import Handlers & Logic (Same as before) ...
@@ -1659,6 +1695,60 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         }
     };
 
+    // Inline (Edit Mode) single-cell save — updates local state immediately so
+    // typing never waits on the network, then fires the write in the background.
+    const handleCellCommit = (sign, key, value) => {
+        setSigns(prev => prev.map(s => s._id === sign._id ? { ...s, [key]: value } : s));
+        trackWrite(
+            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), { [key]: value })
+                .catch((e) => { console.error('Cell update failed', e); alert('Failed to save: ' + e.message); })
+        );
+    };
+
+    // Column definition CRUD — structural changes to boq.columns, shared across
+    // all viewers via the live BOQ listener above. Admin-only (gated in the JSX).
+    // type: 'text' (default) or 'comments' — a "comments" column renders as an
+    // always-editable inline field for every role, independent of Edit Mode.
+    const handleAddColumn = async (label, type = 'text') => {
+        const trimmed = label.trim();
+        if (!trimmed) return 'Enter a column name.';
+        if (columns.some(c => c.key.toLowerCase() === trimmed.toLowerCase())) return 'A column with that name already exists.';
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), {
+                columns: [...columns, { key: trimmed, label: trimmed, visible: true, isId: false, isFilter: false, type }]
+            });
+        } catch (e) {
+            console.error(e);
+            return 'Failed to add column: ' + e.message;
+        }
+        return null;
+    };
+
+    const handleRenameColumn = async (key, newLabel) => {
+        const trimmed = newLabel.trim();
+        if (!trimmed) return;
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), {
+                columns: columns.map(c => c.key === key ? { ...c, label: trimmed } : c)
+            });
+        } catch (e) {
+            console.error(e);
+            alert('Failed to rename column: ' + e.message);
+        }
+    };
+
+    const handleDeleteColumn = async (key) => {
+        if (!window.confirm('Remove this column from the table? Existing data in this field is kept and reappears if you re-add a column with the same name.')) return;
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id), {
+                columns: columns.filter(c => c.key !== key)
+            });
+        } catch (e) {
+            console.error(e);
+            alert('Failed to delete column: ' + e.message);
+        }
+    };
+
     const handleDeleteImage = async (signId, field, imageIndex) => {
         if (!window.confirm("Are you sure you want to delete this image?")) return;
 
@@ -2009,17 +2099,50 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
         return false;
     };
 
-    // Render columns based on visibility settings (but always include ID)
-    const activeColumns = useMemo(
-        () => columns.filter(c => (c.isId || visibleColumnKeys.has(c.key)) && c.visible),
-        [columns, visibleColumnKeys]);
+    // ID column is pinned separately (leftmost, always visible, not reorderable —
+    // mirrors how the mobile card view already treats it). Every other data
+    // column plus a synthetic "Artwork" entry are user-hideable/reorderable via
+    // hiddenColumnKeys/columnOrder (see the column-manager panel below).
+    const idColumn = columns.find(c => c.isId);
+
+    const manageableColumns = useMemo(() => {
+        const dataCols = columns.filter(c => !c.isId);
+        const all = [...dataCols, { key: '_artwork', label: 'Artwork', isSystem: true }];
+        const orderIndex = new Map(columnOrder.map((k, i) => [k, i]));
+        return [...all].sort((a, b) => {
+            const ai = orderIndex.has(a.key) ? orderIndex.get(a.key) : Infinity;
+            const bi = orderIndex.has(b.key) ? orderIndex.get(b.key) : Infinity;
+            return ai - bi;
+        });
+    }, [columns, columnOrder]);
+
+    const renderColumns = useMemo(
+        () => manageableColumns.filter(c => (c.isSystem || c.visible) && !hiddenColumnKeys.has(c.key)),
+        [manageableColumns, hiddenColumnKeys]);
+
+    const moveColumn = (key, direction) => {
+        const keys = manageableColumns.map(c => c.key);
+        const idx = keys.indexOf(key);
+        const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+        if (idx < 0 || swapWith < 0 || swapWith >= keys.length) return;
+        [keys[idx], keys[swapWith]] = [keys[swapWith], keys[idx]];
+        setColumnOrder(keys);
+    };
+
+    // Render columns based on visibility settings (but always include ID) — used
+    // by PrintView, the mobile card view and per-column filters/sort, all of
+    // which don't need the Artwork placeholder mixed into the data-key list.
+    const activeColumns = useMemo(() => {
+        const nonId = renderColumns.filter(c => !c.isSystem);
+        return idColumn ? [idColumn, ...nonId] : nonId;
+    }, [idColumn, renderColumns]);
 
     // Stable props/handlers for the memoized SignRow / SignCard below.
     // These row components re-rendered for every row on every keystroke because each
     // row got freshly-built closures. The ref forwards to the latest handler without
     // changing identity, so React.memo can actually skip untouched rows.
     const rowHandlersRef = useRef(null);
-    rowHandlersRef.current = { executeUpload, handleToggleStage, handleUploadRequest, boqId: boq.id };
+    rowHandlersRef.current = { executeUpload, handleToggleStage, handleUploadRequest, handleCellCommit, boqId: boq.id };
 
     const factoryStagesList = useMemo(() => boq.factoryStages || [], [boq.factoryStages]);
     const siteStagesList = useMemo(() => boq.siteStages || [], [boq.siteStages]);
@@ -2039,6 +2162,8 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
     const onRowToggleStage = useCallback((sign, stage, isFactory) =>
         rowHandlersRef.current.handleToggleStage(sign, stage, isFactory), []);
     const onRowEdit = useCallback((sign) => setEditingSign(sign), []);
+    const onCellCommit = useCallback((sign, key, value) =>
+        rowHandlersRef.current.handleCellCommit(sign, key, value), []);
     const onRowViewImage = useCallback((sign, images, idx, field) =>
         setLightboxImages({ images, index: idx, signId: sign._id, field }), []);
     const onRowDelete = useCallback(async (sign) => {
@@ -2162,33 +2287,39 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                 </div>
 
                 <div className="flex items-center gap-1 flex-shrink-0">
-                    {/* Column visibility */}
+                    {/* Column visibility / order / (admin) add-rename-delete */}
                     <div className="relative">
                         <button
                             onClick={() => setShowColumnSelector(!showColumnSelector)}
                             className={`p-2 rounded-lg transition ${showColumnSelector ? 'bg-indigo-100 text-indigo-600' : 'text-slate-500 hover:bg-slate-100 active:bg-slate-200'}`}
-                            title="Show/Hide Columns"
+                            title="Manage Columns"
                         >
                             <Eye size={16} />
                         </button>
                         {showColumnSelector && (
-                            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border p-2 z-50 animate-in fade-in slide-in-from-top-2">
-                                <div className="text-xs font-bold text-slate-400 uppercase px-2 py-1 mb-1">Visible Columns</div>
-                                <div className="max-h-60 overflow-y-auto space-y-1">
-                                    {columns.filter(c => c.visible).map(col => (
-                                        <button
-                                            key={col.key}
-                                            onClick={() => !col.isId && toggleColumnVisibility(col.key)}
-                                            className={`w-full text-left px-3 py-2 rounded flex items-center justify-between text-sm ${col.isId ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-50'}`}
-                                        >
-                                            <span className={visibleColumnKeys.has(col.key) || col.isId ? 'text-slate-800 font-medium' : 'text-slate-400'}>{col.label}</span>
-                                            {visibleColumnKeys.has(col.key) || col.isId ? <Eye size={14} className="text-indigo-500" /> : <EyeOff size={14} className="text-slate-300" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            <ColumnManagerPanel
+                                columns={manageableColumns}
+                                hiddenColumnKeys={hiddenColumnKeys}
+                                isAdmin={user.role === ROLES.ADMIN}
+                                onToggleVisibility={toggleColumnVisibility}
+                                onMove={moveColumn}
+                                onRename={handleRenameColumn}
+                                onDelete={handleDeleteColumn}
+                                onAdd={handleAddColumn}
+                                onClose={() => setShowColumnSelector(false)}
+                            />
                         )}
                     </div>
+                    {/* Edit Mode — Excel-like inline cell editing on the desktop table */}
+                    {user.role === ROLES.ADMIN && (
+                        <button
+                            onClick={() => setEditMode(!editMode)}
+                            className={`p-2 rounded-lg transition ${editMode ? 'bg-indigo-100 text-indigo-600' : 'text-slate-500 hover:bg-slate-100 active:bg-slate-200'}`}
+                            title={editMode ? 'Exit Edit Mode' : 'Edit Mode — edit cells directly in the table'}
+                        >
+                            <PencilLine size={16} />
+                        </button>
+                    )}
                     {/* Save status — tells the user when it's safe to close the tab */}
                     <div
                         className="flex items-center gap-1 text-xs mr-0.5 select-none"
@@ -2707,6 +2838,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             key={sign._id}
                             sign={sign}
                             columns={activeColumns}
+                            hideArtwork={hiddenColumnKeys.has('_artwork')}
                             gridTemplate={mobileGridTemplate}
                             user={user}
                             selected={selectedSigns.has(sign._id)}
@@ -2719,6 +2851,7 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             onDelete={onRowDelete}
                             onEdit={onRowEdit}
                             onViewImage={onRowViewImage}
+                            onCellCommit={onCellCommit}
                         />
                     ))}
                     {filteredSigns.length === 0 && (
@@ -2745,7 +2878,21 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             <th className="px-2 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 w-24" onClick={() => setSortConfig({ key: 'status', direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}>
                                 <div className="flex items-center gap-1">Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</div>
                             </th>
-                            {activeColumns.map(col => (
+                            {idColumn && (
+                                <th
+                                    style={{ width: colWidths[idColumn.key] }}
+                                    className="px-2 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 whitespace-normal break-words leading-tight"
+                                    onClick={() => setSortConfig({ key: idColumn.key, direction: sortConfig?.direction === 'asc' ? 'desc' : 'asc' })}
+                                >
+                                    <div className="flex items-start gap-1">
+                                        <span>{idColumn.label}</span>
+                                        {sortConfig?.key === idColumn.key && (sortConfig.direction === 'asc' ? <ChevronUp size={12} className="flex-shrink-0 mt-0.5" /> : <ChevronDown size={12} className="flex-shrink-0 mt-0.5" />)}
+                                    </div>
+                                </th>
+                            )}
+                            {renderColumns.map(col => col.isSystem ? (
+                                <th key={col.key} className="px-2 py-2 border-b border-slate-200">{col.label}</th>
+                            ) : (
                                 <th
                                     key={col.key}
                                     style={{ width: colWidths[col.key] }}
@@ -2758,7 +2905,6 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                                     </div>
                                 </th>
                             ))}
-                            <th className="px-2 py-2 border-b border-slate-200">Artwork</th>
                             {(boq.factoryStages || []).length > 0 && (
                                 <th className="px-2 py-2 border-b border-slate-200 w-24 cursor-pointer hover:bg-slate-100 select-none"
                                     onClick={() => setSortConfig({ key: '_factoryImageDate', direction: sortConfig?.key === '_factoryImageDate' && sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
@@ -2787,8 +2933,11 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                             <SignRow
                                 key={sign._id}
                                 sign={sign}
-                                columns={activeColumns}
+                                idColumn={idColumn}
+                                columns={renderColumns}
                                 colWidths={colWidths}
+                                editMode={editMode}
+                                onCellCommit={onCellCommit}
                                 user={user}
                                 selected={selectedSigns.has(sign._id)}
                                 onSelect={onRowSelect}
@@ -2815,6 +2964,115 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
                     onClose={() => setImportConfig(null)}
                     onConfirm={confirmImport}
                 />
+            )}
+        </div>
+    );
+};
+
+// Column manager: show/hide + reorder (everyone, personal/sticky) and, for admins,
+// rename/delete/add column definitions (shared, written to boq.columns).
+const ColumnManagerPanel = ({ columns, hiddenColumnKeys, isAdmin, onToggleVisibility, onMove, onRename, onDelete, onAdd, onClose }) => {
+    const [renamingKey, setRenamingKey] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [addValue, setAddValue] = useState('');
+    const [addType, setAddType] = useState('text');
+    const [addError, setAddError] = useState('');
+    const panelRef = React.useRef(null);
+
+    useEffect(() => {
+        const handler = (e) => { if (panelRef.current && !panelRef.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    const startRename = (col) => { setRenamingKey(col.key); setRenameValue(col.label); };
+    const commitRename = () => {
+        if (renamingKey && renameValue.trim()) onRename(renamingKey, renameValue.trim());
+        setRenamingKey(null);
+    };
+
+    const submitAdd = async () => {
+        const err = await onAdd(addValue, addType);
+        if (err) { setAddError(err); return; }
+        setAddValue('');
+        setAddType('text');
+        setAddError('');
+    };
+
+    return (
+        <div ref={panelRef} className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border p-2 z-50 animate-in fade-in slide-in-from-top-2">
+            <div className="text-xs font-bold text-slate-400 uppercase px-2 py-1 mb-1">Columns</div>
+            <div className="max-h-72 overflow-y-auto space-y-1">
+                {columns.map((col, i) => {
+                    const visible = !hiddenColumnKeys.has(col.key);
+                    return (
+                        <div key={col.key} className="flex items-center gap-1 px-1 py-1 rounded hover:bg-slate-50">
+                            <div className="flex flex-col flex-shrink-0">
+                                <button onClick={() => onMove(col.key, 'up')} disabled={i === 0}
+                                    className="text-slate-400 hover:text-slate-700 disabled:opacity-20 disabled:cursor-not-allowed" title="Move up">
+                                    <ArrowUp size={12} />
+                                </button>
+                                <button onClick={() => onMove(col.key, 'down')} disabled={i === columns.length - 1}
+                                    className="text-slate-400 hover:text-slate-700 disabled:opacity-20 disabled:cursor-not-allowed" title="Move down">
+                                    <ArrowDown size={12} />
+                                </button>
+                            </div>
+                            {renamingKey === col.key ? (
+                                <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={e => setRenameValue(e.target.value)}
+                                    onBlur={commitRename}
+                                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenamingKey(null); }}
+                                    className="flex-1 min-w-0 text-sm border rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                />
+                            ) : (
+                                <button onClick={() => onToggleVisibility(col.key)} className="flex-1 min-w-0 text-left flex items-center justify-between gap-1 text-sm">
+                                    <span className={`truncate flex items-center gap-1 ${visible ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>
+                                        {col.type === 'comments' && <MessageSquare size={11} className="text-teal-500 flex-shrink-0" />}
+                                        {col.label}
+                                    </span>
+                                    {visible ? <Eye size={14} className="text-indigo-500 flex-shrink-0" /> : <EyeOff size={14} className="text-slate-300 flex-shrink-0" />}
+                                </button>
+                            )}
+                            {isAdmin && !col.isSystem && renamingKey !== col.key && (
+                                <>
+                                    <button onClick={() => startRename(col)} className="p-1 text-slate-300 hover:text-blue-500 flex-shrink-0" title="Rename column">
+                                        <PencilLine size={13} />
+                                    </button>
+                                    <button onClick={() => onDelete(col.key)} className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0" title="Delete column">
+                                        <Trash2 size={13} />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            {isAdmin && (
+                <div className="mt-2 pt-2 border-t">
+                    <div className="flex items-center gap-1">
+                        <input
+                            value={addValue}
+                            onChange={e => { setAddValue(e.target.value); setAddError(''); }}
+                            onKeyDown={e => e.key === 'Enter' && submitAdd()}
+                            placeholder="New column name"
+                            className="flex-1 min-w-0 text-sm border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                        />
+                        <button onClick={submitAdd} className="p-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex-shrink-0" title="Add column">
+                            <Plus size={14} />
+                        </button>
+                    </div>
+                    <select
+                        value={addType}
+                        onChange={e => setAddType(e.target.value)}
+                        className="mt-1 w-full text-xs border rounded px-2 py-1 text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    >
+                        <option value="text">Text — edits need Edit Mode (admin)</option>
+                        <option value="comments">Comments — anyone can type directly, no Edit Mode needed</option>
+                    </select>
+                    {addError && <p className="text-[10px] text-red-500 mt-1 px-1">{addError}</p>}
+                </div>
             )}
         </div>
     );
@@ -2910,7 +3168,7 @@ const StageDots = ({ stages, checks, onToggle, isFactory, compact = false }) => 
     );
 };
 
-const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignCard = React.memo(({ sign, columns, hideArtwork = false, gridTemplate = '', user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, onCellCommit, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
@@ -2950,7 +3208,14 @@ const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected,
                         {sign[idCol.key]}
                     </span>
                 )}
-                {bodyColumns.map(col => (
+                {bodyColumns.map(col => col.type === 'comments' ? (
+                    <EditableCell
+                        key={col.key}
+                        value={sign[col.key] ?? ''}
+                        onCommit={(v) => onCellCommit(sign, col.key, v)}
+                        className="text-[10px] text-slate-700 border border-slate-200 rounded px-1 py-0.5 w-full min-w-0 bg-white focus:border-indigo-400 focus:outline-none"
+                    />
+                ) : (
                     <span key={col.key} className="text-[10px] text-slate-700 break-words leading-tight">
                         {sign[col.key]}
                     </span>
@@ -2983,6 +3248,7 @@ const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected,
             {/* Images — full width, the 3 sections (Art / Fab / Site) spread evenly */}
             <div className="flex items-start gap-2 mt-2">
                 {/* Artwork */}
+                {!hideArtwork && (
                 <div className="flex-1 min-w-0 flex items-center gap-1.5">
                     <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide flex-shrink-0">Art</span>
                     <div className="flex flex-wrap gap-0.5">
@@ -3001,6 +3267,7 @@ const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected,
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* Factory photos */}
                 {(factImages.length > 0 || isFactory) && (
@@ -3100,8 +3367,45 @@ const SignCard = React.memo(({ sign, columns, gridTemplate = '', user, selected,
     );
 });
 
+// Excel-like inline cell editor for the desktop table's Edit Mode. Keeps its own
+// draft so typing never gets clobbered by the live Firestore listener re-rendering
+// `signs` mid-edit; only syncs from the incoming value while not focused.
+const EditableCell = ({ value, onCommit, className }) => {
+    const [draft, setDraft] = useState(value ?? '');
+    const focusedRef = React.useRef(false);
+
+    useEffect(() => {
+        if (!focusedRef.current) setDraft(value ?? '');
+    }, [value]);
+
+    const commit = () => {
+        if (draft !== (value ?? '')) onCommit(draft);
+    };
+
+    return (
+        <input
+            value={draft}
+            onFocus={() => { focusedRef.current = true; }}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { focusedRef.current = false; commit(); }}
+            onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const cell = e.target.closest('td');
+                const row = cell?.closest('tr');
+                const cellIndex = cell && row ? Array.prototype.indexOf.call(row.children, cell) : -1;
+                e.target.blur();
+                const nextCell = row?.nextElementSibling && cellIndex >= 0 ? row.nextElementSibling.children[cellIndex] : null;
+                nextCell?.querySelector('input')?.focus();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={className || "w-full min-w-0 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white rounded px-1 py-0.5 bg-transparent focus:outline-none"}
+        />
+    );
+};
+
 // ── Desktop table row ─────────────────────────────────────────────────────────
-const SignRow = React.memo(({ sign, columns, colWidths = {}, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
+const SignRow = React.memo(({ sign, idColumn, columns, colWidths = {}, editMode = false, onCellCommit, user, selected, onSelect, onUploadRequest, onDirectUpload, onDelete, onEdit, onViewImage, factoryStages, siteStages, onToggleStage }) => {
     const isFactory = user.role === ROLES.FACTORY || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
     const isSite = user.role === ROLES.SITE || user.role === ROLES.DUAL || user.role === ROLES.ADMIN;
 
@@ -3113,6 +3417,10 @@ const SignRow = React.memo(({ sign, columns, colWidths = {}, user, selected, onS
     // Latest photo timestamps surfaced compactly in the Factory/Site cells
     const factoryTs = latestImageTs(factImages);
     const siteTs = latestImageTs(siteImages);
+
+    // Comments-type columns are always inline-editable for every role; other
+    // columns only become editable while the admin-only Edit Mode is on.
+    const isEditableCell = (col) => editMode || col.type === 'comments';
 
     const statusColor = (s) => {
         if (s.includes('Ready')) return 'bg-blue-100 text-blue-700';
@@ -3133,27 +3441,38 @@ const SignRow = React.memo(({ sign, columns, colWidths = {}, user, selected, onS
                     {sign.status}
                 </span>
             </td>
-            {columns.filter(c => c.visible).map(col => (
+            {idColumn && (
+                <td
+                    style={{ width: colWidths[idColumn.key], maxWidth: colWidths[idColumn.key] }}
+                    title={sign[idColumn.key] != null ? String(sign[idColumn.key]) : undefined}
+                    className="px-2 py-1.5 text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis align-middle">
+                    {sign[idColumn.key]}
+                </td>
+            )}
+            {columns.map(col => col.isSystem ? (
+                <td key={col.key} className="px-2 py-1.5 align-middle">
+                    <div className="flex -space-x-1 overflow-hidden hover:space-x-1 transition-all">
+                        {artImages.length > 0 ? artImages.map((img, idx) => (
+                            <div
+                                key={idx}
+                                onClick={() => onViewImage(sign, artImages, idx, 'artworkImages')}
+                                className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
+                            >
+                                <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
+                            </div>
+                        )) : <div className="w-7 h-7 bg-slate-100 rounded border flex items-center justify-center text-slate-300"><ImageIcon size={12} /></div>}
+                    </div>
+                </td>
+            ) : (
                 <td key={col.key}
                     style={{ width: colWidths[col.key], maxWidth: colWidths[col.key] }}
-                    title={sign[col.key] != null ? String(sign[col.key]) : undefined}
-                    className="px-2 py-1.5 text-slate-700 whitespace-nowrap overflow-hidden text-ellipsis align-middle">
-                    {sign[col.key]}
+                    title={!isEditableCell(col) && sign[col.key] != null ? String(sign[col.key]) : undefined}
+                    className={`px-2 py-1.5 text-slate-700 align-middle ${isEditableCell(col) ? '' : 'whitespace-nowrap overflow-hidden text-ellipsis'}`}>
+                    {isEditableCell(col)
+                        ? <EditableCell value={sign[col.key] ?? ''} onCommit={(v) => onCellCommit(sign, col.key, v)} />
+                        : sign[col.key]}
                 </td>
             ))}
-            <td className="px-2 py-1.5 align-middle">
-                <div className="flex -space-x-1 overflow-hidden hover:space-x-1 transition-all">
-                    {artImages.length > 0 ? artImages.map((img, idx) => (
-                        <div
-                            key={idx}
-                            onClick={() => onViewImage(sign, artImages, idx, 'artworkImages')}
-                            className="w-7 h-7 bg-white rounded border shadow-sm flex-shrink-0 cursor-zoom-in relative hover:z-10 hover:scale-110 transition"
-                        >
-                            <img src={img.thumbUrl || img.url} alt="" loading="lazy" className="w-full h-full object-contain rounded" />
-                        </div>
-                    )) : <div className="w-7 h-7 bg-slate-100 rounded border flex items-center justify-center text-slate-300"><ImageIcon size={12} /></div>}
-                </div>
-            </td>
 
             {/* Factory Column — only when factory stages are configured */}
             {factoryStages.length > 0 && (
@@ -3236,16 +3555,18 @@ const SignRow = React.memo(({ sign, columns, colWidths = {}, user, selected, onS
             {user.role === ROLES.ADMIN && (
                 <td className="px-2 py-1.5 text-center align-middle">
                     <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onEdit(sign);
-                            }}
-                            className="p-1 hover:bg-blue-50 text-blue-400 hover:text-blue-600 rounded transition"
-                            title="Edit Sign"
-                        >
-                            <Edit size={13} />
-                        </button>
+                        {!editMode && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(sign);
+                                }}
+                                className="p-1 hover:bg-blue-50 text-blue-400 hover:text-blue-600 rounded transition"
+                                title="Edit Sign"
+                            >
+                                <Edit size={13} />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
