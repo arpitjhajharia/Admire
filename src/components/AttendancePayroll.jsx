@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Settings, RefreshCw, TrendingUp, CreditCard,
   Clock, AlertCircle, CheckCircle2, Activity, Star, Camera, Upload,
   ChevronDown, ChevronUp, Phone, MapPin, Droplets, ShieldCheck, Download,
-  UserMinus, UserCheck, UserX
+  UserMinus, UserCheck, UserX, Building2
 } from 'lucide-react';
 
 // ─── Firestore helper ──────────────────────────────────────────────────────────
@@ -127,6 +127,15 @@ const isOnRosterFor = (emp, ym) =>
 const getAdvanceBalance = (advances, empId) =>
   advances.filter(a => a.employeeId === empId).reduce((bal, a) => a.type === 'advance' ? bal + (a.amount || 0) : bal - (a.amount || 0), 0);
 
+// ─── Branches ──────────────────────────────────────────────────────────────────
+// Branches live on the global payroll settings as [{ id, name }]; employees point
+// at one by id so a rename carries through everywhere. Employees saved before
+// branches existed have no branchId and show up as Unassigned.
+const BRANCH_ALL = 'all';
+const BRANCH_NONE = 'none';
+const BRANCH_FILTER_KEY = 'payroll_branch_filter';
+const newBranchId = () => `br_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
 // shared input & label classes
 const inp = (extra = '') => `w-full border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none ${extra}`;
 const lbl = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1';
@@ -169,11 +178,12 @@ function MonthPicker({ value, onChange }) {
 }
 
 // ─── Employee Modal ────────────────────────────────────────────────────────────
-function EmployeeModal({ emp, onClose }) {
+function EmployeeModal({ emp, branches = [], defaultBranchId = '', onClose }) {
   const isNew = !emp?.id;
   const [form, setForm] = useState({
     name: emp?.name || '',
     department: emp?.department || '',
+    branchId: emp?.branchId || (isNew ? defaultBranchId : ''),
     joiningDate: emp?.joiningDate || '',
     baseSalary: emp?.baseSalary ?? '',
     shiftHours: emp?.shiftHours ?? 9,
@@ -252,6 +262,15 @@ function EmployeeModal({ emp, onClose }) {
             <div>
               <label className={lbl}>Department</label>
               <input className={inp()} value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} placeholder="e.g. Operations" />
+            </div>
+            <div>
+              <label className={lbl}>Branch</label>
+              <select className={inp()} value={form.branchId} onChange={e => setForm(f => ({ ...f, branchId: e.target.value }))}>
+                <option value="">— Unassigned —</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {form.branchId && !branches.some(b => b.id === form.branchId) && <option value={form.branchId}>(deleted branch)</option>}
+              </select>
+              {!branches.length && <p className="text-[10px] text-slate-400 mt-1">Add branches from Employees → Branches</p>}
             </div>
             <div>
               <label className={lbl}>Joining Date</label>
@@ -536,7 +555,80 @@ function DeactivateModal({ emp, actor, onClose }) {
 }
 
 // ─── Employee Tab ──────────────────────────────────────────────────────────────
-function EmployeeTab({ employees, perms = {}, actor }) {
+// ─── Branches Modal ────────────────────────────────────────────────────────────
+function BranchesModal({ branches, employees, onSave, onClose }) {
+  const [draft, setDraft] = useState(branches.map(b => ({ ...b })));
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const headcount = (id) => employees.filter(e => e.branchId === id).length;
+  const nameTaken = (name, exceptId) =>
+    draft.some(b => b.id !== exceptId && b.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+  const addBranch = () => {
+    const name = newName.trim();
+    if (!name) return;
+    if (nameTaken(name)) return alert(`A branch called "${name}" already exists`);
+    setDraft(d => [...d, { id: newBranchId(), name }]);
+    setNewName('');
+  };
+
+  const removeBranch = (b) => {
+    const n = headcount(b.id);
+    if (n) return alert(`${b.name} still has ${n} ${n === 1 ? 'employee' : 'employees'} (including former staff). Move them to another branch first.`);
+    setDraft(d => d.filter(x => x.id !== b.id));
+  };
+
+  const handleSave = async () => {
+    const cleaned = draft.map(b => ({ id: b.id, name: b.name.trim() }));
+    if (cleaned.some(b => !b.name)) return alert('Branch names cannot be blank');
+    if (cleaned.some(b => nameTaken(b.name, b.id))) return alert('Two branches have the same name');
+    setSaving(true);
+    await onSave(cleaned);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-base font-bold dark:text-white flex items-center gap-2"><Building2 size={18} /> Branches</h2>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="space-y-2">
+            {draft.map(b => (
+              <div key={b.id} className="flex items-center gap-2">
+                <input className={inp()} value={b.name}
+                  onChange={e => setDraft(d => d.map(x => x.id === b.id ? { ...x, name: e.target.value } : x))} />
+                <span className="text-[11px] text-slate-400 whitespace-nowrap w-14 text-right">{headcount(b.id)} emp</span>
+                <button onClick={() => removeBranch(b)} title="Remove branch" className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500"><Trash2 size={14} /></button>
+              </div>
+            ))}
+            {!draft.length && <p className="text-xs text-slate-400 text-center py-2">No branches yet</p>}
+          </div>
+          <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <input className={inp()} value={newName} placeholder="New branch, e.g. Mumbai"
+              onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addBranch()} />
+            <button onClick={addBranch} className="flex items-center gap-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-semibold rounded-lg dark:text-slate-200 whitespace-nowrap">
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 p-5 border-t border-slate-200 dark:border-slate-700">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg disabled:opacity-50">
+            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />} Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeTab({ employees, perms = {}, actor, branches = [], allEmployees = employees, defaultBranchId = '', onSaveBranches }) {
   const [modalEmp, setModalEmp] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [deactivateEmp, setDeactivateEmp] = useState(null);
@@ -544,6 +636,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
   const [deleting, setDeleting] = useState(null);
   const [reactivating, setReactivating] = useState(null);
   const [statusFilter, setStatusFilter] = useState(EMP_ACTIVE);
+  const [showBranches, setShowBranches] = useState(false);
 
   const canAddEdit = !!perms['employee.addEdit'];
   const canDelete = !!perms['employee.delete'];
@@ -555,7 +648,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
   const filtered = employees.filter(e => {
     if (statusFilter !== 'all' && (statusFilter === EMP_ACTIVE) !== isEmployeeActive(e)) return false;
     const q = search.toLowerCase();
-    return e.name.toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q);
+    return e.name.toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q) || (e.branchName || '').toLowerCase().includes(q);
   });
 
   const handleDelete = async (emp) => {
@@ -598,10 +691,16 @@ function EmployeeTab({ employees, perms = {}, actor }) {
           </div>
         </div>
         {canAddEdit && (
-          <button onClick={() => { setModalEmp(null); setShowModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg">
-            <Plus size={16} /> Add Employee
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowBranches(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+              <Building2 size={15} /> Branches
+            </button>
+            <button onClick={() => { setModalEmp(null); setShowModal(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg">
+              <Plus size={16} /> Add Employee
+            </button>
+          </div>
         )}
       </div>
 
@@ -610,7 +709,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                {['Name','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT','Status',...(showActions ? ['Actions'] : [])].map(h => (
+                {['Name','Branch','Department','Joining Date','Base Salary','Current Salary','Shift Hrs','PT','Status',...(showActions ? ['Actions'] : [])].map(h => (
                   <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide ${['Actions','Status'].includes(h) ? 'text-center' : ['Base Salary','Current Salary'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
@@ -623,6 +722,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
                 return (
                   <tr key={emp.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${active ? '' : 'opacity-60'}`}>
                     <td className="px-4 py-3 font-semibold dark:text-slate-100">{emp.name}</td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{emp.branchName || '—'}</td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{emp.department || '—'}</td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{emp.joiningDate || '—'}</td>
                     <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{fmt(emp.baseSalary)}</td>
@@ -660,7 +760,7 @@ function EmployeeTab({ employees, perms = {}, actor }) {
                   </tr>
                 );
               })}
-              {!filtered.length && <tr><td colSpan={showActions ? 9 : 8} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">
+              {!filtered.length && <tr><td colSpan={showActions ? 10 : 9} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">
                 {statusFilter === EMP_INACTIVE && !search ? 'Nobody has been deactivated yet' : 'No employees found'}
               </td></tr>}
             </tbody>
@@ -668,7 +768,8 @@ function EmployeeTab({ employees, perms = {}, actor }) {
         </div>
       </div>
 
-      {showModal && <EmployeeModal emp={modalEmp} onClose={() => setShowModal(false)} />}
+      {showModal && <EmployeeModal emp={modalEmp} branches={branches} defaultBranchId={defaultBranchId} onClose={() => setShowModal(false)} />}
+      {showBranches && <BranchesModal branches={branches} employees={allEmployees} onSave={onSaveBranches} onClose={() => setShowBranches(false)} />}
       {deactivateEmp && <DeactivateModal emp={deactivateEmp} actor={actor} onClose={() => setDeactivateEmp(null)} />}
     </div>
   );
@@ -921,7 +1022,7 @@ function AttendanceTab({ employees, attendance, selectedMonth, holidays = [] }) 
                     <tr key={emp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 border-b border-slate-100 dark:border-slate-700/50">
                       <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-600 px-3 py-2">
                         <div className="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[138px]">{emp.name}</div>
-                        <div className="text-[10px] text-slate-400">{emp.department}</div>
+                        <div className="text-[10px] text-slate-400">{[emp.branchName, emp.department].filter(Boolean).join(' • ')}</div>
                       </td>
                       {days.map(d => {
                         const effectiveStatus = getEffectiveStatus(emp.id, d);
@@ -1210,7 +1311,7 @@ function computeSalary(emp, attendance, advances, selectedMonth, settings) {
   };
 }
 
-function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, settings, onSaveSettings }) {
+function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, settings, onSaveSettings, branchLabel = '', showBranchBreakdown = false }) {
   const [calcResults, setCalcResults] = useState({});
   const [advDeductions, setAdvDeductions] = useState({});
   const [saving, setSaving] = useState({});
@@ -1252,6 +1353,8 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
         employeeId: emp.id,
         employeeName: emp.name,
         department: emp.department || '',
+        branchId: emp.branchId || '',
+        branchName: emp.branchName || '',
         month: selectedMonth,
         ...c,
         advanceDeduction: adv,
@@ -1322,6 +1425,28 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       });
       const depts = Object.keys(deptGroups).sort();
 
+      // ── Branch groups (summary breakdown + detail sheet sections) ──
+      const branchOf = (emp) => emp.branchName || 'Unassigned';
+      const branchGroups = {};
+      employees.forEach(emp => {
+        const b = branchOf(emp);
+        if (!branchGroups[b]) branchGroups[b] = [];
+        branchGroups[b].push(emp);
+      });
+      const branchNames = Object.keys(branchGroups).sort();
+
+      // With every branch in one report, the detail sheet is sectioned by
+      // branch then department so each branch can be read off on its own.
+      const detailGroups = {};
+      employees.forEach(emp => {
+        const d = emp.department || 'Unassigned';
+        const key = showBranchBreakdown ? `${branchOf(emp)} — ${d}` : d;
+        if (!detailGroups[key]) detailGroups[key] = [];
+        detailGroups[key].push(emp);
+      });
+      const detailKeys = Object.keys(detailGroups).sort();
+      const branchSuffix = branchLabel ? ` — ${branchLabel}` : '';
+
       // ── Grand totals ───────────────────────────────────────────────
       const gGross = employees.reduce((s,e) => s+Math.round(allCalc[e.id]?.gross||0),0);
       const gOT    = employees.reduce((s,e) => s+Math.round(allCalc[e.id]?.otPay||0),0);
@@ -1354,7 +1479,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
 
       // R2 subtitle
       ws1.mergeCells('A2:F2'); ws1.getRow(2).height = 20;
-      sc(ws1,'A2',`Payroll Summary — ${MONTHS_LONG[mo]} ${yr}`,
+      sc(ws1,'A2',`Payroll Summary — ${MONTHS_LONG[mo]} ${yr}${branchSuffix}`,
         {font:{bold:true,size:12,color:{argb:'FF1A5C3A'}}, alignment:{horizontal:'center',vertical:'middle'}});
 
       ws1.getRow(3).height = 10;
@@ -1417,8 +1542,42 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
         };
       });
 
+      // Branch breakdown table (only when the report spans every branch)
+      let s1Last = dTotR;
+      if (showBranchBreakdown) {
+        const bHdrR = dTotR+2; ws1.getRow(bHdrR).height = 18;
+        ['Branch','Employees','Gross Salary','OT Pay','Net Payable','% of Total Net'].forEach((h,i) => {
+          ws1.getRow(bHdrR).getCell(i+1).value = h;
+          ws1.getRow(bHdrR).getCell(i+1).style = {font:{bold:true,size:10,color:{argb:'FFFFFFFF'}},fill:hFill('FF2D6A4F'),alignment:ctr,border:bdr};
+        });
+        branchNames.forEach((branch,idx) => {
+          const emps = branchGroups[branch];
+          const bG = emps.reduce((s,e)=>s+Math.round(allCalc[e.id]?.gross||0),0);
+          const bO = emps.reduce((s,e)=>s+Math.round(allCalc[e.id]?.otPay||0),0);
+          const bN = emps.reduce((s,e)=>s+getNet(e.id),0);
+          const pct = gNet>0 ? (bN/gNet*100).toFixed(1)+'%' : '—';
+          const r = bHdrR+1+idx; ws1.getRow(r).height = 15;
+          [branch,emps.length,bG,bO,Math.round(bN),pct].forEach((v,i) => {
+            ws1.getRow(r).getCell(i+1).value = v;
+            ws1.getRow(r).getCell(i+1).style = {
+              font:{size:10}, fill:hFill(idx%2===0?'FFF8FBF8':'FFFFFFFF'), border:bdr,
+              alignment:i===0?lft:i===1?ctr:rgt, numFmt:[2,3,4].includes(i)?'#,##0':undefined,
+            };
+          });
+        });
+        s1Last = bHdrR+1+branchNames.length;
+        ws1.getRow(s1Last).height = 16;
+        ['Total',employees.length,Math.round(gGross),Math.round(gOT),Math.round(gNet),'100%'].forEach((v,i) => {
+          ws1.getRow(s1Last).getCell(i+1).value = v;
+          ws1.getRow(s1Last).getCell(i+1).style = {
+            font:{bold:true,size:10},fill:hFill('FFD9EAD3'),border:bdr,
+            alignment:i===0?lft:i===1?ctr:rgt, numFmt:[2,3,4].includes(i)?'#,##0':undefined,
+          };
+        });
+      }
+
       // Signature block — sheet 1
-      const s1Sig = dTotR+3; ws1.getRow(s1Sig).height = 36;
+      const s1Sig = s1Last+3; ws1.getRow(s1Sig).height = 36;
       ws1.mergeCells(`A${s1Sig}:B${s1Sig}`);
       ws1.mergeCells(`C${s1Sig}:D${s1Sig}`);
       ws1.mergeCells(`E${s1Sig}:F${s1Sig}`);
@@ -1462,7 +1621,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       sc(ws2,'K2','with',                        {font:{size:11},alignment:ctr});
       sc(ws2,'L2',totalDays,                     {font:{bold:true,size:11},fill:hFill('FF92D050'),alignment:ctr});
       ws2.mergeCells('M2:R2');
-      sc(ws2,'M2','Days',{font:{size:11},alignment:lft});
+      sc(ws2,'M2',`Days${branchSuffix}`,{font:{size:11},alignment:lft});
       ri = 3;
 
       // R3 spacer
@@ -1494,8 +1653,8 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       const CTRS2 = new Set([4,5,6,7,10]);
       let g2Gross=0,g2OT=0,g2Ded=0,g2PT=0,g2Net=0;
 
-      depts.forEach(dept => {
-        const emps = deptGroups[dept];
+      detailKeys.forEach(dept => {
+        const emps = detailGroups[dept];
 
         // Dept header row
         ws2.mergeCells(`A${ri}:R${ri}`);
@@ -1615,7 +1774,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
       const blob = new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url; a.download = `Salary_${MONTHS_LONG[mo]}_${yr}.xlsx`; a.click();
+      a.href = url; a.download = `Salary_${branchLabel ? branchLabel.replace(/[^\w-]+/g, '_') + '_' : ''}${MONTHS_LONG[mo]}_${yr}.xlsx`; a.click();
       URL.revokeObjectURL(url);
     } catch (e) { alert('Error generating report: ' + e.message); }
     setGenerating(false);
@@ -1696,7 +1855,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
                     <tr key={emp.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/20">
                       <td className="px-3 py-3">
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{emp.name}</div>
-                        <div className="text-[10px] text-slate-400">{emp.department} • {fmt(c.currentSalary)}/mo</div>
+                        <div className="text-[10px] text-slate-400">{[emp.branchName, emp.department, `${fmt(c.currentSalary)}/mo`].filter(Boolean).join(' • ')}</div>
                         <div className="text-[10px] text-slate-400">
                           P:{c.presentDays + c.otDays} H:{c.halfDays} L:{c.lateDays} LE:{c.leftEarlyDays} A:{c.absentDays}
                           {c.holidayDays > 0 && ` Ho:${c.holidayDays}`}{c.weekOffDays > 0 && ` WO:${c.weekOffDays}`}
@@ -1780,7 +1939,7 @@ function SalaryTab({ employees, attendance, advances, salaries, selectedMonth, s
 }
 
 // ─── Dashboard Tab ─────────────────────────────────────────────────────────────
-function DashboardTab({ employees, attendance, advances, salaries, selectedMonth, settings }) {
+function DashboardTab({ employees, attendance, advances, salaries, selectedMonth, settings, showBranchBreakdown = false }) {
   const { year, month } = parseYM(selectedMonth);
   const totalDays = getDaysInMonth(year, month);
 
@@ -1822,6 +1981,20 @@ function DashboardTab({ employees, attendance, advances, salaries, selectedMonth
   });
   const maxDeptGross = Math.max(...Object.values(deptMap).map(d => d.gross), 1);
 
+  // Branch-wise — live, only when the dashboard spans every branch
+  const branchMap = {};
+  if (showBranchBreakdown) {
+    employees.forEach(emp => {
+      const b = emp.branchName || 'Unassigned';
+      if (!branchMap[b]) branchMap[b] = { count: 0, gross: 0, net: 0, absent: 0 };
+      branchMap[b].count++;
+      branchMap[b].gross += liveCalc[emp.id]?.gross || 0;
+      branchMap[b].net += getLiveNet(emp);
+      branchMap[b].absent += liveCalc[emp.id]?.absentDays || 0;
+    });
+  }
+  const branchRows = Object.entries(branchMap).sort(([a], [b]) => a.localeCompare(b));
+
   const attKeyFn = (empId, day) => `${empId}_${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const days = Array.from({ length: totalDays }, (_, i) => i + 1);
   const dashHolidays = toDateStrings(settings.holidays?.[String(year)]);
@@ -1846,6 +2019,38 @@ function DashboardTab({ employees, attendance, advances, salaries, selectedMonth
           </div>
         ))}
       </div>
+
+      {/* Branch-wise summary */}
+      {branchRows.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
+            <Building2 size={16} className="text-slate-500" />
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Branch-wise Summary</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                  {['Branch','Headcount','Absent Days','Gross','Net Payable'].map(h => (
+                    <th key={h} className={`px-4 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase ${h === 'Branch' ? 'text-left' : 'text-right'}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {branchRows.map(([branch, info]) => (
+                  <tr key={branch} className="border-b border-slate-100 dark:border-slate-700/50">
+                    <td className="px-4 py-2.5 font-medium dark:text-slate-100">{branch}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{info.count}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{info.absent}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(info.gross)}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">{fmt(info.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Attendance Heatmap */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -2318,6 +2523,13 @@ export default function AttendancePayroll({ user, perms = {} }) {
   const [salaries, setSalaries] = useState([]);
   const [settings, setSettings] = useState({ lateDeductFraction: 0.25, leftEarlyDeductFraction: 0.25, holidays: {} });
   const [loadingEmp, setLoadingEmp] = useState(true);
+  const [branchFilter, setBranchFilter] = useState(() => {
+    try { return localStorage.getItem(BRANCH_FILTER_KEY) || BRANCH_ALL; } catch { return BRANCH_ALL; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(BRANCH_FILTER_KEY, branchFilter); } catch { /* storage unavailable */ }
+  }, [branchFilter]);
 
   // Employees & settings listener (persistent)
   useEffect(() => {
@@ -2366,21 +2578,45 @@ export default function AttendancePayroll({ user, perms = {} }) {
 
   const actor = user?.username || user?.name || 'user';
 
+  const branches = useMemo(() => settings.branches || [], [settings.branches]);
+  const handleSaveBranches = (next) => handleSaveSettings({ branches: next });
+
+  // Every employee carries its branch name so tabs and exports can show it
+  // without looking it up; a branchId pointing at a removed branch reads as Unassigned.
+  const allEmployees = useMemo(() => {
+    const names = Object.fromEntries(branches.map(b => [b.id, b.name]));
+    return employees.map(e => ({ ...e, branchName: names[e.branchId] || '' }));
+  }, [employees, branches]);
+
+  // A remembered filter for a branch that has since been removed falls back to all.
+  const activeBranch = branchFilter === BRANCH_ALL || branchFilter === BRANCH_NONE || branches.some(b => b.id === branchFilter)
+    ? branchFilter : BRANCH_ALL;
+  const hasUnassigned = allEmployees.some(e => !e.branchName);
+  const branchEmployees = useMemo(() => {
+    if (activeBranch === BRANCH_ALL) return allEmployees;
+    if (activeBranch === BRANCH_NONE) return allEmployees.filter(e => !e.branchName);
+    return allEmployees.filter(e => e.branchId === activeBranch);
+  }, [allEmployees, activeBranch]);
+  const branchLabel = activeBranch === BRANCH_ALL ? ''
+    : activeBranch === BRANCH_NONE ? 'Unassigned'
+    : branches.find(b => b.id === activeBranch)?.name || '';
+  const showBranchBreakdown = activeBranch === BRANCH_ALL && branches.length > 0;
+
   // Who attendance, payroll and the dashboard are about for the selected month.
   // Leavers stay on it through their final month and drop off after it, so past
   // months keep reading exactly as they did before anyone was deactivated.
   const roster = useMemo(
-    () => employees.filter(e => isOnRosterFor(e, selectedMonth)),
-    [employees, selectedMonth]
+    () => branchEmployees.filter(e => isOnRosterFor(e, selectedMonth)),
+    [branchEmployees, selectedMonth]
   );
-  const hiddenLeavers = employees.length - roster.length;
+  const hiddenLeavers = branchEmployees.length - roster.length;
 
   // Advances outlive employment: someone who left still owes or is owed until
   // the balance is squared off, so keep them selectable while it is non-zero.
   const advanceRoster = useMemo(() => {
     const onRoster = new Set(roster.map(e => e.id));
-    return employees.filter(e => onRoster.has(e.id) || getAdvanceBalance(advances, e.id) !== 0);
-  }, [employees, roster, advances]);
+    return branchEmployees.filter(e => onRoster.has(e.id) || getAdvanceBalance(advances, e.id) !== 0);
+  }, [branchEmployees, roster, advances]);
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
@@ -2405,7 +2641,20 @@ export default function AttendancePayroll({ user, perms = {} }) {
             </p>
           )}
         </div>
-        <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+        <div className="flex items-center gap-3 flex-wrap">
+          {branches.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Building2 size={15} className="text-slate-400" />
+              <select value={activeBranch} onChange={e => setBranchFilter(e.target.value)}
+                className="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-sm font-semibold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none">
+                <option value={BRANCH_ALL}>All Branches</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {(hasUnassigned || activeBranch === BRANCH_NONE) && <option value={BRANCH_NONE}>Unassigned</option>}
+              </select>
+            </div>
+          )}
+          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -2428,10 +2677,18 @@ export default function AttendancePayroll({ user, perms = {} }) {
       ) : (
         <>
           {activeTab === 'dashboard' && (
-            <DashboardTab employees={roster} attendance={attendance} advances={advances} salaries={salaries} selectedMonth={selectedMonth} settings={settings} />
+            <DashboardTab employees={roster} attendance={attendance} advances={advances} salaries={salaries} selectedMonth={selectedMonth} settings={settings} showBranchBreakdown={showBranchBreakdown} />
           )}
           {activeTab === 'employees' && perms['employee.view'] && (
-            <EmployeeTab employees={employees} perms={perms} actor={actor} />
+            <EmployeeTab
+              employees={branchEmployees}
+              allEmployees={allEmployees}
+              branches={branches}
+              defaultBranchId={branches.some(b => b.id === activeBranch) ? activeBranch : ''}
+              onSaveBranches={handleSaveBranches}
+              perms={perms}
+              actor={actor}
+            />
           )}
           {activeTab === 'attendance' && (
             <AttendanceTab
@@ -2453,6 +2710,8 @@ export default function AttendancePayroll({ user, perms = {} }) {
               selectedMonth={selectedMonth}
               settings={settings}
               onSaveSettings={handleSaveSettings}
+              branchLabel={branchLabel}
+              showBranchBreakdown={showBranchBreakdown}
             />
           )}
           {activeTab === 'holidays' && (perms['employee.addEdit'] || perms['payroll.view']) && (
