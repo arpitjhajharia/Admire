@@ -1697,7 +1697,20 @@ const BOQManager = ({ boq: initialBoq, user, onBack }) => {
 
     // Inline (Edit Mode) single-cell save — updates local state immediately so
     // typing never waits on the network, then fires the write in the background.
+    // Returns false when the edit is rejected so the cell can revert its draft.
     const handleCellCommit = (sign, key, value) => {
+        if (columns.find(c => c.isId)?.key === key) {
+            const next = String(value ?? '').trim();
+            if (!next) {
+                alert('Unique ID cannot be empty.');
+                return false;
+            }
+            if (signs.some(s => s._id !== sign._id && String(s[key] ?? '').trim() === next)) {
+                alert(`Unique ID "${next}" already exists. Please choose a different one.`);
+                return false;
+            }
+            value = next;
+        }
         setSigns(prev => prev.map(s => s._id === sign._id ? { ...s, [key]: value } : s));
         trackWrite(
             updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boqs', boq.id, 'signs', sign._id), { [key]: value })
@@ -3379,7 +3392,7 @@ const EditableCell = ({ value, onCommit, className }) => {
     }, [value]);
 
     const commit = () => {
-        if (draft !== (value ?? '')) onCommit(draft);
+        if (draft !== (value ?? '') && onCommit(draft) === false) setDraft(value ?? '');
     };
 
     return (
@@ -3444,9 +3457,11 @@ const SignRow = React.memo(({ sign, idColumn, columns, colWidths = {}, editMode 
             {idColumn && (
                 <td
                     style={{ width: colWidths[idColumn.key], maxWidth: colWidths[idColumn.key] }}
-                    title={sign[idColumn.key] != null ? String(sign[idColumn.key]) : undefined}
-                    className="px-2 py-1.5 text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis align-middle">
-                    {sign[idColumn.key]}
+                    title={!editMode && sign[idColumn.key] != null ? String(sign[idColumn.key]) : undefined}
+                    className={`px-2 py-1.5 text-slate-700 font-medium align-middle ${editMode ? '' : 'whitespace-nowrap overflow-hidden text-ellipsis'}`}>
+                    {editMode
+                        ? <EditableCell value={sign[idColumn.key] ?? ''} onCommit={(v) => onCellCommit(sign, idColumn.key, v)} />
+                        : sign[idColumn.key]}
                 </td>
             )}
             {columns.map(col => col.isSystem ? (
