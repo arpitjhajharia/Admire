@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { secondaryAuth, dataDoc, dataCol } from '../lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { deleteDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, FieldPath, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { Trash2, UserPlus, Shield, Edit2, Save, X, Check, Users, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { RULES } from '../lib/permissions';
 
@@ -140,9 +140,8 @@ const UserManager = () => {
         if (!pendingKey) return;
         setSavingOverride(true);
         try {
-            await updateDoc(dataDoc('user_roles', userId), {
-                [`overrides.${pendingKey}`]: pendingVal
-            });
+            // FieldPath keeps 'module.payroll' as one key; a dotted string would nest it into {module:{payroll}}
+            await updateDoc(dataDoc('user_roles', userId), new FieldPath('overrides', pendingKey), pendingVal);
             setPendingKey('');
             setPendingVal(true);
         } catch (err) {
